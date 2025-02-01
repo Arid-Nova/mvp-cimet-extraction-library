@@ -22,7 +22,15 @@ import java.util.stream.Collectors;
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class JClass extends ProjectFile implements JsonSerializable {
+    /**
+     * The name of the package containing this class
+     */
     private String packageName;
+
+    /**
+     * A list of imports that the class includes
+     */
+    private Set<Import> imports;
 
     /**
      * Class implementations
@@ -60,6 +68,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.packageName = packageName;
         this.path = path;
         this.classRole = classRole;
+        this.imports = new HashSet<>();
         this.methods = new HashSet<>();
         this.fields = new HashSet<>();
         this.annotations = new HashSet<>();
@@ -68,11 +77,12 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.fileType = FileType.JCLASS;
     }
 
-    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes) {
+    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes) {
         this.name = name;
         this.packageName = packageName;
         this.path = path;
         this.classRole = classRole;
+        this.imports = imports;
         this.methods = methods;
         this.fields = fields;
         this.annotations = classAnnotations;
@@ -92,6 +102,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
 
         jsonObject.addProperty("packageName", getPackageName());
         jsonObject.addProperty("classRole", getClassRole().name());
+        jsonObject.add("imports", JsonSerializable.toJsonArray(getImports()));
         jsonObject.add("annotations", JsonSerializable.toJsonArray(getAnnotations()));
         jsonObject.add("fields", JsonSerializable.toJsonArray(getFields()));
         jsonObject.add("methods", JsonSerializable.toJsonArray(getMethods()));
