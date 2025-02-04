@@ -57,6 +57,14 @@ public class Import extends Node {
     }
 
     /**
+     * Returns whether or not the import is for an entire package (i.e., com.package.*)
+     * @return True if it imports a full package, false if otherwise
+     */
+    public Boolean importsEntirePackage() {
+        return importObject.equals("*");
+    }
+
+    /**
      * see {@link JsonSerializable#toJsonObject()}
      */
     @Override
