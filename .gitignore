@@ -3,3 +3,8 @@
 
 # Maven
 target/
+
+# Test output
+logs/
+output/
+clone/

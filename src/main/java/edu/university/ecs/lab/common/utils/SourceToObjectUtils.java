@@ -2,6 +2,7 @@ package edu.university.ecs.lab.common.utils;
 
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.ImportDeclaration;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.*;
@@ -116,6 +117,7 @@ public class SourceToObjectUtils {
                     path,
                     packageName,
                     classRole,
+                    parseImports(cu.findAll(ImportDeclaration.class)),
                     parseMethods(cu.findAll(MethodDeclaration.class), requestMapping),
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
@@ -126,6 +128,27 @@ public class SourceToObjectUtils {
         // Build the JClass
         return jClass;
 
+    }
+
+    /**
+     * This method parses importDeclarations list and returns a Set of Import models
+     *
+     * @param importDeclarations the list of importDeclarations to be parsed
+     * @return a set of Import models representing the ImportDeclarations
+     */
+    public static Set<Import> parseImports(List<ImportDeclaration> importDeclarations) {
+        HashSet<Import> imports = new HashSet<>();
+
+        for (ImportDeclaration impDec : importDeclarations) {
+            String fullImport = impDec.getNameAsString();
+
+            String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
+            String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
+
+            Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
+            imports.add(imp);
+        }
+        return imports;
     }
 
 
@@ -422,6 +445,7 @@ public class SourceToObjectUtils {
                 path,
                 packageName,
                 ClassRole.FEIGN_CLIENT,
+                parseImports(cu.findAll(ImportDeclaration.class)),
                 newMethods,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
@@ -538,6 +562,7 @@ public class SourceToObjectUtils {
                 path,
                 packageName,
                 ClassRole.REP_REST_RSC,
+                parseImports(cu.findAll(ImportDeclaration.class)),
                 newEndpoints,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
@@ -546,7 +571,7 @@ public class SourceToObjectUtils {
     }
 
     private static JClass handleJS(String filePath) {
-        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>());
+        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>());
         try {
             Set<RestCall> restCalls = new HashSet<>();
             // Command to run Node.js script
