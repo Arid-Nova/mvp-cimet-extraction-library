@@ -3,6 +3,7 @@ package edu.university.ecs.lab.common.models.ir;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.google.gson.JsonObject;
+import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -17,8 +18,10 @@ import java.util.*;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = false)
 public class Method extends Node {
-    // Protection Not Yet Implemented
-    // protected String protection;
+    /**
+     * The protection level for this Method
+     */
+    protected AccessModifier protection;
 
     /**
      * Set of fields representing parameters
@@ -46,7 +49,7 @@ public class Method extends Node {
     protected String className;
 
     public Method(String name, String packageAndClassName, Set<Parameter> parameters, String typeAsString, Set<Annotation> annotations, String microserviceName,
-                  String className) {
+                  String className, AccessModifier protection) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
         this.parameters = parameters;
@@ -54,12 +57,14 @@ public class Method extends Node {
         this.annotations = annotations;
         this.microserviceName = microserviceName;
         this.className = className;
+        this.protection = protection;
     }
 
     public Method(MethodDeclaration methodDeclaration) {
         this.name = methodDeclaration.getNameAsString();
         this.packageAndClassName = methodDeclaration.getClass().getPackageName() + "." + methodDeclaration.getClass().getName();
         this.parameters = parseParameters(methodDeclaration.getParameters());
+        this.protection = AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier());
     }
 
     /**
@@ -76,6 +81,7 @@ public class Method extends Node {
         jsonObject.addProperty("returnType", getReturnType());
         jsonObject.addProperty("microserviceName", microserviceName);
         jsonObject.addProperty("className", className);
+        jsonObject.addProperty("protection", protection.toString());
 
         return jsonObject;
     }
