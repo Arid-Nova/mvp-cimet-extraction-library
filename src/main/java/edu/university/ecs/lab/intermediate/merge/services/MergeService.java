@@ -3,12 +3,13 @@ package edu.university.ecs.lab.intermediate.merge.services;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
 import edu.university.ecs.lab.common.models.ir.*;
-import edu.university.ecs.lab.common.services.LoggerManager;
-import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.delta.models.Delta;
 import edu.university.ecs.lab.delta.models.SystemChange;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
+
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -30,7 +31,7 @@ public class MergeService {
             String intermediatePath,
             String deltaPath,
             String configPath,
-            String outputPath) {
+            String outputPath) throws FileNotFoundException {
         this.config = ConfigUtil.readConfig(configPath);
         this.microserviceSystem = JsonReadWriteUtils.readFromJSON(Path.of(intermediatePath).toAbsolutePath().toString(), MicroserviceSystem.class);
         this.systemChange = JsonReadWriteUtils.readFromJSON(Path.of(deltaPath).toAbsolutePath().toString(), SystemChange.class);
@@ -44,7 +45,6 @@ public class MergeService {
 
         // If no changes are present we will write back out same IR
         if (Objects.isNull(systemChange.getChanges())) {
-            LoggerManager.debug(() -> "No changes found at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
             // JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
             return;
         }
@@ -71,7 +71,6 @@ public class MergeService {
 
         microserviceSystem.setCommitID(systemChange.getNewCommit());
 
-        LoggerManager.info(() -> "Merged to new IR at " + systemChange.getNewCommit());
         //  JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
     }
 
@@ -83,10 +82,8 @@ public class MergeService {
      */
     public void addFile(Delta delta) {
         // Check for unparsable files
-        if(delta.getClassChange() == null && delta.getConfigChange() == null) {
-            LoggerManager.warn(() -> "[Filtered] An added file has no change information " + delta.getNewPath());
+        if(delta.getClassChange() == null && delta.getConfigChange() == null)
             return;
-        }
 
         Microservice ms = microserviceSystem.findMicroserviceByPath(delta.getNewPath());
 
@@ -98,7 +95,6 @@ public class MergeService {
                 microserviceSystem.getOrphans().add(delta.getConfigChange());
             }
 
-            LoggerManager.debug(() -> "[File added] " + delta.getNewPath() + " to orphans at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
             return;
         }
 
@@ -109,10 +105,6 @@ public class MergeService {
             // Add the JClass, the microservice name is updated see addJClass()
             ms.addJClass(delta.getClassChange());
         }
-
-        LoggerManager.debug(() -> "[File added] " + delta.getNewPath() + " to microservice " + ms.getPath() + " at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
-
-
     }
 
     /**
@@ -131,23 +123,15 @@ public class MergeService {
                 // If found remove it and return
                 if (orphan.getPath().equals(delta.getOldPath())) {
                     microserviceSystem.getOrphans().remove(orphan);
-                    LoggerManager.debug(() -> "[File removed] " + delta.getOldPath() + " from orphans at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
                     return;
                 }
             }
-            LoggerManager.debug(() -> "[File not found] " + delta.getOldPath() + " in orphans at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
-
             return;
         }
 
         // Remove the file depending on which is null, skips gracefully if not found in microservice
         // see removeProjectFile()
-        // see removeProjectFile()
         ms.removeProjectFile(delta.getOldPath());
-
-        LoggerManager.debug(() -> "[File removed] " + delta.getOldPath() + " from microservice " + ms.getPath() + " at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
-
-
     }
 
 
@@ -167,18 +151,11 @@ public class MergeService {
 
         // Loop through changes to pom.xml files
         for (Delta delta : buildDeltas) {
-
-
             Microservice microservice;
             String[] tokens;
 
             String path = delta.getOldPath().equals("/dev/null") ? delta.getNewPath() : delta.getOldPath();
             tokens = path.split("/");
-
-            // Skip a pom that is in the root
-            if (tokens.length <= 2) {
-                LoggerManager.debug(() -> "Tokens check still needed?");
-            }
 
             match: {
                 switch (delta.getChangeType()) {
@@ -207,22 +184,15 @@ public class MergeService {
                         // Here we must check if any orphans are waiting on this creation
                         microserviceSystem.adopt(microservice);
                         microserviceSystem.getMicroservices().add(microservice);
-                        LoggerManager.debug(() -> "[Microservice added]  " + microservice.getName() + " " + microservice.getPath() + " at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
                         break;
 
 
                     case DELETE:
                         microservice = microserviceSystem.findMicroserviceByPath(delta.getOldPath().replace("/pom.xml", "").replace("/build.gradle", ""));
 
-                        // If a less
-                        if (microservice == null) {
-                            LoggerManager.error(() -> "[Microservice not found]  " + delta.getOldPath() + " at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit(), Optional.of(new RuntimeException("Fail")));
-                        }
-
                         // Here we must orphan all the classes of this microservice
                         microserviceSystem.getMicroservices().remove(microservice);
                         microserviceSystem.orphanize(microservice);
-                        LoggerManager.debug(() -> "[Microservice removed]  " + microservice.getName() + " " + microservice.getPath() + " at " + systemChange.getOldCommit() + " -> " + systemChange.getNewCommit());
                         break;
 
                 }
@@ -269,7 +239,6 @@ public class MergeService {
                 String delta1Path = delta1.getNewPath().replace("/pom.xml", "").replace("/build.gradle", "");
                 String delta2Path = delta2.getNewPath().replace("/pom.xml", "").replace("/build.gradle", "");
                 if(delta1Path.equals(delta2Path) && !deletedFirst) {
-                    LoggerManager.debug(() -> "[Filtered] Duplicates deltas detected for " + delta1.getNewPath() + " and " + delta2.getNewPath());
                     filteredDeltas.remove(delta1);
                     deletedFirst = true;
                     continue;
@@ -277,10 +246,8 @@ public class MergeService {
 
                 // Check if paths are more/less specific
                 if(delta1Path.matches(delta2Path + "/.*")) {
-                    LoggerManager.debug(() -> "[Filtered] Delta " + delta1.getNewPath() + " more specific than " + delta2.getNewPath());
                     filteredDeltasCopy.remove(delta2);
                 } else if(delta2Path.matches(delta1Path + "/.*")) {
-                    LoggerManager.debug(() -> "[Filtered] Delta " + delta2.getNewPath() + " more specific than " + delta1.getNewPath());
                     filteredDeltasCopy.remove(delta1);
                 }
             }
@@ -297,7 +264,6 @@ public class MergeService {
 
                 // If they are equal and they aren't both additions, arbitrarily remove one of them
                 if(delta1Path.equals(delta2Path) && !delta1.getOldPath().equals(delta2.getOldPath()) && !deletedFirst) {
-                    LoggerManager.debug(() -> "[Filtered] Duplicates deltas detected for " + delta1.getOldPath() + " and " + delta2.getOldPath());
                     filteredDeltasCopy.remove(delta1);
                     deletedFirst = true;
                 }
@@ -322,13 +288,13 @@ public class MergeService {
         return this.microserviceSystem;
     }
 
-    public static MicroserviceSystem create(String configPath, String intermediatePath, String deltaPath, String newCommitID) {
+    public static MicroserviceSystem create(String configPath, String intermediatePath, String deltaPath, String newCommitID) throws FileNotFoundException {
         MergeService mergeService = new MergeService(intermediatePath, deltaPath, configPath, "");
         mergeService.generateMergeIR(newCommitID);
         return mergeService.getMicroserviceSystem();
     }
 
-    public static void createAndWrite(String configPath, String intermediatePath, String deltaPath, String newCommitID, String outputPath) {
+    public static void createAndWrite(String configPath, String intermediatePath, String deltaPath, String newCommitID, String outputPath) throws IOException {
         MicroserviceSystem microserviceSystem = create(configPath, intermediatePath, deltaPath, newCommitID);
         JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
     }

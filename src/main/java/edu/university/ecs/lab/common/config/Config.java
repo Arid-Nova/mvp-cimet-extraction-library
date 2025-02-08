@@ -1,13 +1,9 @@
 package edu.university.ecs.lab.common.config;
 
-import edu.university.ecs.lab.common.error.Error;
 import lombok.Getter;
 import lombok.Setter;
 
 import java.util.Objects;
-import java.util.Optional;
-
-import static edu.university.ecs.lab.common.error.Error.NULL_ERROR;
 
 /**
  * Model to represent the JSON configuration file
@@ -48,19 +44,18 @@ public class Config {
      */
 
     private void validateConfig(String systemName, String repositoryURL, String branch) {
-        try {
-            Objects.requireNonNull(systemName);
-            Objects.requireNonNull(repositoryURL);
-            Objects.requireNonNull(branch);
-            validateConfig(systemName, repositoryURL, branch);
+        Objects.requireNonNull(systemName);
+        Objects.requireNonNull(repositoryURL);
+        Objects.requireNonNull(branch);
+        validateConfig(systemName, repositoryURL, branch);
 
-            assert !systemName.isBlank() && !repositoryURL.isBlank() && !branch.isBlank();
-        } catch (Exception e) {
-            Error.reportAndExit(Error.INVALID_CONFIG, Optional.of(e));
+        if (!systemName.isBlank() && !repositoryURL.isBlank() && !branch.isBlank()) {
+           throw new IllegalStateException("An invalid configuration was found!");
         }
-        Objects.requireNonNull(systemName, NULL_ERROR.getMessage());
-        Objects.requireNonNull(repositoryURL, NULL_ERROR.getMessage());
-        Objects.requireNonNull(branch, NULL_ERROR.getMessage());
+
+        Objects.requireNonNull(systemName);
+        Objects.requireNonNull(repositoryURL);
+        Objects.requireNonNull(branch);
         validateRepositoryURL(repositoryURL);
     }
 
@@ -70,7 +65,7 @@ public class Config {
 
     private void validateRepositoryURL(String repositoryURL) {
         if (!(repositoryURL.isBlank() || repositoryURL.startsWith(GIT_SCHEME_DOMAIN) || repositoryURL.endsWith(GIT_PATH_EXTENSION))) {
-            Error.reportAndExit(Error.INVALID_REPOSITORY_URL, Optional.empty());
+            throw new IllegalStateException("An invalid repository URL was provided!");
         }
     }
 

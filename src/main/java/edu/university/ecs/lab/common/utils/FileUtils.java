@@ -1,12 +1,8 @@
 package edu.university.ecs.lab.common.utils;
 
-import edu.university.ecs.lab.common.error.Error;
 import java.io.File;
 import java.util.Arrays;
-import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
-
 
 /**
  * Manages all file paths and file path conversion functions.
@@ -84,7 +80,7 @@ public class FileUtils {
     @Deprecated
     public static String getMicroserviceNameFromPath(String path) {
         if (!path.startsWith(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR)) {
-            Error.reportAndExit(Error.INVALID_REPO_PATHS, Optional.empty());
+            throw new IllegalArgumentException("A malformed path was provided");
         }
 
         String[] split = path.replace(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR, "").split(SPECIAL_SEPARATOR);
@@ -111,12 +107,8 @@ public class FileUtils {
      * This method creates the default output and clone directories
      */
     public static void makeDirs() {
-        try {
-            new File(getOutputPath()).mkdirs();
-            new File(getClonePath()).mkdirs();
-        } catch (Exception e) {
-            Error.reportAndExit(Error.INVALID_REPO_PATHS, Optional.of(e));
-        }
+        new File(getOutputPath()).mkdirs();
+        new File(getClonePath()).mkdirs();
     }
 
     /**

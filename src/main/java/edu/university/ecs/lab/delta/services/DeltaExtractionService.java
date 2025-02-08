@@ -5,18 +5,19 @@ import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
 import edu.university.ecs.lab.common.models.ir.ConfigFile;
 import edu.university.ecs.lab.common.models.ir.JClass;
-import edu.university.ecs.lab.common.models.ir.MicroserviceSystem;
 import edu.university.ecs.lab.common.services.GitService;
-import edu.university.ecs.lab.common.services.LoggerManager;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import edu.university.ecs.lab.delta.models.Delta;
 import edu.university.ecs.lab.delta.models.SystemChange;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -70,7 +71,7 @@ public class DeltaExtractionService {
      * @param commitOld old commit for comparison
      * @param commitNew new commit for comparison
      */
-    private DeltaExtractionService(String configPath, String outputPath, String commitOld, String commitNew) {
+    private DeltaExtractionService(String configPath, String outputPath, String commitOld, String commitNew) throws IOException, InterruptedException {
         this.config = ConfigUtil.readConfig(configPath);
         this.gitService = new GitService(configPath);
         this.commitOld = commitOld;
@@ -81,7 +82,7 @@ public class DeltaExtractionService {
     /**
      * Generates Delta file representing changes between commitOld and commitNew
      */
-    private void generateDelta() {
+    private void generateDelta() throws GitAPIException, IOException {
         List<DiffEntry> differences = null;
 
         // Ensure we start at commitOld
@@ -162,10 +163,6 @@ public class DeltaExtractionService {
 
         // Output the system changes
         // JsonReadWriteUtils.writeToJSON(outputPath, systemChange);
-
-        // Report
-        LoggerManager.info(() -> "Delta changes extracted between " + commitOld + " -> " + commitNew);
-
     }
 
     /**
@@ -211,18 +208,18 @@ public class DeltaExtractionService {
         return new JsonObject();
     }
 
-    public static SystemChange create(String configPath, String oldCommit, String newCommit) {
+    public static SystemChange create(String configPath, String oldCommit, String newCommit) throws IOException, InterruptedException, GitAPIException {
         DeltaExtractionService extractionService = new DeltaExtractionService(configPath, "", oldCommit, newCommit);
         extractionService.generateDelta();
         return extractionService.getSystemChange();
     }
 
-    public static void createAndWrite(String configPath, String oldCommit, String newCommit, String outputPath) {
+    public static void createAndWrite(String configPath, String oldCommit, String newCommit, String outputPath) throws GitAPIException, IOException, InterruptedException {
         SystemChange systemChange = DeltaExtractionService.create(configPath, oldCommit, newCommit);
         JsonReadWriteUtils.writeToJSON(outputPath, systemChange);
     }
 
-    public static SystemChange read(String fPath) {
+    public static SystemChange read(String fPath) throws FileNotFoundException {
         SystemChange systemChange = JsonReadWriteUtils.readFromJSON(fPath, SystemChange.class);
         return systemChange;
     }
