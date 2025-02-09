@@ -112,17 +112,12 @@ public class SourceToObjectUtils {
         } else if(classRole == ClassRole.REP_REST_RSC) {
             jClass = handleRepositoryRestResource(requestMapping, classAnnotations);
         } else {
-            jClass = new JClass(
-                    className,
-                    path,
-                    packageName,
-                    classRole,
+            jClass = buildJClass(className, path, packageName, classRole,
                     parseImports(cu.findAll(ImportDeclaration.class)),
                     parseMethods(cu.findAll(MethodDeclaration.class), requestMapping),
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
-                    parseMethodCalls(cu.findAll(MethodDeclaration.class)),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                    parseMethodCalls(cu.findAll(MethodDeclaration.class)));
         }
 
         // Build the JClass
@@ -440,7 +435,7 @@ public class SourceToObjectUtils {
 
 
         // Build the JClass
-        return new JClass(
+        return buildJClass(
                 className,
                 path,
                 packageName,
@@ -449,8 +444,7 @@ public class SourceToObjectUtils {
                 newMethods,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                newRestCalls);
     }
 
     public static ConfigFile parseConfigurationFile(File file, Config config) {
@@ -557,7 +551,7 @@ public class SourceToObjectUtils {
 
 
         // Build the JClass
-        return new JClass(
+        return buildJClass(
                 className,
                 path,
                 packageName,
@@ -566,8 +560,36 @@ public class SourceToObjectUtils {
                 newEndpoints,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                newRestCalls);
+    }
+
+    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls) {
+        JClass jClass = null;
+
+        List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
+        List<EnumDeclaration> enumDecs = cu.findAll(EnumDeclaration.class);
+        List<RecordDeclaration> recordDecs = cu.findAll(RecordDeclaration.class);
+        if (!classInterfaceDecs.isEmpty()) {
+            if (!classInterfaceDecs.get(0).isInterface()) {
+                jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+            } else {
+                jClass = new JInterface(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+
+            }
+        } else if (!enumDecs.isEmpty()) {
+            List<String> enumEntries = new ArrayList<>();
+            enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
+            jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                    enumEntries);
+        } else if (!recordDecs.isEmpty()) {
+            jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+        }
+
+        return jClass;
     }
 
     private static JClass handleJS(String filePath) {
