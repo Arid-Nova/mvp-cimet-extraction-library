@@ -140,13 +140,21 @@ public class SourceToObjectUtils {
         HashSet<Import> imports = new HashSet<>();
 
         for (ImportDeclaration impDec : importDeclarations) {
-            String fullImport = impDec.getNameAsString();
+            if (!impDec.isAsterisk()) {
+                String fullImport = impDec.getNameAsString();
 
-            String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
-            String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
+                String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
+                String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
 
-            Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
-            imports.add(imp);
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
+                imports.add(imp);
+            } else {
+                String impPackage = impDec.getNameAsString();
+                String impObject = "*";
+
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
+                imports.add(imp);
+            }
         }
         return imports;
     }
