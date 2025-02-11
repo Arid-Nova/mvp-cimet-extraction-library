@@ -591,7 +591,7 @@ public class SourceToObjectUtils {
             List<String> enumEntries = new ArrayList<>();
             enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
             jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection
+                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection,
                     enumEntries);
         } else if (!recordDecs.isEmpty()) {
             jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
