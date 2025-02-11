@@ -601,7 +601,7 @@ public class SourceToObjectUtils {
 
         Set<RestCall> restCalls = new HashSet<>();
         // Command to run Node.js script
-        ProcessBuilder processBuilder = new ProcessBuilder("node", "scripts/parser.js");
+        ProcessBuilder processBuilder = new ProcessBuilder("node", "/scripts/parser.js");
         Process process = processBuilder.start();
 
         // Capture the output
