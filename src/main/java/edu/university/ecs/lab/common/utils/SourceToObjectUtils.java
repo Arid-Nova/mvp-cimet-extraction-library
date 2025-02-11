@@ -18,13 +18,12 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.error.Error;
 import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
-import edu.university.ecs.lab.common.services.LoggerManager;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -49,10 +48,8 @@ public class SourceToObjectUtils {
         try {
             cu = StaticJavaParser.parse(sourceFile);
         } catch (Exception e) {
-            LoggerManager.warn(() -> "Failed to parse  " + sourceFile.getPath());
             microserviceName = "";
             return;
-//            Error.reportAndExit(Error.JPARSE_FAILED, Optional.of(e));
         }
         if (!cu.findAll(PackageDeclaration.class).isEmpty()) {
             packageName = cu.findAll(PackageDeclaration.class).get(0).getNameAsString();
@@ -82,7 +79,6 @@ public class SourceToObjectUtils {
     public static JClass parseClass(File sourceFile, Config config, String microserviceName) {
         // Guard condition
         if(Objects.isNull(sourceFile) || FileUtils.isConfigurationFile(sourceFile.getPath())) {
-            LoggerManager.warn(() -> "JClass filtered  " + sourceFile.getPath() + " is config or null");
             return null;
         }
 
@@ -99,7 +95,6 @@ public class SourceToObjectUtils {
 
         // Return unknown classRoles where annotation not found
         if (classRole.equals(ClassRole.UNKNOWN)) {
-            LoggerManager.warn(() -> "JClass filtered  " + sourceFile.getPath() + " class role unknown");
             return null;
         }
 
@@ -601,30 +596,24 @@ public class SourceToObjectUtils {
         return jClass;
     }
 
-    private static JClass handleJS(String filePath) {
+    private static JClass handleJS(String filePath) throws IOException, InterruptedException {
         JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE);
-        try {
-            Set<RestCall> restCalls = new HashSet<>();
-            // Command to run Node.js script
-            ProcessBuilder processBuilder = new ProcessBuilder("node", "scripts/parser.js");
-            Process process = processBuilder.start();
 
-            // Capture the output
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] split = line.split(";");
-                restCalls.add(new RestCall(split[0], split[1], split[2], split[3], split[4], split[5], split[6], split[7]));
-                System.out.println("Node.js Output: " + line);
-            }
+        Set<RestCall> restCalls = new HashSet<>();
+        // Command to run Node.js script
+        ProcessBuilder processBuilder = new ProcessBuilder("node", "scripts/parser.js");
+        Process process = processBuilder.start();
 
-            // Wait for the Node.js process to complete
-            int exitCode = process.waitFor();
-            System.out.println("Node.js process exited with code: " + exitCode);
-        } catch (Exception e) {
-            System.err.println(e);
-            System.exit(1);
+        // Capture the output
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line;
+        while ((line = reader.readLine()) != null) {
+            String[] split = line.split(";");
+            restCalls.add(new RestCall(split[0], split[1], split[2], split[3], split[4], split[5], split[6], split[7]));
         }
+
+        // Wait for the Node.js process to complete
+        process.waitFor();
 
         return jClass;
     }

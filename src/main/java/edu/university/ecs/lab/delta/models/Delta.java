@@ -5,9 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import edu.university.ecs.lab.common.models.ir.ConfigFile;
 import edu.university.ecs.lab.common.models.ir.JClass;
-import edu.university.ecs.lab.common.models.ir.ProjectFile;
 import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
-import edu.university.ecs.lab.common.services.LoggerManager;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
 import lombok.AllArgsConstructor;
@@ -63,9 +61,6 @@ public class Delta implements JsonSerializable {
                 return null;
             }
         } catch (JsonSyntaxException e) {
-            if(data.get("fileType").getAsString().equals("JCLASS")) {
-                LoggerManager.debug(e::getMessage);
-            }
             return null;
         }
 
@@ -87,10 +82,6 @@ public class Delta implements JsonSerializable {
                 return null;
             }
         } catch (JsonSyntaxException e) {
-            if(data.get("fileType").getAsString().equals("CONFIG")) {
-                LoggerManager.debug(e::getMessage);
-            }
-
             return null;
         }
     }

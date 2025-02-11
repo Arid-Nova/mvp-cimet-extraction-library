@@ -2,29 +2,25 @@ package edu.university.ecs.lab.intermediate.create.services;
 
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
-import edu.university.ecs.lab.common.error.Error;
 import edu.university.ecs.lab.common.models.ir.ConfigFile;
 import edu.university.ecs.lab.common.models.ir.JClass;
 import edu.university.ecs.lab.common.models.ir.Microservice;
 import edu.university.ecs.lab.common.models.ir.MicroserviceSystem;
 import edu.university.ecs.lab.common.services.GitService;
-import edu.university.ecs.lab.common.services.LoggerManager;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.*;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -55,7 +51,7 @@ public class IRExtractionService {
      * @param commitID optional commitID for extraction, if empty resolves to HEAD
      * @see GitService
      */
-    public IRExtractionService(String configPath, Optional<String> commitID) {
+    public IRExtractionService(String configPath, Optional<String> commitID) throws IOException, InterruptedException, GitAPIException {
         gitService = new GitService(configPath);
 
         if(commitID.isPresent()) {
@@ -73,13 +69,9 @@ public class IRExtractionService {
      *
      * @param fileName name of output file for IR extraction
      */
-    public void generateIR(String fileName) {
+    public void generateIR(String fileName) throws IOException, InterruptedException {
         // Clone remote repositories and scan through each cloned repo to extract endpoints
         Set<Microservice> microservices = cloneAndScanServices();
-
-        if (microservices.isEmpty()) {
-            LoggerManager.info(() -> "No microservices were found during IR Extraction!");
-        }
 
         //  Write each service and endpoints to IR
         writeToFile(microservices, fileName);
@@ -91,7 +83,7 @@ public class IRExtractionService {
      *
      * @return a map of services and their endpoints
      */
-    public Set<Microservice> cloneAndScanServices() {
+    public Set<Microservice> cloneAndScanServices() throws IOException, InterruptedException {
         Set<Microservice> microservices = new HashSet<>();
 
         // Clone the repository present in the configuration file
@@ -233,13 +225,10 @@ public class IRExtractionService {
      * @param microservices a list of microservices extracted from repository
      * @param fileName the name of the output file for IR
      */
-    private void writeToFile(Set<Microservice> microservices, String fileName) {
-
+    private void writeToFile(Set<Microservice> microservices, String fileName) throws IOException {
         MicroserviceSystem microserviceSystem = new MicroserviceSystem(config.getSystemName(), commitID, microservices, new HashSet<>());
 
         JsonReadWriteUtils.writeToJSON(fileName, microserviceSystem.toJsonObject());
-
-        LoggerManager.info(() -> "Successfully extracted IR at " + commitID);
     }
 
     /**
@@ -254,7 +243,7 @@ public class IRExtractionService {
         // Validate path exists and is a directory
         File localDir = new File(rootMicroservicePath);
         if (!localDir.exists() || !localDir.isDirectory()) {
-            Error.reportAndExit(Error.INVALID_REPO_PATHS, Optional.empty());
+            throw new IllegalArgumentException("The provided repository path is invalid!");
         }
 
         // Use fallback
@@ -262,9 +251,9 @@ public class IRExtractionService {
             microserviceName = FileUtils.fallbackGetMicroserviceNameFromPath(rootMicroservicePath);
 
         Microservice model = new Microservice(microserviceName, FileUtils.localPathToGitPath(rootMicroservicePath, config.getRepoName()));
+
         scanDirectory(localDir, model);
 
-        LoggerManager.info(() -> "Done scanning directory  " + rootMicroservicePath);
         return model;
     }
 
@@ -303,19 +292,19 @@ public class IRExtractionService {
         }
     }
 
-    public static MicroserviceSystem create(String configPath) {
+    public static MicroserviceSystem create(String configPath) throws GitAPIException, IOException, InterruptedException {
         IRExtractionService extractionService = new IRExtractionService(configPath, Optional.empty());
         Set<Microservice> microservices = extractionService.cloneAndScanServices();
         MicroserviceSystem microserviceSystem = new MicroserviceSystem(extractionService.config.getSystemName(), extractionService.commitID, microservices, new HashSet<>());
         return microserviceSystem;
     }
 
-    public static void createAndWrite(String configPath, String outputPath) {
+    public static void createAndWrite(String configPath, String outputPath) throws GitAPIException, IOException, InterruptedException {
         MicroserviceSystem microserviceSystem = create(configPath);
         JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem.toJsonObject());
     }
 
-    public static MicroserviceSystem read(String fPath) {
+    public static MicroserviceSystem read(String fPath) throws IOException {
         MicroserviceSystem microserviceSystem = JsonReadWriteUtils.readFromJSON(fPath, MicroserviceSystem.class);
         return microserviceSystem;
     }
