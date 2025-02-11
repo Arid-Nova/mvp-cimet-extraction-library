@@ -159,7 +159,6 @@ public class SourceToObjectUtils {
         return imports;
     }
 
-
     /**
      * This method parses methodDeclarations list and returns a Set of Method models
      *
