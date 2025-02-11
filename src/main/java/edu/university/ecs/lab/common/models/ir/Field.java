@@ -1,6 +1,7 @@
 package edu.university.ecs.lab.common.models.ir;
 
 import com.google.gson.JsonObject;
+import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -16,10 +17,16 @@ public class Field extends Node {
      */
     private String type;
 
-    public Field(String name, String packageAndClassName, String type) {
+    /**
+     * The protection applied to this Field
+     */
+    private AccessModifier protection;
+
+    public Field(String name, String packageAndClassName, String type, AccessModifier protection) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
         this.type = type;
+        this.protection = protection;
     }
 
 
@@ -33,6 +40,7 @@ public class Field extends Node {
         jsonObject.addProperty("name", getName());
         jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
         jsonObject.addProperty("type", getType());
+        jsonObject.addProperty("protection", getProtection().toString());
 
         return jsonObject;
     }

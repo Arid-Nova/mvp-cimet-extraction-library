@@ -19,10 +19,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeS
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.error.Error;
-import edu.university.ecs.lab.common.models.enums.ClassRole;
-import edu.university.ecs.lab.common.models.enums.EndpointTemplate;
-import edu.university.ecs.lab.common.models.enums.HttpMethod;
-import edu.university.ecs.lab.common.models.enums.RestCallTemplate;
+import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.LoggerManager;
 
@@ -117,7 +114,8 @@ public class SourceToObjectUtils {
                     parseMethods(cu.findAll(MethodDeclaration.class), requestMapping),
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
-                    parseMethodCalls(cu.findAll(MethodDeclaration.class)));
+                    parseMethodCalls(cu.findAll(MethodDeclaration.class)),
+                    AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
         }
 
         // Build the JClass
@@ -135,17 +133,24 @@ public class SourceToObjectUtils {
         HashSet<Import> imports = new HashSet<>();
 
         for (ImportDeclaration impDec : importDeclarations) {
-            String fullImport = impDec.getNameAsString();
+            if (!impDec.isAsterisk()) {
+                String fullImport = impDec.getNameAsString();
 
-            String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
-            String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
+                String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
+                String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
 
-            Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
-            imports.add(imp);
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
+                imports.add(imp);
+            } else {
+                String impPackage = impDec.getNameAsString();
+                String impObject = "*";
+
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
+                imports.add(imp);
+            }
         }
         return imports;
     }
-
 
     /**
      * This method parses methodDeclarations list and returns a Set of Method models
@@ -170,7 +175,8 @@ public class SourceToObjectUtils {
                     methodDeclaration.getTypeAsString(),
                     parseAnnotations(methodDeclaration.getAnnotations()),
                     microserviceName,
-                    className);
+                    className,
+                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()));
 
             method = convertValidEndpoints(methodDeclaration, method, requestMapping);
 
@@ -271,7 +277,8 @@ public class SourceToObjectUtils {
         // loop through class declarations
         for (FieldDeclaration fd : fieldDeclarations) {
             for (VariableDeclarator variable : fd.getVariables()) {
-                javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString()));
+                javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
+                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier())));
             }
 
         }
@@ -403,7 +410,7 @@ public class SourceToObjectUtils {
         for(Method method : methods) {
             if(method instanceof Endpoint) {
                 Endpoint endpoint = (Endpoint) method;
-                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName()));
+                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName(), method.getProtection()));
 
                 StringBuilder queryParams = new StringBuilder();
                 for(edu.university.ecs.lab.common.models.ir.Parameter parameter : method.getParameters()) {
@@ -444,7 +451,8 @@ public class SourceToObjectUtils {
                 newMethods,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls);
+                newRestCalls,
+                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
     }
 
     public static ConfigFile parseConfigurationFile(File file, Config config) {
@@ -560,10 +568,11 @@ public class SourceToObjectUtils {
                 newEndpoints,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls);
+                newRestCalls,
+                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
     }
 
-    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls) {
+    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, AccessModifier protection) {
         JClass jClass = null;
 
         List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
@@ -572,28 +581,28 @@ public class SourceToObjectUtils {
         if (!classInterfaceDecs.isEmpty()) {
             if (!classInterfaceDecs.get(0).isInterface()) {
                 jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
             } else {
                 jClass = new JInterface(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
 
             }
         } else if (!enumDecs.isEmpty()) {
             List<String> enumEntries = new ArrayList<>();
             enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
             jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection
                     enumEntries);
         } else if (!recordDecs.isEmpty()) {
             jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
         }
 
         return jClass;
     }
 
     private static JClass handleJS(String filePath) {
-        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>());
+        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE);
         try {
             Set<RestCall> restCalls = new HashSet<>();
             // Command to run Node.js script
