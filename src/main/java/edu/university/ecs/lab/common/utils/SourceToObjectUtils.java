@@ -18,10 +18,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.models.enums.ClassRole;
-import edu.university.ecs.lab.common.models.enums.EndpointTemplate;
-import edu.university.ecs.lab.common.models.enums.HttpMethod;
-import edu.university.ecs.lab.common.models.enums.RestCallTemplate;
+import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
 
 import java.io.BufferedReader;
