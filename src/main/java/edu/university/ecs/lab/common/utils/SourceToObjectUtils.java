@@ -19,10 +19,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeS
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.error.Error;
-import edu.university.ecs.lab.common.models.enums.ClassRole;
-import edu.university.ecs.lab.common.models.enums.EndpointTemplate;
-import edu.university.ecs.lab.common.models.enums.HttpMethod;
-import edu.university.ecs.lab.common.models.enums.RestCallTemplate;
+import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.LoggerManager;
 
@@ -122,7 +119,8 @@ public class SourceToObjectUtils {
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
                     parseMethodCalls(cu.findAll(MethodDeclaration.class)),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                    AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
         }
 
         // Build the JClass
@@ -182,7 +180,8 @@ public class SourceToObjectUtils {
                     methodDeclaration.getTypeAsString(),
                     parseAnnotations(methodDeclaration.getAnnotations()),
                     microserviceName,
-                    className);
+                    className,
+                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()));
 
             method = convertValidEndpoints(methodDeclaration, method, requestMapping);
 
@@ -283,7 +282,8 @@ public class SourceToObjectUtils {
         // loop through class declarations
         for (FieldDeclaration fd : fieldDeclarations) {
             for (VariableDeclarator variable : fd.getVariables()) {
-                javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString()));
+                javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
+                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier())));
             }
 
         }
@@ -415,7 +415,7 @@ public class SourceToObjectUtils {
         for(Method method : methods) {
             if(method instanceof Endpoint) {
                 Endpoint endpoint = (Endpoint) method;
-                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName()));
+                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName(), method.getProtection()));
 
                 StringBuilder queryParams = new StringBuilder();
                 for(edu.university.ecs.lab.common.models.ir.Parameter parameter : method.getParameters()) {
@@ -457,7 +457,8 @@ public class SourceToObjectUtils {
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
                 newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
     }
 
     public static ConfigFile parseConfigurationFile(File file, Config config) {
@@ -574,11 +575,12 @@ public class SourceToObjectUtils {
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
                 newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
     }
 
     private static JClass handleJS(String filePath) {
-        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>());
+        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE);
         try {
             Set<RestCall> restCalls = new HashSet<>();
             // Command to run Node.js script

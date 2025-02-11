@@ -2,6 +2,7 @@ package edu.university.ecs.lab.common.models.ir;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.HttpMethod;
 import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
 import lombok.Data;
@@ -33,12 +34,12 @@ public class Endpoint extends Method {
 
 
     public Endpoint(String methodName, String packageName, Set<Parameter> parameters, String returnType, Set<Annotation> annotations, String microserviceName,
-                    String className) {
-        super(methodName, packageName, parameters, returnType, annotations, microserviceName, className);
+                    String className, AccessModifier protection) {
+        super(methodName, packageName, parameters, returnType, annotations, microserviceName, className, protection);
     }
 
     public Endpoint(Method method, String url, HttpMethod httpMethod) {
-        super(method.name, method.packageAndClassName, method.parameters, method.returnType, method.annotations, method.microserviceName, method.className);
+        super(method.name, method.packageAndClassName, method.parameters, method.returnType, method.annotations, method.microserviceName, method.className, method.protection);
         this.url = url;
         this.httpMethod = httpMethod;
     }

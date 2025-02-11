@@ -2,6 +2,7 @@ package edu.university.ecs.lab.common.models.ir;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.models.enums.FileType;
 import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
@@ -26,6 +27,11 @@ public class JClass extends ProjectFile implements JsonSerializable {
      * The name of the package containing this class
      */
     private String packageName;
+
+    /**
+     * The protection level assigned to the class
+     */
+    private AccessModifier protection;
 
     /**
      * A list of imports that the class includes
@@ -75,9 +81,10 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.methodCalls = new ArrayList<>();
         this.implementedTypes = new HashSet<>();
         this.fileType = FileType.JCLASS;
+        this.protection = AccessModifier.PACKAGE_PRIVATE;
     }
 
-    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes) {
+    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection) {
         this.name = name;
         this.packageName = packageName;
         this.path = path;
@@ -89,6 +96,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.methodCalls = methodCalls;
         this.implementedTypes = implementedTypes;
         this.fileType = FileType.JCLASS;
+        this.protection = protection;
     }
 
 
@@ -108,6 +116,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
         jsonObject.add("methods", JsonSerializable.toJsonArray(getMethods()));
         jsonObject.add("methodCalls", JsonSerializable.toJsonArray(getMethodCalls()));
         jsonObject.add("implementedTypes", gson.toJsonTree(getImplementedTypes()).getAsJsonArray());
+        jsonObject.addProperty("protection", getProtection().toString());
 
         return jsonObject;
     }
