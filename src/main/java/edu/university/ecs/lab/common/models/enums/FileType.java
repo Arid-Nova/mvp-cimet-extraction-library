@@ -5,6 +5,9 @@ package edu.university.ecs.lab.common.models.enums;
  */
 public enum FileType {
     JCLASS,
+    JINTERFACE,
+    JENUM,
+    JRECORD,
     CONFIG,
     POM
 }

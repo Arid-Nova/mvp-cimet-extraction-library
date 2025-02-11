@@ -12,8 +12,8 @@ import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
-import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
-import com.github.javaparser.symbolsolver.model.typesystem.ReferenceTypeImpl;
+import com.github.javaparser.resolution.TypeSolver;
+import com.github.javaparser.resolution.model.typesystem.ReferenceTypeImpl;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
@@ -109,17 +109,12 @@ public class SourceToObjectUtils {
         } else if(classRole == ClassRole.REP_REST_RSC) {
             jClass = handleRepositoryRestResource(requestMapping, classAnnotations);
         } else {
-            jClass = new JClass(
-                    className,
-                    path,
-                    packageName,
-                    classRole,
+            jClass = buildJClass(className, path, packageName, classRole,
                     parseImports(cu.findAll(ImportDeclaration.class)),
                     parseMethods(cu.findAll(MethodDeclaration.class), requestMapping),
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
                     parseMethodCalls(cu.findAll(MethodDeclaration.class)),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
                     AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
         }
 
@@ -447,7 +442,7 @@ public class SourceToObjectUtils {
 
 
         // Build the JClass
-        return new JClass(
+        return buildJClass(
                 className,
                 path,
                 packageName,
@@ -457,7 +452,6 @@ public class SourceToObjectUtils {
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
                 newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
                 AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
     }
 
@@ -565,7 +559,7 @@ public class SourceToObjectUtils {
 
 
         // Build the JClass
-        return new JClass(
+        return buildJClass(
                 className,
                 path,
                 packageName,
@@ -575,8 +569,36 @@ public class SourceToObjectUtils {
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
                 newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
                 AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
+    }
+
+    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, AccessModifier protection) {
+        JClass jClass = null;
+
+        List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
+        List<EnumDeclaration> enumDecs = cu.findAll(EnumDeclaration.class);
+        List<RecordDeclaration> recordDecs = cu.findAll(RecordDeclaration.class);
+        if (!classInterfaceDecs.isEmpty()) {
+            if (!classInterfaceDecs.get(0).isInterface()) {
+                jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
+            } else {
+                jClass = new JInterface(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
+
+            }
+        } else if (!enumDecs.isEmpty()) {
+            List<String> enumEntries = new ArrayList<>();
+            enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
+            jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection,
+                    enumEntries);
+        } else if (!recordDecs.isEmpty()) {
+            jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
+        }
+
+        return jClass;
     }
 
     private static JClass handleJS(String filePath) {
