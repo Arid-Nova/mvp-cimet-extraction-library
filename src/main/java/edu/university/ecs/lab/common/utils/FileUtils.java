@@ -75,10 +75,12 @@ public class FileUtils {
         return getRepositoryPath(repoName) + localPath.replace(GIT_SEPARATOR, SYS_SEPARATOR);
     }
 
-
-
-    @Deprecated
-    public static String getMicroserviceNameFromPath(String path) {
+    /**
+     * Fallback to get microservice name if other methods such as reading pom.xml, settings.gradle, etc. fail
+     * @param path The path to the microservice
+     * @return Raw microservice name based on the path
+     */
+    public static String fallbackGetMicroserviceNameFromPath(String path) {
         if (!path.startsWith(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR)) {
             throw new IllegalArgumentException("A malformed path was provided");
         }

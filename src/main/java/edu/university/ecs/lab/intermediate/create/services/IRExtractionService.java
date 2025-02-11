@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.*;
 
 
+
 /**
  * Top-level service for extracting intermediate representation from remote repositories. Methods
  * are allowed to exit the program with an error code if an error occurs.
@@ -89,8 +90,8 @@ public class IRExtractionService {
         gitService.cloneRemote();
 
         // Start scanning from the root directory
-        List<String> rootDirectories = findRootDirectories(FileUtils.getRepositoryPath(config.getRepoName()));
-        List<String> rootDirectoriesCopy = List.copyOf(rootDirectories);
+        Map<String, String> rootDirectories = findRootDirectories(FileUtils.getRepositoryPath(config.getRepoName()));
+        List<String> rootDirectoriesCopy = new ArrayList<>(rootDirectories.keySet());
 
         // Filter more/less specific
         for(String s1 : rootDirectoriesCopy) {
@@ -106,8 +107,8 @@ public class IRExtractionService {
         }
 
         // Scan each root directory for microservices
-        for (String rootDirectory : rootDirectories) {
-            Microservice microservice = recursivelyScanFiles(rootDirectory);
+        for (String rootDirectory : rootDirectories.keySet()) {
+            Microservice microservice = recursivelyScanFiles(rootDirectory, rootDirectories.get(rootDirectory));
             if (microservice != null) {
                 microservices.add(microservice);
             }
@@ -120,11 +121,12 @@ public class IRExtractionService {
      * Recursively search for directories containing a microservice (pom.xml file)
      *
      * @param directory the directory to start the search from
-     * @return a list of directory paths containing pom.xml
+     * @return a mapping of directory paths containing pom.xml to microservice names
      */
-    private List<String> findRootDirectories(String directory) {
-        List<String> rootDirectories = new ArrayList<>();
+    private Map<String, String> findRootDirectories(String directory) {
+        Map<String, String> rootDirectories = new HashMap<String, String>();
         File root = new File(directory);
+        String microserviceName = "unknown-service";
         if (root.exists() && root.isDirectory()) {
             // Check if the current directory contains a Dockerfile
             File[] files = root.listFiles();
@@ -150,21 +152,66 @@ public class IRExtractionService {
                             if (nodeList.getLength() == 0) {
                                 containsPom = true;
                             }
+                            else {
+                                continue;
+                            }
+
+                            // Obtain the name of the microservice represented by this POM file
+                            // Identify all instances of artifactId
+                            NodeList artifactIds = document.getDocumentElement().getElementsByTagName("artifactId");
+
+                            // For each potential match of artifactId, determine if the parent is the project node
+                            try {
+                                for (int i = 0; i < artifactIds.getLength(); i++) {
+                                    if (artifactIds.item(i).getParentNode().isEqualNode(document.getDocumentElement())) {
+                                        // If the artifactId is nested right under the project node, this contains the
+                                        // microserviceName, so extract the value and break
+                                        microserviceName = artifactIds.item(i).getFirstChild().getNodeValue();
+                                        break;
+                                    }
+                                }
+                            }
+                            // DOMExceptions are caught just in case the POM file is missing the microservice name
+                            // An exception here shouldn't stop the IR extraction
+                            catch (DOMException ignored) {}
+
                         } catch (Exception e) {
                             throw new RuntimeException("Error parsing pom.xml");
                         }
                     } else if(file.isFile() && file.getName().equals("build.gradle")) {
                         containsGradle = true;
                     } else if (file.isDirectory()) {
-                        rootDirectories.addAll(findRootDirectories(file.getPath()));
+                        rootDirectories.putAll(findRootDirectories(file.getPath()));
+                    } else if (file.isFile() && file.getName().equals("settings.gradle")) {
+
+                        // Identify pattern in settings.gradle to find for the microservice name
+                        Pattern nameFinder = Pattern.compile("rootProject\\.name[ \\n*]=[ \\n*][\\\"\\'](.*)[\\\"\\']");
+
+                        // Load the file
+                        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+
+                            // For each line, identify any matches to find the name
+                            String line = br.readLine();
+                            while (line != null) {
+                                Matcher m = nameFinder.matcher(line);
+                                if(m.find())
+                                {
+                                    microserviceName = m.group(1);
+                                    break;
+                                }
+                                line = br.readLine();
+                            }
+                        }
+                        // Being unable to find the microservice name should not stop the extraction
+                        catch (Exception ignored) {}
                     }
                 }
             }
             if (containsPom) {
-                rootDirectories.add(root.getPath());
+                rootDirectories.put(root.getPath(), microserviceName);
                 return rootDirectories;
-            } else if (containsGradle){
-                rootDirectories.add(root.getPath());
+            } else if (containsGradle) {
+                rootDirectories.put(root.getPath(), microserviceName);
                 return rootDirectories;
             }
         }
@@ -188,17 +235,23 @@ public class IRExtractionService {
      * Recursively scan the files in the given repository path and extract the endpoints and
      * dependencies for a single microservice.
      *
+     * @param rootMicroservicePath The path to the microservice root directory
+     * @param microserviceName The name of the microservice; using null or "unknown-service" will lead to extracting it from the path
      * @return model of a single service containing the extracted endpoints and dependencies
      */
-    public Microservice recursivelyScanFiles(String rootMicroservicePath) {
+    public Microservice recursivelyScanFiles(String rootMicroservicePath, String microserviceName) {
         // Validate path exists and is a directory
         File localDir = new File(rootMicroservicePath);
         if (!localDir.exists() || !localDir.isDirectory()) {
             throw new IllegalArgumentException("The provided repository path is invalid!");
         }
 
-        Microservice model = new Microservice(FileUtils.getMicroserviceNameFromPath(rootMicroservicePath),
-                FileUtils.localPathToGitPath(rootMicroservicePath, config.getRepoName()));
+        // Use fallback
+        if(microserviceName == null || microserviceName.equals("unknown-service"))
+            microserviceName = FileUtils.fallbackGetMicroserviceNameFromPath(rootMicroservicePath);
+
+        Microservice model = new Microservice(microserviceName, FileUtils.localPathToGitPath(rootMicroservicePath, config.getRepoName()));
+
         scanDirectory(localDir, model);
 
         return model;
