@@ -304,7 +304,7 @@ public class IRExtractionService {
         JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem.toJsonObject());
     }
 
-    public static MicroserviceSystem read(String fPath) throws FileNotFoundException {
+    public static MicroserviceSystem read(String fPath) throws IOException {
         MicroserviceSystem microserviceSystem = JsonReadWriteUtils.readFromJSON(fPath, MicroserviceSystem.class);
         return microserviceSystem;
     }

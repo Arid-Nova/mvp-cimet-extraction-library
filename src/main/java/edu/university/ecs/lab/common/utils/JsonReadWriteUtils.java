@@ -35,8 +35,9 @@ public class JsonReadWriteUtils {
         Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
         Path path = Paths.get(filePath);
         Files.createDirectories(path.getParent());
-        Writer writer = Files.newBufferedWriter(path);
-        gson.toJson(object, writer);
+        try (Writer writer = Files.newBufferedWriter(path)) {
+            gson.toJson(object, writer);
+        }
     }
 
     /**
@@ -47,12 +48,12 @@ public class JsonReadWriteUtils {
      * @param type     the Class representing the type of the object to deserialize
      * @return an object of type T containing the data from the JSON file
      */
-    public static <T> T readFromJSON(String filePath, Class<T> type) throws FileNotFoundException {
+    public static <T> T readFromJSON(String filePath, Class<T> type) throws IOException {
         // Register appropriate deserializers to allow compaction of data
-
         Gson gson = registerDeserializers();
-        Reader reader = new BufferedReader(new FileReader(filePath));
-        return gson.fromJson(reader, type);
+        try (Reader reader = new BufferedReader(new FileReader(filePath))) {
+            return gson.fromJson(reader, type);
+        }
     }
 
     /**

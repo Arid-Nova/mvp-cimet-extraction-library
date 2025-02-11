@@ -219,7 +219,7 @@ public class DeltaExtractionService {
         JsonReadWriteUtils.writeToJSON(outputPath, systemChange);
     }
 
-    public static SystemChange read(String fPath) throws FileNotFoundException {
+    public static SystemChange read(String fPath) throws IOException {
         SystemChange systemChange = JsonReadWriteUtils.readFromJSON(fPath, SystemChange.class);
         return systemChange;
     }

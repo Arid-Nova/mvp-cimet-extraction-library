@@ -75,8 +75,9 @@ public class GitService {
         }
 
         // Reset branch to old commit
-        Git git = new Git(repository);
-        git.reset().setMode(ResetCommand.ResetType.HARD).setRef(commitID).call();
+        try (Git git = new Git(repository)) {
+            git.reset().setMode(ResetCommand.ResetType.HARD).setRef(commitID).call();
+        }
     }
 
     /**
@@ -122,28 +123,29 @@ public class GitService {
         newCommit = revWalk.parseCommit(repository.resolve(commitNew));
 
         // Prepare tree parsers for both commits
-        ObjectReader reader = repository.newObjectReader();
-        CanonicalTreeParser oldTreeParser = new CanonicalTreeParser();
-        CanonicalTreeParser newTreeParser = new CanonicalTreeParser();
+        try (ObjectReader reader = repository.newObjectReader()) {
+            CanonicalTreeParser oldTreeParser = new CanonicalTreeParser();
+            CanonicalTreeParser newTreeParser = new CanonicalTreeParser();
 
-        // Use tree objects from the commits
-        oldTreeParser.reset(reader, oldCommit.getTree().getId());
-        newTreeParser.reset(reader, newCommit.getTree().getId());
+            // Use tree objects from the commits
+            oldTreeParser.reset(reader, oldCommit.getTree().getId());
+            newTreeParser.reset(reader, newCommit.getTree().getId());
 
-        // Compute differences between the trees of the two commits
-        Git git = new Git(repository);
-            List<DiffEntry> rawDiffs = git.diff()
-                    .setOldTree(oldTreeParser)
-                    .setNewTree(newTreeParser)
-                    .call();
+            // Compute differences between the trees of the two commits
+            try (Git git = new Git(repository)) {
+                List<DiffEntry> rawDiffs = git.diff()
+                        .setOldTree(oldTreeParser)
+                        .setNewTree(newTreeParser)
+                        .call();
 
-            // Filter out diffs that only contain whitespace or comment changes
-            RevCommit finalOldCommit = oldCommit;
-            RevCommit finalNewCommit = newCommit;
-            returnList = rawDiffs.stream()
-                    .filter(diff -> isCodeChange(diff, repository, finalOldCommit, finalNewCommit))
-                    .collect(Collectors.toList());
-
+                // Filter out diffs that only contain whitespace or comment changes
+                RevCommit finalOldCommit = oldCommit;
+                RevCommit finalNewCommit = newCommit;
+                returnList = rawDiffs.stream()
+                        .filter(diff -> isCodeChange(diff, repository, finalOldCommit, finalNewCommit))
+                        .collect(Collectors.toList());
+            }
+        }
 
         return returnList;
     }
@@ -231,9 +233,9 @@ public class GitService {
     public Iterable<RevCommit> getLog() throws GitAPIException {
         Iterable<RevCommit> returnList = null;
 
-        Git git = new Git(repository);
-        returnList = git.log().call();
-
+        try (Git git = new Git(repository)) {
+            returnList = git.log().call();
+        }
 
         return returnList;
     }

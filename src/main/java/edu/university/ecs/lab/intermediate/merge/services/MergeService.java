@@ -31,7 +31,7 @@ public class MergeService {
             String intermediatePath,
             String deltaPath,
             String configPath,
-            String outputPath) throws FileNotFoundException {
+            String outputPath) throws IOException {
         this.config = ConfigUtil.readConfig(configPath);
         this.microserviceSystem = JsonReadWriteUtils.readFromJSON(Path.of(intermediatePath).toAbsolutePath().toString(), MicroserviceSystem.class);
         this.systemChange = JsonReadWriteUtils.readFromJSON(Path.of(deltaPath).toAbsolutePath().toString(), SystemChange.class);
@@ -288,7 +288,7 @@ public class MergeService {
         return this.microserviceSystem;
     }
 
-    public static MicroserviceSystem create(String configPath, String intermediatePath, String deltaPath, String newCommitID) throws FileNotFoundException {
+    public static MicroserviceSystem create(String configPath, String intermediatePath, String deltaPath, String newCommitID) throws IOException {
         MergeService mergeService = new MergeService(intermediatePath, deltaPath, configPath, "");
         mergeService.generateMergeIR(newCommitID);
         return mergeService.getMicroserviceSystem();
