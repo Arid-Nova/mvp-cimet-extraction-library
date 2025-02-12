@@ -11,6 +11,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -28,8 +29,8 @@ public class JEnum extends JClass implements JsonSerializable {
         this.fileType = FileType.JENUM;
     }
 
-    public JEnum(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection, Boolean isFinal, List<String> enumTypes) {
-        super(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls, implementedTypes, protection, isFinal);
+    public JEnum(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection, List<String> enumTypes) {
+        super(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls, implementedTypes, new HashSet<String>(), protection, true, false, true);
         this.fileType = FileType.JENUM;
         this.enumTypes = enumTypes;
     }

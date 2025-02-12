@@ -10,10 +10,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NonNull;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -49,6 +46,11 @@ public class JClass extends ProjectFile implements JsonSerializable {
     private Set<String> implementedTypes;
 
     /**
+     * Class extensions
+     */
+    private Set<String> extendedTypes;
+
+    /**
      * Role of the class in the microservice system. See {@link ClassRole}
      */
     private ClassRole classRole;
@@ -73,6 +75,15 @@ public class JClass extends ProjectFile implements JsonSerializable {
      */
     private List<MethodCall> methodCalls;
 
+    /**
+     * Whether the class is static (nested classes only)
+     */
+    private Boolean isStatic;
+
+    /**
+     * Whether the class is abstract
+     */
+    private Boolean isAbstract;
 
     public JClass(String name, String path, String packageName, ClassRole classRole) {
         this.name = name;
@@ -90,7 +101,9 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.isFinal = false;
     }
 
-    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection, Boolean isFinal) {
+    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods,
+                  Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes,
+                  Set<String> extendedTypes, AccessModifier protection, Boolean isFinal, Boolean isAbstract, Boolean isStatic) {
         this.name = name;
         this.packageName = packageName;
         this.path = path;
@@ -101,9 +114,12 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.annotations = classAnnotations;
         this.methodCalls = methodCalls;
         this.implementedTypes = implementedTypes;
+        this.extendedTypes = extendedTypes;
         this.fileType = FileType.JCLASS;
         this.protection = protection;
         this.isFinal = isFinal;
+        this.isAbstract = isAbstract;
+        this.isStatic = isStatic;
     }
 
 
@@ -123,8 +139,12 @@ public class JClass extends ProjectFile implements JsonSerializable {
         jsonObject.add("methods", JsonSerializable.toJsonArray(getMethods()));
         jsonObject.add("methodCalls", JsonSerializable.toJsonArray(getMethodCalls()));
         jsonObject.add("implementedTypes", gson.toJsonTree(getImplementedTypes()).getAsJsonArray());
+        jsonObject.add("extendedTypes", gson.toJsonTree(getExtendedTypes()).getAsJsonArray());
         jsonObject.addProperty("protection", getProtection().toString());
         jsonObject.addProperty("isFinal", getIsFinal());
+        jsonObject.addProperty("isAbstract", getIsAbstract());
+        jsonObject.addProperty("isStatic", getIsStatic());
+
 
         return jsonObject;
     }

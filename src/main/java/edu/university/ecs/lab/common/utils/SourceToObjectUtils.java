@@ -7,7 +7,9 @@ import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
@@ -110,7 +112,9 @@ public class SourceToObjectUtils {
                     parseAnnotations(classAnnotations),
                     parseMethodCalls(cu.findAll(MethodDeclaration.class)),
                     AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal());
+                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal(),
+                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isAbstract(),
+                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isStatic());
         }
 
         // Build the JClass
@@ -457,7 +461,9 @@ public class SourceToObjectUtils {
                 parseAnnotations(classAnnotations),
                 newRestCalls,
                 AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal());
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal(),
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isAbstract(),
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isStatic());
     }
 
     public static ConfigFile parseConfigurationFile(File file, Config config) {
@@ -575,10 +581,12 @@ public class SourceToObjectUtils {
                 parseAnnotations(classAnnotations),
                 newRestCalls,
                 AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal());
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal(),
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isAbstract(),
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isStatic());
     }
 
-    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, AccessModifier protection, Boolean isFinal) {
+    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, AccessModifier protection, Boolean isFinal, Boolean isAbstract, Boolean isStatic) {
         JClass jClass = null;
 
         List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
@@ -587,28 +595,32 @@ public class SourceToObjectUtils {
         if (!classInterfaceDecs.isEmpty()) {
             if (!classInterfaceDecs.get(0).isInterface()) {
                 jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal);
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                        classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                        protection, isFinal, isAbstract, isStatic);
             } else {
                 jClass = new JInterface(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal);
+                        classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                        protection, isFinal, isStatic);
 
             }
         } else if (!enumDecs.isEmpty()) {
             List<String> enumEntries = new ArrayList<>();
             enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
             jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal,
-                    enumEntries);
+                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                    protection, enumEntries);
         } else if (!recordDecs.isEmpty()) {
             jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal);
+                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                    protection, isStatic);
         }
 
         return jClass;
     }
 
     private static JClass handleJS(String filePath) throws IOException, InterruptedException {
-        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE, false);
+        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE, false, false, false);
 
         Set<RestCall> restCalls = new HashSet<>();
         // Command to run Node.js script
