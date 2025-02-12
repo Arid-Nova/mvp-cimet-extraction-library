@@ -13,8 +13,8 @@ public class JRecord extends JClass {
         this.fileType = FileType.JRECORD;
     }
 
-    public JRecord(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection) {
-        super(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls, implementedTypes, protection);
+    public JRecord(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection, Boolean isFinal) {
+        super(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls, implementedTypes, protection, isFinal);
         this.fileType = FileType.JRECORD;
     }
 }

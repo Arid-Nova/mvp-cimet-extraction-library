@@ -34,6 +34,11 @@ public class JClass extends ProjectFile implements JsonSerializable {
     private AccessModifier protection;
 
     /**
+     * Whether the class is final
+     */
+    private Boolean isFinal;
+
+    /**
      * A list of imports that the class includes
      */
     private Set<Import> imports;
@@ -82,9 +87,10 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.implementedTypes = new HashSet<>();
         this.fileType = FileType.JCLASS;
         this.protection = AccessModifier.PACKAGE_PRIVATE;
+        this.isFinal = false;
     }
 
-    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection) {
+    public JClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection, Boolean isFinal) {
         this.name = name;
         this.packageName = packageName;
         this.path = path;
@@ -97,6 +103,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.implementedTypes = implementedTypes;
         this.fileType = FileType.JCLASS;
         this.protection = protection;
+        this.isFinal = isFinal;
     }
 
 
@@ -117,6 +124,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
         jsonObject.add("methodCalls", JsonSerializable.toJsonArray(getMethodCalls()));
         jsonObject.add("implementedTypes", gson.toJsonTree(getImplementedTypes()).getAsJsonArray());
         jsonObject.addProperty("protection", getProtection().toString());
+        jsonObject.addProperty("isFinal", getIsFinal().toString());
 
         return jsonObject;
     }
