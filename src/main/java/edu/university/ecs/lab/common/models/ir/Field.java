@@ -53,8 +53,8 @@ public class Field extends Node {
         jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
         jsonObject.addProperty("type", getType());
         jsonObject.addProperty("protection", getProtection().toString());
-        jsonObject.addProperty("isStatic", getIsStatic().toString());
-        jsonObject.addProperty("isFinal", getIsFinal().toString());
+        jsonObject.addProperty("isStatic", getIsStatic());
+        jsonObject.addProperty("isFinal", getIsFinal());
 
         return jsonObject;
     }

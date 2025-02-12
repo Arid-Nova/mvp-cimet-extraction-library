@@ -56,7 +56,7 @@ public class Parameter extends Node implements JsonSerializable {
         jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
         jsonObject.addProperty("type", getType());
         jsonObject.add("annotations", JsonSerializable.toJsonArray(annotations));
-        jsonObject.addProperty("isVariableParameter", getIsVariableParameter().toString());
+        jsonObject.addProperty("isVariableParameter", getIsVariableParameter());
 
         return jsonObject;
     }

@@ -124,7 +124,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
         jsonObject.add("methodCalls", JsonSerializable.toJsonArray(getMethodCalls()));
         jsonObject.add("implementedTypes", gson.toJsonTree(getImplementedTypes()).getAsJsonArray());
         jsonObject.addProperty("protection", getProtection().toString());
-        jsonObject.addProperty("isFinal", getIsFinal().toString());
+        jsonObject.addProperty("isFinal", getIsFinal());
 
         return jsonObject;
     }
