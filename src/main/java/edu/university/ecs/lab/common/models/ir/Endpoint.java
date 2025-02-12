@@ -34,12 +34,12 @@ public class Endpoint extends Method {
 
 
     public Endpoint(String methodName, String packageName, Set<Parameter> parameters, String returnType, Set<Annotation> annotations, String microserviceName,
-                    String className, AccessModifier protection) {
-        super(methodName, packageName, parameters, returnType, annotations, microserviceName, className, protection);
+                    String className, AccessModifier protection, Boolean isAbstract, Boolean isStatic, Boolean isFinal, Set<String> thrownExceptions) {
+        super(methodName, packageName, parameters, returnType, annotations, microserviceName, className, protection, isAbstract, isStatic, isFinal, thrownExceptions);
     }
 
     public Endpoint(Method method, String url, HttpMethod httpMethod) {
-        super(method.name, method.packageAndClassName, method.parameters, method.returnType, method.annotations, method.microserviceName, method.className, method.protection);
+        super(method.name, method.packageAndClassName, method.parameters, method.returnType, method.annotations, method.microserviceName, method.className, method.protection, method.getIsAbstract(), method.getIsStatic(), method.getIsFinal(), method.getThrownExceptions());
         this.url = url;
         this.httpMethod = httpMethod;
     }

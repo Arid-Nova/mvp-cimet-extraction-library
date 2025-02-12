@@ -22,11 +22,23 @@ public class Field extends Node {
      */
     private AccessModifier protection;
 
-    public Field(String name, String packageAndClassName, String type, AccessModifier protection) {
+    /**
+     * Whether the field is static
+     */
+    private Boolean isStatic;
+
+    /**
+     * Whether the field is final
+     */
+    private Boolean isFinal;
+
+    public Field(String name, String packageAndClassName, String type, AccessModifier protection, Boolean isStatic, Boolean isFinal) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
         this.type = type;
         this.protection = protection;
+        this.isStatic = isStatic;
+        this.isFinal = isFinal;
     }
 
 
@@ -41,6 +53,8 @@ public class Field extends Node {
         jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
         jsonObject.addProperty("type", getType());
         jsonObject.addProperty("protection", getProtection().toString());
+        jsonObject.addProperty("isStatic", getIsStatic());
+        jsonObject.addProperty("isFinal", getIsFinal());
 
         return jsonObject;
     }

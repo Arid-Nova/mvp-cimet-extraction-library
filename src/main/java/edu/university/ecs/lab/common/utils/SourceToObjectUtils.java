@@ -1,14 +1,13 @@
 package edu.university.ecs.lab.common.utils;
 
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.*;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
@@ -110,7 +109,8 @@ public class SourceToObjectUtils {
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
                     parseMethodCalls(cu.findAll(MethodDeclaration.class)),
-                    AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
+                    AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
+                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal());
         }
 
         // Build the JClass
@@ -163,6 +163,10 @@ public class SourceToObjectUtils {
                 parameters.add(new edu.university.ecs.lab.common.models.ir.Parameter(parameter, packageAndClassName));
             }
 
+            NodeList<ReferenceType> exceptions = methodDeclaration.getThrownExceptions();
+            Set<String> thrownExceptions = new HashSet<>();
+            exceptions.forEach(exception -> thrownExceptions.add(exception.toString()));
+
             Method method = new Method(
                     methodDeclaration.getNameAsString(),
                     packageAndClassName,
@@ -171,7 +175,11 @@ public class SourceToObjectUtils {
                     parseAnnotations(methodDeclaration.getAnnotations()),
                     microserviceName,
                     className,
-                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()));
+                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()),
+                    methodDeclaration.isAbstract(),
+                    methodDeclaration.isStatic(),
+                    methodDeclaration.isFinal(),
+                    thrownExceptions);
 
             method = convertValidEndpoints(methodDeclaration, method, requestMapping);
 
@@ -273,7 +281,8 @@ public class SourceToObjectUtils {
         for (FieldDeclaration fd : fieldDeclarations) {
             for (VariableDeclarator variable : fd.getVariables()) {
                 javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
-                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier())));
+                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier()),
+                        fd.isStatic(), fd.isFinal()));
             }
 
         }
@@ -405,7 +414,7 @@ public class SourceToObjectUtils {
         for(Method method : methods) {
             if(method instanceof Endpoint) {
                 Endpoint endpoint = (Endpoint) method;
-                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName(), method.getProtection()));
+                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName(), method.getProtection(), method.getIsAbstract(), method.getIsStatic(), method.getIsFinal(), method.getThrownExceptions()));
 
                 StringBuilder queryParams = new StringBuilder();
                 for(edu.university.ecs.lab.common.models.ir.Parameter parameter : method.getParameters()) {
@@ -447,7 +456,8 @@ public class SourceToObjectUtils {
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
                 newRestCalls,
-                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
+                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal());
     }
 
     public static ConfigFile parseConfigurationFile(File file, Config config) {
@@ -564,10 +574,11 @@ public class SourceToObjectUtils {
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
                 newRestCalls,
-                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()));
+                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
+                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal());
     }
 
-    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, AccessModifier protection) {
+    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, AccessModifier protection, Boolean isFinal) {
         JClass jClass = null;
 
         List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
@@ -576,28 +587,28 @@ public class SourceToObjectUtils {
         if (!classInterfaceDecs.isEmpty()) {
             if (!classInterfaceDecs.get(0).isInterface()) {
                 jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal);
             } else {
                 jClass = new JInterface(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal);
 
             }
         } else if (!enumDecs.isEmpty()) {
             List<String> enumEntries = new ArrayList<>();
             enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
             jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection,
+                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal,
                     enumEntries);
         } else if (!recordDecs.isEmpty()) {
             jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection);
+                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()), protection, isFinal);
         }
 
         return jClass;
     }
 
     private static JClass handleJS(String filePath) throws IOException, InterruptedException {
-        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE);
+        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE, false);
 
         Set<RestCall> restCalls = new HashSet<>();
         // Command to run Node.js script

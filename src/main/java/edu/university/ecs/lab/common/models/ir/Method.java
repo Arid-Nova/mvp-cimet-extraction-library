@@ -2,6 +2,8 @@ package edu.university.ecs.lab.common.models.ir;
 
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.type.ReferenceType;
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
@@ -48,8 +50,28 @@ public class Method extends Node {
      */
     protected String className;
 
+    /**
+     * Whether the function is abstract
+     */
+    private Boolean isAbstract;
+
+    /**
+     * Whether the function is static
+     */
+    private Boolean isStatic;
+
+    /**
+     * Whether the function is final
+     */
+    private Boolean isFinal;
+
+    /**
+     * A list of exceptions that the function can throw when called
+     */
+    private Set<String> thrownExceptions;
+
     public Method(String name, String packageAndClassName, Set<Parameter> parameters, String typeAsString, Set<Annotation> annotations, String microserviceName,
-                  String className, AccessModifier protection) {
+                  String className, AccessModifier protection, Boolean isAbstract, Boolean isStatic, Boolean isFinal, Set<String> thrownExceptions) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
         this.parameters = parameters;
@@ -58,6 +80,10 @@ public class Method extends Node {
         this.microserviceName = microserviceName;
         this.className = className;
         this.protection = protection;
+        this.isAbstract = isAbstract;
+        this.isStatic = isStatic;
+        this.isFinal = isFinal;
+        this.thrownExceptions = thrownExceptions;
     }
 
     public Method(MethodDeclaration methodDeclaration) {
@@ -65,6 +91,12 @@ public class Method extends Node {
         this.packageAndClassName = methodDeclaration.getClass().getPackageName() + "." + methodDeclaration.getClass().getName();
         this.parameters = parseParameters(methodDeclaration.getParameters());
         this.protection = AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier());
+        this.isAbstract = methodDeclaration.isAbstract();
+        this.isStatic = methodDeclaration.isStatic();
+        this.isFinal = methodDeclaration.isFinal();
+        NodeList<ReferenceType> exceptions = methodDeclaration.getThrownExceptions();
+        this.thrownExceptions = new HashSet<>();
+        exceptions.forEach(exception -> this.thrownExceptions.add(exception.toString()));
     }
 
     /**
@@ -73,6 +105,7 @@ public class Method extends Node {
     @Override
     public JsonObject toJsonObject() {
         JsonObject jsonObject = new JsonObject();
+        Gson gson = new Gson();
 
         jsonObject.addProperty("name", getName());
         jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
@@ -82,6 +115,10 @@ public class Method extends Node {
         jsonObject.addProperty("microserviceName", microserviceName);
         jsonObject.addProperty("className", className);
         jsonObject.addProperty("protection", protection.toString());
+        jsonObject.addProperty("isAbstract", getIsAbstract());
+        jsonObject.addProperty("isFinal", getIsFinal());
+        jsonObject.addProperty("isStatic", getIsStatic());
+        jsonObject.add("thrownExceptions", gson.toJsonTree(getThrownExceptions()).getAsJsonArray());
 
         return jsonObject;
     }
