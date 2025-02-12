@@ -20,11 +20,15 @@ public class Parameter extends Node implements JsonSerializable {
 
     private Set<Annotation> annotations;
 
-    public Parameter(String name, String packageAndClassName, String type, Set<Annotation> annotations) {
+    private Boolean isVariableParameter;
+
+
+    public Parameter(String name, String packageAndClassName, String type, Set<Annotation> annotations, Boolean isVariableParameter) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
         this.type = type;
         this.annotations = annotations;
+        this.isVariableParameter = isVariableParameter;
     }
 
     public Parameter(com.github.javaparser.ast.body.Parameter parameter, String packageAndClassName) {
@@ -32,6 +36,12 @@ public class Parameter extends Node implements JsonSerializable {
         this.type = parameter.getTypeAsString();
         this.packageAndClassName = packageAndClassName;
         this.annotations = parameter.getAnnotations().stream().map(annotationExpr -> new Annotation(annotationExpr, packageAndClassName)).collect(Collectors.toSet());
+        this.isVariableParameter = parameter.isVarArgs();
+
+        // Include some additional annotations for variable parameters
+        if (this.isVariableParameter) {
+            this.annotations.addAll(parameter.getVarArgsAnnotations().stream().map(annotationExpr -> new Annotation(annotationExpr, packageAndClassName)).collect(Collectors.toSet()));
+        }
     }
 
 
@@ -46,6 +56,7 @@ public class Parameter extends Node implements JsonSerializable {
         jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
         jsonObject.addProperty("type", getType());
         jsonObject.add("annotations", JsonSerializable.toJsonArray(annotations));
+        jsonObject.addProperty("isVariableParameter", getIsVariableParameter().toString());
 
         return jsonObject;
     }

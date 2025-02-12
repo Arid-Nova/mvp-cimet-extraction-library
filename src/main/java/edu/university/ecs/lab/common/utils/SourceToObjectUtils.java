@@ -1,14 +1,13 @@
 package edu.university.ecs.lab.common.utils;
 
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.ImportDeclaration;
+import com.github.javaparser.ast.*;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
@@ -164,6 +163,10 @@ public class SourceToObjectUtils {
                 parameters.add(new edu.university.ecs.lab.common.models.ir.Parameter(parameter, packageAndClassName));
             }
 
+            NodeList<ReferenceType> exceptions = methodDeclaration.getThrownExceptions();
+            Set<String> thrownExceptions = new HashSet<>();
+            exceptions.forEach(exception -> thrownExceptions.add(exception.toString()));
+
             Method method = new Method(
                     methodDeclaration.getNameAsString(),
                     packageAndClassName,
@@ -172,7 +175,11 @@ public class SourceToObjectUtils {
                     parseAnnotations(methodDeclaration.getAnnotations()),
                     microserviceName,
                     className,
-                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()));
+                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()),
+                    methodDeclaration.isAbstract(),
+                    methodDeclaration.isStatic(),
+                    methodDeclaration.isFinal(),
+                    thrownExceptions);
 
             method = convertValidEndpoints(methodDeclaration, method, requestMapping);
 
@@ -407,7 +414,7 @@ public class SourceToObjectUtils {
         for(Method method : methods) {
             if(method instanceof Endpoint) {
                 Endpoint endpoint = (Endpoint) method;
-                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName(), method.getProtection()));
+                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName(), method.getProtection(), method.getIsAbstract(), method.getIsStatic(), method.getIsFinal(), method.getThrownExceptions()));
 
                 StringBuilder queryParams = new StringBuilder();
                 for(edu.university.ecs.lab.common.models.ir.Parameter parameter : method.getParameters()) {
