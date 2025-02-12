@@ -274,7 +274,8 @@ public class SourceToObjectUtils {
         for (FieldDeclaration fd : fieldDeclarations) {
             for (VariableDeclarator variable : fd.getVariables()) {
                 javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
-                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier())));
+                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier()),
+                        fd.isStatic(), fd.isFinal()));
             }
 
         }
