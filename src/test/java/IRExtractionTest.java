@@ -15,14 +15,9 @@ import java.io.IOException;
 import java.util.Optional;
 
 public class IRExtractionTest {
-
-    public static final String TEST_RESOURCES_PATH = "src" + File.separator + "test" + File.separator + "resources";
-    public static final String TEST_CONFIGS_PATH = TEST_RESOURCES_PATH + File.separator + "configs";
-    public static final String TEST_JAVA_FILES_PATH = TEST_RESOURCES_PATH + File.separator + "java_files";
-
     @Test
     void testGenerateIR() throws GitAPIException, IOException, InterruptedException {
-        final String TEST_CONFIG_FILE = TEST_CONFIGS_PATH + File.separator + "test_config.json";
+        final String TEST_CONFIG_FILE = TestConstants.CONFIGS_PATH + File.separator + "test_config.json";
         IRExtractionService irServ = new IRExtractionService(TEST_CONFIG_FILE, Optional.empty());
         irServ.generateIR("output/IR.json");
         System.out.println("Generated IR at output/IR.json.");
@@ -30,10 +25,10 @@ public class IRExtractionTest {
 
     @Test
     public void testRestCallExtraction() throws IOException, InterruptedException {
-        final String TEST_FILE1 = TEST_JAVA_FILES_PATH + File.separator + "TestFile2.java";
-        final String TEST_FILE2 = TEST_JAVA_FILES_PATH + File.separator + "TestFile3.java";
+        final String TEST_FILE1 = TestConstants.JAVA_FILES_PATH + File.separator + "TestFile2.java";
+        final String TEST_FILE2 = TestConstants.JAVA_FILES_PATH + File.separator + "TestFile3.java";
 
-        final String TEST_CONFIG_FILE = TEST_CONFIGS_PATH + File.separator + "test_config2.json";
+        final String TEST_CONFIG_FILE = TestConstants.CONFIGS_PATH + File.separator + "test_config2.json";
 
         if(!(new File("clone" + File.separator + "train-ticket").exists())) {
             GitService gitService = new GitService(TEST_CONFIG_FILE);
