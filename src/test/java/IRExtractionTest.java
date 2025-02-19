@@ -1,4 +1,11 @@
+import edu.university.ecs.lab.common.config.ConfigUtil;
+import edu.university.ecs.lab.common.models.ir.Endpoint;
+import edu.university.ecs.lab.common.models.ir.JClass;
+import edu.university.ecs.lab.common.models.ir.RestCall;
+import edu.university.ecs.lab.common.services.GitService;
+import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
@@ -9,11 +16,42 @@ import java.util.Optional;
 
 public class IRExtractionTest {
 
-    public static final String TEST_CONFIG_PATH = "src" + File.separator + "test" + File.separator + "resources" + File.separator + "test_config.json";
+    public static final String TEST_RESOURCES_PATH = "src" + File.separator + "test" + File.separator + "resources";
+    public static final String TEST_CONFIGS_PATH = TEST_RESOURCES_PATH + File.separator + "configs";
+    public static final String TEST_JAVA_FILES_PATH = TEST_RESOURCES_PATH + File.separator + "java_files";
 
     @Test
-    void testGenerate() throws GitAPIException, IOException, InterruptedException {
-        IRExtractionService irServ = new IRExtractionService(TEST_CONFIG_PATH, Optional.empty());
+    void testGenerateIR() throws GitAPIException, IOException, InterruptedException {
+        final String TEST_CONFIG_FILE = TEST_CONFIGS_PATH + File.separator + "test_config.json";
+        IRExtractionService irServ = new IRExtractionService(TEST_CONFIG_FILE, Optional.empty());
         irServ.generateIR("output/IR.json");
+        System.out.println("Generated IR at output/IR.json.");
+    }
+
+    @Test
+    public void testRestCallExtraction() throws IOException, InterruptedException {
+        final String TEST_FILE1 = TEST_JAVA_FILES_PATH + File.separator + "TestFile2.java";
+        final String TEST_FILE2 = TEST_JAVA_FILES_PATH + File.separator + "TestFile3.java";
+
+        final String TEST_CONFIG_FILE = TEST_CONFIGS_PATH + File.separator + "test_config2.json";
+
+        if(!(new File("clone" + File.separator + "train-ticket").exists())) {
+            GitService gitService = new GitService(TEST_CONFIG_FILE);
+            gitService.cloneRemote();
+        }
+
+        JClass jClass1 = SourceToObjectUtils.parseClass(new File(TEST_FILE1), ConfigUtil.readConfig(TEST_CONFIG_FILE), "a");
+        JClass jClass2 = SourceToObjectUtils.parseClass(new File(TEST_FILE2), ConfigUtil.readConfig(TEST_CONFIG_FILE), "b");
+
+        int count = 0;
+        for(Endpoint e : jClass1.getEndpoints()) {
+            for(RestCall rc : jClass2.getRestCalls()) {
+                if(RestCall.matchEndpoint(rc, e)) {
+                    System.out.println("Passed " + rc.getUrl() + " " + e.getUrl());
+                    count++;
+                }
+            }
+        }
+        Assertions.assertEquals(count, 3);
     }
 }
