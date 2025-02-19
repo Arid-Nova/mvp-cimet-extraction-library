@@ -9,22 +9,6 @@ public enum AccessModifier {
     PACKAGE_PRIVATE;
 
     /**
-     * Convert AccessModifier enum to String equivalent for JSON output
-      * @return String name of the modifier
-     */
-    @Override
-    public String toString() {
-        if (this.equals(PUBLIC))
-            return "public";
-        else if (this.equals(PROTECTED))
-            return "protected";
-        else if (this.equals(PRIVATE))
-            return "private";
-        else
-            return "package_private";
-    }
-
-    /**
      * Converts the AccessSpecifier parser enum to our AccessModifier enum
      * @param as The AccessSpecifier for a component
      * @return An AccessModifier for a component
