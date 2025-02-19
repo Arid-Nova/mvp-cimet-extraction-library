@@ -21,14 +21,14 @@ import java.util.*;
 class DeltaAndMergeTest {
     private static IRExtractionService irExtractionService;
     private static List<RevCommit> list;
-    final static String TEST_CONFIG_PATH = TestConstants.CONFIGS_PATH + File.separator + "test_config3.json";
+    final static String TEST_CONFIG_PATH = TestUtilities.CONFIGS_PATH + File.separator + "test_config3.json";
 
     @BeforeAll
     public static void setUp() throws GitAPIException, IOException, InterruptedException {
         FileUtils.makeDirs();
         GitService gitService = new GitService(TEST_CONFIG_PATH);
 
-        list = iterableToList(gitService.getLog());
+        list = TestUtilities.iterableToList(gitService.getLog());
         irExtractionService = new IRExtractionService(TEST_CONFIG_PATH, Optional.of(list.get(0).toString().split(" ")[1]));
         irExtractionService.generateIR("./output/OldIR.json");
     }
@@ -62,45 +62,7 @@ class DeltaAndMergeTest {
         microserviceSystem1.setOrphans(new HashSet<>());
         microserviceSystem2.setOrphans(new HashSet<>());
 
-        deepCompareSystems(microserviceSystem1, microserviceSystem2);
+        TestUtilities.deepCompareSystems(microserviceSystem1, microserviceSystem2);
         Assertions.assertTrue(Objects.deepEquals(microserviceSystem1, microserviceSystem2));
-    }
-
-    private static void deepCompareSystems(MicroserviceSystem microserviceSystem1, MicroserviceSystem microserviceSystem2) {
-        System.out.println("System equivalence is: " + Objects.deepEquals(microserviceSystem1, microserviceSystem2));
-
-        for (Microservice microservice1 : microserviceSystem1.getMicroservices()) {
-            outer2: {
-                for (Microservice microservice2 : microserviceSystem2.getMicroservices()) {
-                    if (microservice1.getName().equals(microservice2.getName())) {
-                        System.out.println("Microservice equivalence of " + microservice1.getPath() + " is: " + Objects.deepEquals(microservice1, microservice2));
-                        for (ProjectFile projectFile1 : microservice1.getAllFiles()) {
-                            outer1: {
-                                for (ProjectFile projectFile2 : microservice2.getAllFiles()) {
-                                    if (projectFile1.getPath().equals(projectFile2.getPath())) {
-                                        System.out.println("Class equivalence of " + projectFile1.getPath() + " is: " + Objects.deepEquals(projectFile1, projectFile2));
-                                        break outer1;
-                                    }
-                                }
-                                System.out.println("No JClass match found for " + projectFile1.getPath());
-                            }
-                        }
-                        break outer2;
-                    }
-                }
-                System.out.println("No Microservice match found for " + microservice1.getPath());
-            }
-        }
-    }
-
-    private static List<RevCommit> iterableToList(Iterable<RevCommit> iterable) {
-        Iterator<RevCommit> iterator = iterable.iterator();
-        List<RevCommit> list = new LinkedList<>();
-        while (iterator.hasNext()) {
-            list.add(iterator.next());
-        }
-        Collections.reverse(list);
-
-        return list;
     }
 }

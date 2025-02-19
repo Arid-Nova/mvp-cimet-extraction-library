@@ -33,7 +33,7 @@ public class JClass extends ProjectFile implements JsonSerializable {
     /**
      * Whether the class is final
      */
-    private Boolean isFinal;
+    private boolean isFinal;
 
     /**
      * A list of imports that the class includes
@@ -78,12 +78,12 @@ public class JClass extends ProjectFile implements JsonSerializable {
     /**
      * Whether the class is static (nested classes only)
      */
-    private Boolean isStatic;
+    private boolean isStatic;
 
     /**
      * Whether the class is abstract
      */
-    private Boolean isAbstract;
+    private boolean isAbstract;
 
     public JClass(String name, String path, String packageName, ClassRole classRole) {
         this.name = name;
@@ -140,11 +140,10 @@ public class JClass extends ProjectFile implements JsonSerializable {
         jsonObject.add("methodCalls", JsonSerializable.toJsonArray(getMethodCalls()));
         jsonObject.add("implementedTypes", gson.toJsonTree(getImplementedTypes()).getAsJsonArray());
         jsonObject.add("extendedTypes", gson.toJsonTree(getExtendedTypes()).getAsJsonArray());
-        jsonObject.addProperty("protection", getProtection().toString());
-        jsonObject.addProperty("isFinal", getIsFinal());
-        jsonObject.addProperty("isAbstract", getIsAbstract());
-        jsonObject.addProperty("isStatic", getIsStatic());
-
+        jsonObject.addProperty("protection", getProtection().name());
+        jsonObject.addProperty("isFinal", isFinal());
+        jsonObject.addProperty("isAbstract", isAbstract());
+        jsonObject.addProperty("isStatic", isStatic());
 
         return jsonObject;
     }

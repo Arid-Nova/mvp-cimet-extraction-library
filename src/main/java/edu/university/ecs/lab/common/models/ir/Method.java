@@ -53,17 +53,17 @@ public class Method extends Node {
     /**
      * Whether the function is abstract
      */
-    private Boolean isAbstract;
+    private boolean isAbstract;
 
     /**
      * Whether the function is static
      */
-    private Boolean isStatic;
+    private boolean isStatic;
 
     /**
      * Whether the function is final
      */
-    private Boolean isFinal;
+    private boolean isFinal;
 
     /**
      * A list of exceptions that the function can throw when called
@@ -114,10 +114,10 @@ public class Method extends Node {
         jsonObject.addProperty("returnType", getReturnType());
         jsonObject.addProperty("microserviceName", microserviceName);
         jsonObject.addProperty("className", className);
-        jsonObject.addProperty("protection", protection.toString());
-        jsonObject.addProperty("isAbstract", getIsAbstract());
-        jsonObject.addProperty("isFinal", getIsFinal());
-        jsonObject.addProperty("isStatic", getIsStatic());
+        jsonObject.addProperty("protection", getProtection().name());
+        jsonObject.addProperty("isAbstract", isAbstract());
+        jsonObject.addProperty("isFinal", isFinal());
+        jsonObject.addProperty("isStatic", isStatic());
         jsonObject.add("thrownExceptions", gson.toJsonTree(getThrownExceptions()).getAsJsonArray());
 
         return jsonObject;

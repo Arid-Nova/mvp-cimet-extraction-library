@@ -1,6 +1,7 @@
 package edu.university.ecs.lab.common.models.serialization;
 
 import com.google.gson.*;
+import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.models.enums.HttpMethod;
 import java.lang.reflect.Type;
@@ -43,7 +44,16 @@ public class MethodDeserializer implements JsonDeserializer<Method> {
         method.setPackageAndClassName(json.get("packageAndClassName").getAsString());
         method.setMicroserviceName(json.get("microserviceName").getAsString());
         method.setClassName(json.get("className").getAsString());
+        method.setProtection(AccessModifier.valueOf(json.get("protection").getAsString()));
+        method.setFinal(json.get("isFinal").getAsBoolean());
+        method.setAbstract(json.get("isAbstract").getAsBoolean());
+        method.setStatic(json.get("isStatic").getAsBoolean());
 
+        Set<String> thrownExceptions = new HashSet<>();
+        for (JsonElement thrownExceptionJson : json.get("thrownExceptions").getAsJsonArray()) {
+            thrownExceptions.add(thrownExceptionJson.getAsString());
+        }
+        method.setThrownExceptions(thrownExceptions);
 
         return method;
     }
