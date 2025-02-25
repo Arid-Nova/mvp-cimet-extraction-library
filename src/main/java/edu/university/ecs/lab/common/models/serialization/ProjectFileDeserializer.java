@@ -14,6 +14,12 @@ public class ProjectFileDeserializer implements JsonDeserializer<ProjectFile>  {
         switch (type) {
             case "JCLASS":
                 return context.deserialize(json, JClass.class);
+            case "JINTERFACE":
+                return context.deserialize(json, JInterface.class);
+            case "JENUM":
+                return context.deserialize(json, JEnum.class);
+            case "JRECORD":
+                return context.deserialize(json, JRecord.class);
             case "POM":
                 return context.deserialize(json, ConfigFile.class);
             case "CONFIG":
