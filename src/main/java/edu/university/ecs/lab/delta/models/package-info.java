@@ -1,5 +1,5 @@
 /**
- * This package and subpackage {@link edu.university.ecs.lab.delta.models.enums}contains models used for representing changes between two commits in a microservice system.
+ * This package and subpackage {@link edu.university.ecs.lab.delta.models.enums} contains models used for representing changes between two commits in a microservice system.
  * <p>
  * It includes:
  *     - {@link edu.university.ecs.lab.delta.models.Delta}: Represents a single change between two commits.
