@@ -1,13 +1,21 @@
 package edu.university.ecs.lab.common.models.ir;
 
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.models.enums.FileType;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+@Data
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+@JsonTypeName("JInterface")
 public class JInterface extends JClass {
     public JInterface(String name, String path, String packageName, ClassRole classRole) {
         super(name, path, packageName, classRole);

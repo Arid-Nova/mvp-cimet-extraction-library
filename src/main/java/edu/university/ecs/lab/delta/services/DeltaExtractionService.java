@@ -1,6 +1,8 @@
 package edu.university.ecs.lab.delta.services;
 
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
 import edu.university.ecs.lab.common.models.ir.ConfigFile;
@@ -16,7 +18,6 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.List;
 
@@ -26,6 +27,7 @@ import java.util.List;
  * the Delta output file.
  */
 public class DeltaExtractionService {
+    private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final String DEV_NULL = "/dev/null";
     /**
      * Config object representing the contents of the config file
@@ -109,7 +111,7 @@ public class DeltaExtractionService {
         systemChange = new SystemChange();
         systemChange.setOldCommit(commitOld);
         systemChange.setNewCommit(commitNew);
-        JsonObject data = null;
+        JsonNode data = null;
 
 
         // process each difference
@@ -173,26 +175,16 @@ public class DeltaExtractionService {
      * @param newPath git path of new file
      * @return JsonObject of data of the new file
      */
-    private JsonObject add(String newPath) {
-        // Check if it is a configuration file
-        if(FileUtils.isConfigurationFile(newPath)) {
-            ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(new File(FileUtils.gitPathToLocalPath(newPath, config.getRepoName())), config);
-            if(configFile == null || configFile.getData() == null) {
-                return new JsonObject();
-            } else {
-                return configFile.toJsonObject();
-            }
-
-        // Else it is a Java file
+    private JsonNode add(String newPath) {
+        if (FileUtils.isConfigurationFile(newPath)) {
+            ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(
+                    new File(FileUtils.gitPathToLocalPath(newPath, config.getRepoName())), config);
+            return (configFile == null || configFile.getData() == null) ? JsonNodeFactory.instance.objectNode() : objectMapper.valueToTree(configFile);
         } else {
-            JClass jClass = SourceToObjectUtils.parseClass(new File(FileUtils.gitPathToLocalPath(newPath, config.getRepoName())), config, "");
-            if(jClass == null) {
-                return new JsonObject();
-            } else {
-                return jClass.toJsonObject();
-            }
+            JClass jClass = SourceToObjectUtils.parseClass(
+                    new File(FileUtils.gitPathToLocalPath(newPath, config.getRepoName())), config, "");
+            return (jClass == null) ? JsonNodeFactory.instance.objectNode() : objectMapper.valueToTree(jClass);
         }
-
     }
 
     private SystemChange getSystemChange() {
@@ -204,8 +196,8 @@ public class DeltaExtractionService {
      *
      * @return JsonObject that is empty
      */
-    private JsonObject delete() {
-        return new JsonObject();
+    private JsonNode delete() {
+        return JsonNodeFactory.instance.objectNode();
     }
 
     public static SystemChange create(String configPath, String oldCommit, String newCommit) throws IOException, InterruptedException, GitAPIException {

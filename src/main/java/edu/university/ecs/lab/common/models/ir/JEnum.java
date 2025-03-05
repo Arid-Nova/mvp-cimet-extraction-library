@@ -1,27 +1,23 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.models.enums.FileType;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+@Data
 @EqualsAndHashCode(callSuper = true)
-public class JEnum extends JClass implements JsonSerializable {
+@NoArgsConstructor
+@JsonTypeName("JEnum")
+public class JEnum extends JClass {
     /**
      * A list of the constants defined in the Enum
      */
-    @Getter
-    @Setter
     private List<String> enumTypes;
 
     public JEnum(String name, String path, String packageName, ClassRole classRole) {
@@ -33,18 +29,5 @@ public class JEnum extends JClass implements JsonSerializable {
         super(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls, implementedTypes, new HashSet<String>(), protection, true, false, true);
         this.fileType = FileType.JENUM;
         this.enumTypes = enumTypes;
-    }
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = super.toJsonObject();
-        Gson gson = new Gson();
-
-        jsonObject.add("enumTypes", gson.toJsonTree(getEnumTypes()).getAsJsonArray());
-
-        return jsonObject;
     }
 }

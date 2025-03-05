@@ -1,13 +1,11 @@
 package edu.university.ecs.lab.common.models.ir;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.github.javaparser.ast.expr.*;
-import com.google.gson.Gson;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.reflect.TypeToken;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,21 +15,25 @@ import java.util.stream.Collectors;
  * Represents an annotation in Java
  */
 @Data
-@EqualsAndHashCode
-public class Annotation extends Node {
+@EqualsAndHashCode(callSuper = true)
+@NoArgsConstructor
+@JsonTypeName("Annotation")
+public class Annotation extends Component {
 
     private Map<String, String> attributes;
 
-    public Annotation(AnnotationExpr annotationExpr, String packageAndClassName) {
+    public Annotation(AnnotationExpr annotationExpr, String packageAndClassName, Location location) {
         this.name = annotationExpr.getNameAsString();
         this.packageAndClassName = packageAndClassName;
         this.attributes = parseAttributes(annotationExpr);
+        this.location = location;
     }
 
-    public Annotation(String name, String packageAndClassName, HashMap<String, String> attributes) {
+    public Annotation(String name, String packageAndClassName, HashMap<String, String> attributes, Location location) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
         this.attributes = attributes;
+        this.location = location;
     }
 
     /**
@@ -39,24 +41,9 @@ public class Annotation extends Node {
      * 
      * @return comma-delimmited list of annotation content key-value pairs
      */
+    @JsonIgnore
     public String getContents() {
         return getAttributes().entrySet().stream().map(entry -> entry.getKey() + "=" + entry.getValue()).collect(Collectors.joining(","));
-    }
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-        Gson gson = new Gson();
-
-        jsonObject.addProperty("name", getName());
-        jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
-        JsonElement attributesJson = gson.toJsonTree(attributes, new TypeToken<Map<String, String>>(){}.getType());
-        jsonObject.add("attributes", attributesJson);
-
-        return jsonObject;
     }
 
     /**

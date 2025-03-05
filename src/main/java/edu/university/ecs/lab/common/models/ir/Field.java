@@ -1,21 +1,23 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 /**
  * Represents a field attribute in a Java class or in our case a JClass.
  */
 @Data
+@NoArgsConstructor
 @EqualsAndHashCode
-public class Field extends Node {
+@JsonTypeName("Field")
+public class Field extends Component {
     /**
      * Java class type of the class variable e.g. String
      */
-    private String type;
+    private String fieldType;
 
     /**
      * The protection applied to this Field
@@ -32,30 +34,13 @@ public class Field extends Node {
      */
     private Boolean isFinal;
 
-    public Field(String name, String packageAndClassName, String type, AccessModifier protection, Boolean isStatic, Boolean isFinal) {
+    public Field(String name, String packageAndClassName, String fieldType, AccessModifier protection, Boolean isStatic, Boolean isFinal, Location location) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
-        this.type = type;
+        this.fieldType = fieldType;
         this.protection = protection;
         this.isStatic = isStatic;
         this.isFinal = isFinal;
-    }
-
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-
-        jsonObject.addProperty("name", getName());
-        jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
-        jsonObject.addProperty("type", getType());
-        jsonObject.addProperty("protection", getProtection().toString());
-        jsonObject.addProperty("isStatic", getIsStatic());
-        jsonObject.addProperty("isFinal", getIsFinal());
-
-        return jsonObject;
+        this.location = location;
     }
 }

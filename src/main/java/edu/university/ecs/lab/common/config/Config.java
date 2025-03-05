@@ -1,16 +1,17 @@
 package edu.university.ecs.lab.common.config;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.Objects;
 
 /**
  * Model to represent the JSON configuration file
- * Some additional notes, this object is p
  */
 @Getter
-@Setter
+@NoArgsConstructor
 public class Config {
     private static final String GIT_SCHEME_DOMAIN = "https://github.com/";
     private static final String GIT_PATH_EXTENSION = ".git";
@@ -18,17 +19,18 @@ public class Config {
     /**
      * The name of the system analyzed
      */
-    private final String systemName;
+    private String systemName;
 
     /**
      * The path to write cloned repository files to
      */
-    private final String repositoryURL;
+    private String repositoryURL;
 
     /**
      * Initial starting commit for repository
      */
-    private final String branch;
+    @JsonAlias({"branch", "baseBranch"})
+    private String branch;
 
 
     public Config(String systemName, String repositoryURL, String branch) throws Exception {
