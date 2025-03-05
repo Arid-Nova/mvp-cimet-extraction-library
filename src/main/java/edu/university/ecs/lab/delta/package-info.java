@@ -9,8 +9,5 @@
  *   data models, such as {@link edu.university.ecs.lab.delta.models.enums.ChangeType}.
  *   - The {@link edu.university.ecs.lab.delta.services} package, which provides services for extracting and
  *   processing differences between commits, such as the {@link edu.university.ecs.lab.delta.services.DeltaExtractionService}.
- *
- * <p>The package also includes a runner class, {@link edu.university.ecs.lab.delta.DeltaExtractionRunner}, for executing
- * a test delta process.</p>
  */
 package edu.university.ecs.lab.delta;
