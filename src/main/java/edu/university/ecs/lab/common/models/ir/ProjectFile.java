@@ -1,28 +1,30 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import edu.university.ecs.lab.common.models.enums.FileType;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 /**
  * This class represents any file in a project's directory
  */
 @Data
-@EqualsAndHashCode
-public abstract class ProjectFile implements JsonSerializable {
+@NoArgsConstructor
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type"
+)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = ConfigFile.class, name = "ConfigFile"),
+        @JsonSubTypes.Type(value = JClass.class, name = "JClass"),
+})
+@JsonTypeName("ProjectFile")
+public abstract class ProjectFile {
     protected String name;
     protected String path;
     protected FileType fileType;
 
-
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.addProperty("name", name);
-        jsonObject.addProperty("path", path);
-        jsonObject.addProperty("fileType", fileType.name());
-        return jsonObject;
-    }
 }

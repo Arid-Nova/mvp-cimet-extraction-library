@@ -228,7 +228,7 @@ public class IRExtractionService {
     private void writeToFile(Set<Microservice> microservices, String fileName) throws IOException {
         MicroserviceSystem microserviceSystem = new MicroserviceSystem(config.getSystemName(), commitID, microservices, new HashSet<>());
 
-        JsonReadWriteUtils.writeToJSON(fileName, microserviceSystem.toJsonObject());
+        JsonReadWriteUtils.writeToJSON(fileName, microserviceSystem);
     }
 
     /**
@@ -301,7 +301,7 @@ public class IRExtractionService {
 
     public static void createAndWrite(String configPath, String outputPath) throws GitAPIException, IOException, InterruptedException {
         MicroserviceSystem microserviceSystem = create(configPath);
-        JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem.toJsonObject());
+        JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
     }
 
     public static MicroserviceSystem read(String fPath) throws IOException {

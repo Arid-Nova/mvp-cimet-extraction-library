@@ -1,7 +1,6 @@
 package edu.university.ecs.lab.delta.models;
 
-import com.google.gson.JsonObject;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -16,7 +15,8 @@ import java.util.List;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class SystemChange implements JsonSerializable {
+@JsonTypeName("SystemChange")
+public class SystemChange {
 
     /**
      * The old commitID
@@ -32,18 +32,4 @@ public class SystemChange implements JsonSerializable {
      * List of delta changes
      */
     private List<Delta> changes = new ArrayList<>();
-
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-
-        jsonObject.add("changes", JsonSerializable.toJsonArray(changes));
-        jsonObject.addProperty("oldCommit", oldCommit);
-        jsonObject.addProperty("newCommit", newCommit);
-
-        return jsonObject;
-    }
 }

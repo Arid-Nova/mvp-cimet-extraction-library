@@ -1,16 +1,18 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.JsonObject;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 /**
  *
  */
 @Data
 @EqualsAndHashCode
-public class Import extends Node {
+@NoArgsConstructor
+@JsonTypeName("Import")
+public class Import extends Component {
     /**
      * String containing the package being imported
      */
@@ -40,12 +42,13 @@ public class Import extends Node {
      * @param isStatic whether the import was static
      * @param packageAndClassName the package and class name where the import statement is listed
      */
-    public Import(String importPackage, String importObject, Boolean isStatic, String packageAndClassName) {
+    public Import(String importPackage, String importObject, Boolean isStatic, String packageAndClassName, Location location) {
         this.name = importPackage + "." + importObject;
         this.packageAndClassName = packageAndClassName;
         this.importPackage = importPackage;
         this.importObject = importObject;
         this.isStatic = isStatic;
+        this.location = location;
     }
 
     /**
@@ -62,21 +65,5 @@ public class Import extends Node {
      */
     public Boolean importsEntirePackage() {
         return importObject.equals("*");
-    }
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-
-        jsonObject.addProperty("name", getName());
-        jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
-        jsonObject.addProperty("importPackage", getImportPackage());
-        jsonObject.addProperty("importObject", getImportObject());
-        jsonObject.addProperty("isStatic", getIsStatic());
-
-        return jsonObject;
     }
 }

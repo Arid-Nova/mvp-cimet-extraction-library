@@ -1,14 +1,15 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.models.enums.FileType;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.NonNull;
+import lombok.NoArgsConstructor;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -19,7 +20,16 @@ import java.util.stream.Collectors;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class JClass extends ProjectFile implements JsonSerializable {
+@NoArgsConstructor
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type"
+)
+@JsonSubTypes({@JsonSubTypes.Type(value = JEnum.class, name = "JEnum"),
+               @JsonSubTypes.Type(value = JRecord.class, name = "JRecord"),
+               @JsonSubTypes.Type(value = JInterface.class, name = "JInterface")})
+public class JClass extends ProjectFile {
     /**
      * The name of the package containing this class
      */
@@ -38,16 +48,19 @@ public class JClass extends ProjectFile implements JsonSerializable {
     /**
      * A list of imports that the class includes
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<Import> imports;
 
     /**
      * Class implementations
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<String> implementedTypes;
 
     /**
      * Class extensions
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<String> extendedTypes;
 
     /**
@@ -58,21 +71,25 @@ public class JClass extends ProjectFile implements JsonSerializable {
     /**
      * Set of methods in the class
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<Method> methods;
 
     /**
      * Set of class fields
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<Field> fields;
 
     /**
      * Set of class level annotations
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<Annotation> annotations;
 
     /**
      * List of method invocations made from within this class
      */
+    @JsonDeserialize(as = ArrayList.class)
     private List<MethodCall> methodCalls;
 
     /**
@@ -122,38 +139,13 @@ public class JClass extends ProjectFile implements JsonSerializable {
         this.isStatic = isStatic;
     }
 
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = super.toJsonObject();
-        Gson gson = new Gson();
-
-        jsonObject.addProperty("packageName", getPackageName());
-        jsonObject.addProperty("classRole", getClassRole().name());
-        jsonObject.add("imports", JsonSerializable.toJsonArray(getImports()));
-        jsonObject.add("annotations", JsonSerializable.toJsonArray(getAnnotations()));
-        jsonObject.add("fields", JsonSerializable.toJsonArray(getFields()));
-        jsonObject.add("methods", JsonSerializable.toJsonArray(getMethods()));
-        jsonObject.add("methodCalls", JsonSerializable.toJsonArray(getMethodCalls()));
-        jsonObject.add("implementedTypes", gson.toJsonTree(getImplementedTypes()).getAsJsonArray());
-        jsonObject.add("extendedTypes", gson.toJsonTree(getExtendedTypes()).getAsJsonArray());
-        jsonObject.addProperty("protection", getProtection().name());
-        jsonObject.addProperty("isFinal", isFinal());
-        jsonObject.addProperty("isAbstract", isAbstract());
-        jsonObject.addProperty("isStatic", isStatic());
-
-        return jsonObject;
-    }
-
     /**
      * This method returns all endpoints found in the methods of this class,
      * grouped under the same list as an Endpoint is an extension of a Method
      * see {@link Endpoint}
      * @return set of all endpoints
      */
+    @JsonIgnore
     public Set<Endpoint> getEndpoints() {
         if((!getClassRole().equals(ClassRole.CONTROLLER) && !getClassRole().equals(ClassRole.REP_REST_RSC)) || getMethods().isEmpty()) {
             return new HashSet<>();
@@ -167,9 +159,22 @@ public class JClass extends ProjectFile implements JsonSerializable {
      * see {@link RestCall}
      * @return set of all restCalls
      */
+    @JsonIgnore
     public List<RestCall> getRestCalls() {
 
         return methodCalls.stream().filter(methodCall -> methodCall instanceof RestCall).map(methodCall -> (RestCall) methodCall).collect(Collectors.toUnmodifiableList());
+    }
+
+    @JsonIgnore
+    public List<Component> getComponents() {
+        List<Component> components = new ArrayList<>();
+        components.addAll(getMethodCalls());
+        components.addAll(getFields());
+        components.addAll(getAnnotations());
+        components.addAll(getMethods());
+        components.addAll(getMethodCalls());
+
+        return components;
     }
 
     /**

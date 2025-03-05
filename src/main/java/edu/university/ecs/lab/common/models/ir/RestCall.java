@@ -1,12 +1,10 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import edu.university.ecs.lab.common.models.enums.HttpMethod;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
-import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.util.Set;
 
@@ -16,7 +14,9 @@ import java.util.Set;
  * a call to an endpoint mapping.
  */
 @Data
+@NoArgsConstructor
 @EqualsAndHashCode(callSuper=true)
+@JsonTypeName("RestCall")
 public class RestCall extends MethodCall {
 
     /**
@@ -30,32 +30,11 @@ public class RestCall extends MethodCall {
      */
     private HttpMethod httpMethod;
 
-
-
-
-    public RestCall(String methodName, String packageAndClassName, String objectType, String objectName, String calledFrom, String parameterContents,
-                    String microserviceName, String className) {
-        super(methodName, packageAndClassName, objectType, objectName, calledFrom, parameterContents,
-                microserviceName, className);
-    }
-
     public RestCall(MethodCall methodCall, String url, HttpMethod httpMethod) {
         super(methodCall.name, methodCall.packageAndClassName, methodCall.objectType, methodCall.objectName, methodCall.calledFrom, methodCall.parameterContents,
-                methodCall.microserviceName, methodCall.className);
+                methodCall.microserviceName, methodCall.className, methodCall.location);
         this.url = url;
         this.httpMethod = httpMethod;
-    }
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = super.toJsonObject();
-
-        jsonObject.addProperty("url", url);
-        jsonObject.addProperty("httpMethod", httpMethod.name());
-
-        return jsonObject;
     }
 
     /**

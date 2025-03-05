@@ -138,13 +138,19 @@ public class SourceToObjectUtils {
                 String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
                 String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
 
-                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
+                Location range = null;
+                if (impDec.getRange().isPresent()) range = new Location(impDec.getRange().get());
+
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName, range);
                 imports.add(imp);
             } else {
                 String impPackage = impDec.getNameAsString();
                 String impObject = "*";
 
-                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName);
+                Location range = null;
+                if (impDec.getRange().isPresent()) range = new Location(impDec.getRange().get());
+
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName, range);
                 imports.add(imp);
             }
         }
@@ -171,6 +177,9 @@ public class SourceToObjectUtils {
             Set<String> thrownExceptions = new HashSet<>();
             exceptions.forEach(exception -> thrownExceptions.add(exception.toString()));
 
+            Location range = null;
+            if (methodDeclaration.getRange().isPresent()) range = new Location(methodDeclaration.getRange().get());
+
             Method method = new Method(
                     methodDeclaration.getNameAsString(),
                     packageAndClassName,
@@ -183,7 +192,8 @@ public class SourceToObjectUtils {
                     methodDeclaration.isAbstract(),
                     methodDeclaration.isStatic(),
                     methodDeclaration.isFinal(),
-                    thrownExceptions);
+                    thrownExceptions,
+                    range);
 
             method = convertValidEndpoints(methodDeclaration, method, requestMapping);
 
@@ -238,8 +248,11 @@ public class SourceToObjectUtils {
                 String parameterContents = mce.getArguments().stream().map(Objects::toString).collect(Collectors.joining(","));
 
                 if (Objects.nonNull(calledServiceName)) {
+                    Location range = null;
+                    if (mce.getRange().isPresent()) range = new Location(mce.getRange().get());
+
                     MethodCall methodCall = new MethodCall(methodName, packageAndClassName, calledServiceType, calledServiceName,
-                            methodDeclaration.getNameAsString(), parameterContents, microserviceName, className);
+                            methodDeclaration.getNameAsString(), parameterContents, microserviceName, className, range);
 
                     methodCall = convertValidRestCalls(mce, methodCall);
 
@@ -284,9 +297,12 @@ public class SourceToObjectUtils {
         // loop through class declarations
         for (FieldDeclaration fd : fieldDeclarations) {
             for (VariableDeclarator variable : fd.getVariables()) {
+                Location range = null;
+                if (variable.getRange().isPresent()) range = new Location(variable.getRange().get());
+
                 javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
                         AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier()),
-                        fd.isStatic(), fd.isFinal()));
+                        fd.isStatic(), fd.isFinal(), range));
             }
 
         }
@@ -350,7 +366,10 @@ public class SourceToObjectUtils {
         Set<Annotation> annotations = new HashSet<>();
 
         for (AnnotationExpr ae : annotationExprs) {
-            annotations.add(new Annotation(ae, packageAndClassName));
+            Location range = null;
+            if (ae.getRange().isPresent()) range = new Location(ae.getRange().get());
+
+            annotations.add(new Annotation(ae, packageAndClassName, range));
         }
 
         return annotations;
@@ -418,7 +437,10 @@ public class SourceToObjectUtils {
         for(Method method : methods) {
             if(method instanceof Endpoint) {
                 Endpoint endpoint = (Endpoint) method;
-                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName(), method.getProtection(), method.isAbstract(), method.isStatic(), method.isFinal(), method.getThrownExceptions()));
+                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(),
+                        method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(),
+                        method.getClassName(), method.getProtection(), method.isAbstract(), method.isStatic(),
+                        method.isFinal(), method.getThrownExceptions(), method.getLocation()));
 
                 StringBuilder queryParams = new StringBuilder();
                 for(edu.university.ecs.lab.common.models.ir.Parameter parameter : method.getParameters()) {
@@ -442,7 +464,10 @@ public class SourceToObjectUtils {
                     queryParams.replace(0, 1, "?");
                 }
 
-                newRestCalls.add(new RestCall(new MethodCall("exchange", packageAndClassName, "RestCallTemplate", "restCallTemplate", method.getName(), "", endpoint.getMicroserviceName(), endpoint.getClassName()), endpoint.getUrl() + queryParams, endpoint.getHttpMethod()));
+                newRestCalls.add(new RestCall(new MethodCall("exchange", packageAndClassName, "RestCallTemplate",
+                        "restCallTemplate", method.getName(), "", endpoint.getMicroserviceName(),
+                        endpoint.getClassName(), method.getLocation()), endpoint.getUrl() + queryParams,
+                        endpoint.getHttpMethod()));
             } else {
                 newMethods.add(method);
             }
@@ -619,25 +644,25 @@ public class SourceToObjectUtils {
         return jClass;
     }
 
-    private static JClass handleJS(String filePath) throws IOException, InterruptedException {
-        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE, false, false, false);
-
-        Set<RestCall> restCalls = new HashSet<>();
-        // Command to run Node.js script
-        ProcessBuilder processBuilder = new ProcessBuilder("node", "/scripts/parser.js");
-        Process process = processBuilder.start();
-
-        // Capture the output
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        String line;
-        while ((line = reader.readLine()) != null) {
-            String[] split = line.split(";");
-            restCalls.add(new RestCall(split[0], split[1], split[2], split[3], split[4], split[5], split[6], split[7]));
-        }
-
-        // Wait for the Node.js process to complete
-        process.waitFor();
-
-        return jClass;
-    }
+//    private static JClass handleJS(String filePath) throws IOException, InterruptedException {
+//        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE, false, false, false);
+//
+//        Set<RestCall> restCalls = new HashSet<>();
+//        // Command to run Node.js script
+//        ProcessBuilder processBuilder = new ProcessBuilder("node", "/scripts/parser.js");
+//        Process process = processBuilder.start();
+//
+//        // Capture the output
+//        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+//        String line;
+//        while ((line = reader.readLine()) != null) {
+//            String[] split = line.split(";");
+//            restCalls.add(new RestCall(split[0], split[1], split[2], split[3], split[4], split[5], split[6], split[7]));
+//        }
+//
+//        // Wait for the Node.js process to complete
+//        process.waitFor();
+//
+//        return jClass;
+//    }
 }
