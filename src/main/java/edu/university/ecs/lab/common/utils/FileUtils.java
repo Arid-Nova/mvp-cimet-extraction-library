@@ -13,6 +13,7 @@ public class FileUtils {
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
     private static final String DEFAULT_OUTPUT_PATH = "output";
     private static final String DEFAULT_CLONE_PATH = "clone";
+    private static final String DEFAULT_DOCS_PATH = "docs";
     private static final String DOT = ".";
     public static final String GIT_SEPARATOR = "/";
 
@@ -40,6 +41,16 @@ public class FileUtils {
      */
     public static String getOutputPath() {
         return DOT + SYS_SEPARATOR + DEFAULT_OUTPUT_PATH;
+    }
+
+    /**
+     * This method returns the relative local path of the documentation output directory as ./DEFAULT_DOCS_PATH.
+     * This will be a working relative path to the documentation output directory on the local file system.
+     *
+     * @return the relative path string where the documentation output will exist
+     */
+    public static String getDocsPath() {
+        return DOT + SYS_SEPARATOR + DEFAULT_DOCS_PATH;
     }
 
     /**
@@ -111,6 +122,7 @@ public class FileUtils {
     public static void makeDirs() {
         new File(getOutputPath()).mkdirs();
         new File(getClonePath()).mkdirs();
+        new File(getDocsPath()).mkdirs();
     }
 
     /**

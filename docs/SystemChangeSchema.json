@@ -1,0 +1,34 @@
+{
+  "type" : "object",
+  "id" : "urn:jsonschema:edu:university:ecs:lab:delta:models:SystemChange",
+  "properties" : {
+    "oldCommit" : {
+      "type" : "string"
+    },
+    "newCommit" : {
+      "type" : "string"
+    },
+    "changes" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object",
+        "id" : "urn:jsonschema:edu:university:ecs:lab:delta:models:Delta",
+        "properties" : {
+          "oldPath" : {
+            "type" : "string"
+          },
+          "newPath" : {
+            "type" : "string"
+          },
+          "changeType" : {
+            "type" : "string",
+            "enum" : [ "ADD", "MODIFY", "DELETE" ]
+          },
+          "data" : {
+            "type" : "any"
+          }
+        }
+      }
+    }
+  }
+}
