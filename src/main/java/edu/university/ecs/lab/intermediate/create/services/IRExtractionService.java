@@ -183,7 +183,6 @@ public class IRExtractionService {
                     } else if (file.isDirectory()) {
                         rootDirectories.putAll(findRootDirectories(file.getPath()));
                     } else if (file.isFile() && file.getName().equals("settings.gradle")) {
-
                         // Identify pattern in settings.gradle to find for the microservice name
                         Pattern nameFinder = Pattern.compile("rootProject\\.name[ \\n*]=[ \\n*][\\\"\\'](.*)[\\\"\\']");
 

@@ -87,6 +87,7 @@ public class NonJsonReadWriteUtils {
     public static ConfigFile readFromGradle(String path, Config config) {
         ObjectNode jsonObject = mapper.createObjectNode();
         Stack<ObjectNode> jsonStack = new Stack<>();
+        jsonStack.push(jsonObject);
 
         try (BufferedReader br = new BufferedReader(new FileReader(path))) {
             String line;
