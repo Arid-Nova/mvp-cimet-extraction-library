@@ -35,6 +35,9 @@ public class Parameter extends Component {
         this.annotations = annotations;
         this.isVariableParameter = isVariableParameter;
         this.location = location;
+
+        // Fill back references
+        this.annotations.forEach(ann -> ann.setParent(this));
     }
 
     public Parameter(com.github.javaparser.ast.body.Parameter parameter, String packageAndClassName) {

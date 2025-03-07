@@ -137,6 +137,13 @@ public class JClass extends ProjectFile {
         this.isFinal = isFinal;
         this.isAbstract = isAbstract;
         this.isStatic = isStatic;
+
+        // Fill back references
+        this.imports.forEach(imp -> imp.setParent(this));
+        this.methods.forEach(met -> met.setParent(this));
+        this.fields.forEach(fie -> fie.setParent(this));
+        this.annotations.forEach(ann -> ann.setParent(this));
+        this.methodCalls.forEach(mec -> mec.setParent(this));
     }
 
     /**

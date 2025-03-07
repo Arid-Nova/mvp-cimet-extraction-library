@@ -17,10 +17,9 @@ import java.util.Set;
  */
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
-@EqualsAndHashCode
+@EqualsAndHashCode(callSuper = true)
 @JsonTypeName("MicroserviceSystem")
-public class MicroserviceSystem {
+public class MicroserviceSystem extends SystemNode {
     /**
      * The name of the system
      */
@@ -43,6 +42,17 @@ public class MicroserviceSystem {
     @JsonDeserialize(as = HashSet.class)
     private Set<ProjectFile> orphans;
 
+    public MicroserviceSystem(String name, String commitID, Set<Microservice> microservices, Set<ProjectFile> orphans) {
+        this.name = name;
+        this.commitID = commitID;
+        this.microservices = microservices;
+        this.orphans = orphans;
+
+        // Fill back references
+        this.microservices.forEach(mis -> mis.setParent(this));
+        this.orphans.forEach(orp -> orp.setParent(this));
+    }
+
     /**
      * Returns the microservice whose path is the start of the passed path
      *
@@ -52,7 +62,6 @@ public class MicroserviceSystem {
     public Microservice findMicroserviceByPath(String path) {
         return getMicroservices().stream().filter(microservice -> path.startsWith(microservice.getPath())).findFirst().orElse(null);
     }
-
 
     /**
      * Given an existing microservice, if it must now be orphanized
@@ -64,6 +73,7 @@ public class MicroserviceSystem {
     public void orphanize(Microservice microservice) {
         Set<JClass> classes = microservice.getClasses();
         classes.forEach(c -> c.updateMicroserviceName(""));
+        classes.forEach(c -> c.setParent(this));
         orphans.addAll(classes);
     }
 
@@ -83,17 +93,17 @@ public class MicroserviceSystem {
                 if(file.getFileType().equals(FileType.JCLASS)) {
                     JClass jClass = (JClass) file;
                     jClass.updateMicroserviceName(microservice.getName());
+                    jClass.setParent(microservice);
                     microservice.addJClass(jClass);
                     updatedOrphans.remove(file);
                 } else {
                     microservice.getFiles().add((ConfigFile) file);
+                    file.setParent(microservice);
                 }
             }
 
         }
-
         setOrphans(updatedOrphans);
-
     }
 
     /**
@@ -158,5 +168,10 @@ public class MicroserviceSystem {
         }
     }
 
-
+    /**
+     * Microservice systems don't have parents, so none can be set
+     * @param parent Ignored parameter
+     */
+    @Override
+    public void setParent(SystemNode parent) {}
 }

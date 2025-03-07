@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
  *
  */
 @Data
-@EqualsAndHashCode
+@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
 @JsonTypeName("Import")
 public class Import extends Component {
@@ -30,11 +30,6 @@ public class Import extends Component {
     private Boolean isStatic;
 
     /**
-     * Back reference to parent JClass
-     */
-    private JClass parent;
-
-    /**
      * Creates a new Import model
      *
      * @param importPackage the package from which importObject is being imported from
@@ -52,15 +47,7 @@ public class Import extends Component {
     }
 
     /**
-     * Set backward reference to the parent of this component
-     * @param parent the parent of this component
-     */
-    public void setParent(JClass parent) {
-        this.parent = parent;
-    }
-
-    /**
-     * Returns whether or not the import is for an entire package (i.e., com.package.*)
+     * Returns whether the import is for an entire package (i.e., com.package.*)
      * @return True if it imports a full package, false if otherwise
      */
     public Boolean importsEntirePackage() {

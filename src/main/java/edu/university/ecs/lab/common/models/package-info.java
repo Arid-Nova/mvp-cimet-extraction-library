@@ -22,6 +22,7 @@
  *   - {@link edu.university.ecs.lab.common.models.ir.MicroserviceSystem}: Represents a microservice system and all its components,
  *     including the name of the system, the set of microservices, etc.
  *   - {@link edu.university.ecs.lab.common.models.ir.Parameter}: Represents a parameter within a function.
- *   - {@link edu.university.ecs.lab.common.models.ir.RestCall}: Represents an a call to an endpoint mapping and exists at the service level
+ *   - {@link edu.university.ecs.lab.common.models.ir.RestCall}: Represents a call to an endpoint mapping and exists at the service level
+ *   - {@link edu.university.ecs.lab.common.models.ir.SystemNode}: Represents a generic object that could be any Annotation, Endpoint, Field, etc.
  */
 package edu.university.ecs.lab.common.models;

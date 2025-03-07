@@ -4,11 +4,13 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.databind.JsonNode;
 import edu.university.ecs.lab.common.models.enums.FileType;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 /**
  * Represents a project configuration file
  */
+@EqualsAndHashCode(callSuper = true)
 @Data
 @NoArgsConstructor
 @JsonTypeName("ConfigFile")

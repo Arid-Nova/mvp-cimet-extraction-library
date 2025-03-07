@@ -26,7 +26,7 @@ import lombok.NoArgsConstructor;
         @JsonSubTypes.Type(value = Parameter.class, name = "Parameter"),
 })
 @JsonTypeName("Component")
-public abstract class Component {
+public abstract class Component extends SystemNode {
     /**
      * Name of the structure
      */
