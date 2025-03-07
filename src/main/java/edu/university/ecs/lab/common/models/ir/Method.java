@@ -90,6 +90,10 @@ public class Method extends Component {
         this.isFinal = isFinal;
         this.thrownExceptions = thrownExceptions;
         this.location = location;
+
+        // Fill back references
+        this.parameters.forEach(pam -> pam.setParent(this));
+        this.annotations.forEach(ann -> ann.setParent(this));
     }
 
     public Method(MethodDeclaration methodDeclaration) {
@@ -103,6 +107,10 @@ public class Method extends Component {
         NodeList<ReferenceType> exceptions = methodDeclaration.getThrownExceptions();
         this.thrownExceptions = new HashSet<>();
         exceptions.forEach(exception -> this.thrownExceptions.add(exception.toString()));
+
+        // Fill back references
+        this.parameters.forEach(pam -> pam.setParent(this));
+        this.annotations.forEach(ann -> ann.setParent(this));
     }
 
     /**

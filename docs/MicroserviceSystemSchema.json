@@ -75,10 +75,6 @@
                       },
                       "isStatic" : {
                         "type" : "boolean"
-                      },
-                      "parent" : {
-                        "type" : "object",
-                        "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass"
                       }
                     }
                   }

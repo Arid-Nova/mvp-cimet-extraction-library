@@ -19,9 +19,9 @@ import java.util.stream.Collectors;
  */
 @Data
 @NoArgsConstructor
-@EqualsAndHashCode
+@EqualsAndHashCode(callSuper = true)
 @JsonTypeName("Microservice")
-public class Microservice {
+public class Microservice extends SystemNode {
     /**
      * The name of the service (ex: "ts-assurance-service")
      */
@@ -86,13 +86,14 @@ public class Microservice {
     }
 
     /**
-     * Update's the microservice name of the JClass and add's
+     * Update's the microservice name of the JClass and adds
      * it to the appropriate Set
      *
      * @param jClass the JClass to add
      */
     public void addJClass(JClass jClass) {
         jClass.updateMicroserviceName(getName());
+        jClass.setParent(this);
 
         switch (jClass.getClassRole()) {
             case CONTROLLER:
@@ -135,6 +136,8 @@ public class Microservice {
         if (removeClass == null) {
             return;
         }
+
+        removeClass.setParent(null);
 
         switch (removeClass.getClassRole()) {
             case CONTROLLER:
@@ -180,6 +183,8 @@ public class Microservice {
                 return;
             }
 
+            removeFile.setParent(null);
+
             getFiles().remove(removeFile);
 
         } else {
@@ -197,6 +202,8 @@ public class Microservice {
             if (removeClass == null) {
                 return;
             }
+
+            removeClass.setParent(null);
 
             switch (removeClass.getClassRole()) {
                 case CONTROLLER:
@@ -292,6 +299,4 @@ public class Microservice {
     public Set<Method> getMethods() {
         return getClasses().stream().flatMap(jClass -> jClass.getMethods().stream()).collect(Collectors.toSet());
     }
-
-
 }
