@@ -19,7 +19,7 @@ import java.util.Optional;
 public class IRExtractionTest {
     @Test
     void testGenerateIR() throws GitAPIException, IOException, InterruptedException {
-        final String TEST_CONFIG_FILE = TestUtilities.CONFIGS_PATH + File.separator + "test_config.json";
+        final String TEST_CONFIG_FILE = TestUtilities.CONFIGS_PATH + File.separator + "test_config2.json";
         IRExtractionService irServ = new IRExtractionService(TEST_CONFIG_FILE, Optional.empty());
         irServ.generateIR("output/IR.json");
         System.out.println("Generated IR at output/IR.json.");
