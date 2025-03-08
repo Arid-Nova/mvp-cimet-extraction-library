@@ -54,5 +54,10 @@ public class Parameter extends Component {
                     new Annotation(annotationExpr, packageAndClassName, new Location(annotationExpr.getRange().get())))
                     .collect(Collectors.toSet()));
         }
+
+        if(parameter.getRange().isPresent())
+            this.location = new Location(parameter.getRange().get());
+        else
+            this.location = null;
     }
 }
