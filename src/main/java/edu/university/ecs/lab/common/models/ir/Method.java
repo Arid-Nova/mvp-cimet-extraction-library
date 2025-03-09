@@ -2,6 +2,7 @@ package edu.university.ecs.lab.common.models.ir;
 
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.type.ReferenceType;
@@ -24,6 +25,7 @@ import java.util.*;
         property = "type"
 )
 @JsonSubTypes({@JsonSubTypes.Type(value = Endpoint.class, name = "Endpoint")})
+@JsonTypeName("Method")
 public class Method extends Component {
     /**
      * The protection level for this Method
