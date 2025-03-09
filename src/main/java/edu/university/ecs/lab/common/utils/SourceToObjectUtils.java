@@ -110,11 +110,7 @@ public class SourceToObjectUtils {
                     parseMethods(cu.findAll(MethodDeclaration.class), requestMapping),
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
-                    parseMethodCalls(cu.findAll(MethodDeclaration.class)),
-                    AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal(),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isAbstract(),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isStatic());
+                    parseMethodCalls(cu.findAll(MethodDeclaration.class)));
         }
 
         // Build the JClass
@@ -484,11 +480,7 @@ public class SourceToObjectUtils {
                 newMethods,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls,
-                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal(),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isAbstract(),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isStatic());
+                newRestCalls);
     }
 
     public static ConfigFile parseConfigurationFile(File file, Config config) {
@@ -604,20 +596,21 @@ public class SourceToObjectUtils {
                 newEndpoints,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls,
-                AccessModifier.fromAccessSpecifier(cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getAccessSpecifier()),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isFinal(),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isAbstract(),
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).isStatic());
+                newRestCalls);
     }
 
-    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, AccessModifier protection, Boolean isFinal, Boolean isAbstract, Boolean isStatic) {
+    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls) {
         JClass jClass = null;
 
         List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
         List<EnumDeclaration> enumDecs = cu.findAll(EnumDeclaration.class);
         List<RecordDeclaration> recordDecs = cu.findAll(RecordDeclaration.class);
         if (!classInterfaceDecs.isEmpty()) {
+            AccessModifier protection = AccessModifier.fromAccessSpecifier(classInterfaceDecs.get(0).getAccessSpecifier());
+            Boolean isFinal = classInterfaceDecs.get(0).isFinal();
+            Boolean isAbstract = classInterfaceDecs.get(0).isAbstract();
+            Boolean isStatic = classInterfaceDecs.get(0).isStatic();
+
             if (!classInterfaceDecs.get(0).isInterface()) {
                 jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
                         classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
@@ -630,12 +623,17 @@ public class SourceToObjectUtils {
 
             }
         } else if (!enumDecs.isEmpty()) {
+            AccessModifier protection = AccessModifier.fromAccessSpecifier(enumDecs.get(0).getAccessSpecifier());
+
             List<String> enumEntries = new ArrayList<>();
             enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
             jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
                     enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
                     protection, enumEntries);
         } else if (!recordDecs.isEmpty()) {
+            AccessModifier protection = AccessModifier.fromAccessSpecifier(recordDecs.get(0).getAccessSpecifier());
+            Boolean isStatic = recordDecs.get(0).isStatic();
+
             jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
                     recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
                     protection, isStatic);
