@@ -1,14 +1,11 @@
 name: Release Library
 
 on:
-  pull_request:
-    types: [closed] # Only trigger when a PR is closed
-    branches:
-      - main # Only run when PRs are merged into main
+  release:
+    types: [created] # Only trigger when a new release is created
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true # Ensure PR was merged
     runs-on: ubuntu-latest
 
     steps:
