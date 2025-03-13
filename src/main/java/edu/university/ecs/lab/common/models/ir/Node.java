@@ -11,12 +11,20 @@ import lombok.ToString;
  */
 @Data
 @NoArgsConstructor
-public class SystemNode {
+public abstract class Node {
     /**
-     * The parent of this SystemNode
+     * The parent of this Node
      */
     @EqualsAndHashCode.Exclude
     @ToString.Exclude
     @JsonIgnore
-    protected SystemNode parent = null;
+    protected Node parent = null;
+
+    /**
+     * This method generates a unique ID for datatypes in a microservice system.
+     *
+     * @return the string unique ID
+     */
+    @JsonIgnore
+    public abstract String getID();
 }

@@ -26,7 +26,7 @@ import lombok.NoArgsConstructor;
         @JsonSubTypes.Type(value = Parameter.class, name = "Parameter"),
 })
 @JsonTypeName("Component")
-public abstract class Component extends SystemNode {
+public abstract class Component extends Node {
     /**
      * Name of the structure
      */
@@ -41,13 +41,11 @@ public abstract class Component extends SystemNode {
      * The line range of the component
      */
     protected Location location;
-
+    
     /**
-     * This method generates a unique ID for datatypes that fall
-     * under a JClass
-     *
-     * @return the string unique ID
+     * See {@link Node#getID()}
      */
+    @Override
     @JsonIgnore
     public final String getID() {
         return packageAndClassName + "." + name;

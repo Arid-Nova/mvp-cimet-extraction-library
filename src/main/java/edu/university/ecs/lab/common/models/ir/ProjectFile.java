@@ -24,7 +24,7 @@ import lombok.NoArgsConstructor;
         @JsonSubTypes.Type(value = JClass.class, name = "JClass"),
 })
 @JsonTypeName("ProjectFile")
-public abstract class ProjectFile extends SystemNode {
+public abstract class ProjectFile extends Node {
     protected String name;
     protected String path;
     protected FileType fileType;
