@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.FileType;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -19,7 +18,7 @@ import java.util.Set;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @JsonTypeName("MicroserviceSystem")
-public class MicroserviceSystem extends SystemNode {
+public class MicroserviceSystem extends Node {
     /**
      * The name of the system
      */
@@ -173,5 +172,14 @@ public class MicroserviceSystem extends SystemNode {
      * @param parent Ignored parameter
      */
     @Override
-    public void setParent(SystemNode parent) {}
+    public void setParent(Node parent) {}
+
+    /**
+     * See {@link Node#getID()}
+     */
+    @Override
+    @JsonIgnore
+    public String getID() {
+        return this.name + " " + this.commitID;
+    }
 }

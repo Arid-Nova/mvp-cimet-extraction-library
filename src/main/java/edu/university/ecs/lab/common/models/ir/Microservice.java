@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = true)
 @JsonTypeName("Microservice")
-public class Microservice extends SystemNode {
+public class Microservice extends Node {
     /**
      * The name of the service (ex: "ts-assurance-service")
      */
@@ -298,5 +298,14 @@ public class Microservice extends SystemNode {
     @JsonIgnore
     public Set<Method> getMethods() {
         return getClasses().stream().flatMap(jClass -> jClass.getMethods().stream()).collect(Collectors.toSet());
+    }
+
+    /**
+     * See {@link Node#getID()}
+     */
+    @Override
+    @JsonIgnore
+    public String getID() {
+        return this.path;
     }
 }

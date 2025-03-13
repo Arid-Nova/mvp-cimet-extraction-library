@@ -193,4 +193,13 @@ public class JClass extends ProjectFile {
         methodCalls.forEach(methodCall -> methodCall.setMicroserviceName(name));
         methods.forEach(methodCall -> methodCall.setMicroserviceName(name));
     }
+
+    /**
+     * See {@link Node#getID()}
+     */
+    @Override
+    @JsonIgnore
+    public String getID() {
+        return this.path;
+    }
 }
