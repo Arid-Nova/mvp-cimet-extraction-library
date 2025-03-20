@@ -48,7 +48,7 @@ public abstract class Component extends Node {
      * The line range of the component
      */
     protected Location location;
-    
+
     /**
      * See {@link Node#getID()}
      */
@@ -83,5 +83,21 @@ public abstract class Component extends Node {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), name, packageName, className, location);
+    }
+
+    /**
+     * Converts a packageAndClassName to separate package and class names
+     * @param packageAndClassName The package and class name to set for this Component
+     */
+    public void setPackageAndClassNames(String packageAndClassName) {
+        int lastDot = packageAndClassName.lastIndexOf(".");
+        if (lastDot == -1) {
+            packageName = packageAndClassName;
+            className = "";
+        }
+        else {
+            packageName = packageAndClassName.substring(0, lastDot);
+            className = packageAndClassName.substring(lastDot + 1);
+        }
     }
 }

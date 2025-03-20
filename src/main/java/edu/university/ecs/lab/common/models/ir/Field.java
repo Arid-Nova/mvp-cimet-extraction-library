@@ -36,7 +36,7 @@ public class Field extends Component {
 
     public Field(String name, String packageAndClassName, String fieldType, AccessModifier protection, Boolean isStatic, Boolean isFinal, Location location) {
         this.name = name;
-        this.packageAndClassName = packageAndClassName;
+        setPackageAndClassNames(packageAndClassName);
         this.fieldType = fieldType;
         this.protection = protection;
         this.isStatic = isStatic;

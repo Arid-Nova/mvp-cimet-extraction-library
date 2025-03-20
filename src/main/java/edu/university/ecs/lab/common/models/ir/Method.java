@@ -80,7 +80,7 @@ public class Method extends Component {
     public Method(String name, String packageAndClassName, Set<Parameter> parameters, String typeAsString, Set<Annotation> annotations, String microserviceName,
                   String className, AccessModifier protection, Boolean isAbstract, Boolean isStatic, Boolean isFinal, Set<String> thrownExceptions, Location location) {
         this.name = name;
-        this.packageAndClassName = packageAndClassName;
+        setPackageAndClassNames(packageAndClassName);
         this.parameters = parameters;
         this.returnType = typeAsString;
         this.annotations = annotations;
@@ -100,7 +100,8 @@ public class Method extends Component {
 
     public Method(MethodDeclaration methodDeclaration) {
         this.name = methodDeclaration.getNameAsString();
-        this.packageAndClassName = methodDeclaration.getClass().getPackageName() + "." + methodDeclaration.getClass().getName();
+        this.packageName = methodDeclaration.getClass().getPackageName();
+        this.className = methodDeclaration.getClass().getName();
         this.parameters = parseParameters(methodDeclaration.getParameters());
         this.protection = AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier());
         this.isAbstract = methodDeclaration.isAbstract();
@@ -125,7 +126,7 @@ public class Method extends Component {
         HashSet<Parameter> parameterSet = new HashSet<>();
 
         for(com.github.javaparser.ast.body.Parameter parameter : parameters) {
-            parameterSet.add(new Parameter(parameter, getPackageAndClassName()));
+            parameterSet.add(new Parameter(parameter, packageName + "." + className));
         }
 
         return parameterSet;

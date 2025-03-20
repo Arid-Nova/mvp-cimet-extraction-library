@@ -39,7 +39,7 @@ public class Import extends Component {
      */
     public Import(String importPackage, String importObject, Boolean isStatic, String packageAndClassName, Location location) {
         this.name = importPackage + "." + importObject;
-        this.packageAndClassName = packageAndClassName;
+        setPackageAndClassNames(packageAndClassName);
         this.importPackage = importPackage;
         this.importObject = importObject;
         this.isStatic = isStatic;
