@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,4 +33,9 @@ public class SystemChange {
      * List of delta changes
      */
     private List<Delta> changes = new ArrayList<>();
+
+    /**
+     * Various optional metadata that can be attached to SystemChanges.
+     */
+    protected JSONObject metadata;
 }
