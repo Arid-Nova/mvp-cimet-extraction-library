@@ -7,6 +7,8 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Objects;
+
 /**
  * Abstract class for all code components that fall under a JClass
  * structure.
@@ -35,7 +37,12 @@ public abstract class Component extends Node {
     /**
      * Name of the package + class (package path e.g. edu.university.lab.AdminController)
      */
-    protected String packageAndClassName;
+    protected String packageName;
+
+    /**
+     * Name of the package + class (package path e.g. edu.university.lab.AdminController)
+     */
+    protected String className;
 
     /**
      * The line range of the component
@@ -48,6 +55,33 @@ public abstract class Component extends Node {
     @Override
     @JsonIgnore
     public final String getID() {
-        return packageAndClassName + "." + name;
+        String id = String.join(".", packageName, className, name);
+
+        // TODO: Perhaps a better implementation strategy instead of checking type here
+        if(this instanceof MethodCall) {
+            id += "[" + location.startLine + "-" + location.endLine + "]";
+        }
+
+        return id;
+    }
+
+    /**
+     * Equals implementation for components, if the ID is equivalent they should
+     * be treated as the same component
+     *
+     * @param o object to compare to
+     * @return boolean equality
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) return false;
+        if (!super.equals(o)) return false;
+        Component component = (Component) o;
+        return Objects.equals(getID(), component.getID()) ;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), name, packageName, className, location);
     }
 }
