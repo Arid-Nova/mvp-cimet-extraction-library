@@ -1,15 +1,11 @@
 package edu.university.ecs.lab.common.models.ir;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import edu.university.ecs.lab.common.models.metadata.NodeMetadata;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
-
-import java.util.HashSet;
-import java.util.Set;
+import org.json.JSONObject;
 
 /**
  * Class that provides a generic way of storing any type of object/node in a microservice system.
@@ -28,8 +24,7 @@ public abstract class Node {
     /**
      * Various optional metadata that can be attached to Nodes.
      */
-    @JsonDeserialize(as = HashSet.class)
-    protected Set<NodeMetadata> metadata;
+    protected JSONObject metadata;
 
     /**
      * This method generates a unique ID for datatypes in a microservice system.
