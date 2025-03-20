@@ -1,12 +1,8 @@
 package edu.university.ecs.lab.common.utils;
 
-import edu.university.ecs.lab.common.error.Error;
 import java.io.File;
 import java.util.Arrays;
-import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
-
 
 /**
  * Manages all file paths and file path conversion functions.
@@ -17,6 +13,7 @@ public class FileUtils {
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
     private static final String DEFAULT_OUTPUT_PATH = "output";
     private static final String DEFAULT_CLONE_PATH = "clone";
+    private static final String DEFAULT_DOCS_PATH = "docs";
     private static final String DOT = ".";
     public static final String GIT_SEPARATOR = "/";
 
@@ -44,6 +41,16 @@ public class FileUtils {
      */
     public static String getOutputPath() {
         return DOT + SYS_SEPARATOR + DEFAULT_OUTPUT_PATH;
+    }
+
+    /**
+     * This method returns the relative local path of the documentation output directory as ./DEFAULT_DOCS_PATH.
+     * This will be a working relative path to the documentation output directory on the local file system.
+     *
+     * @return the relative path string where the documentation output will exist
+     */
+    public static String getDocsPath() {
+        return DOT + SYS_SEPARATOR + DEFAULT_DOCS_PATH;
     }
 
     /**
@@ -79,12 +86,14 @@ public class FileUtils {
         return getRepositoryPath(repoName) + localPath.replace(GIT_SEPARATOR, SYS_SEPARATOR);
     }
 
-
-
-    @Deprecated
-    public static String getMicroserviceNameFromPath(String path) {
+    /**
+     * Fallback to get microservice name if other methods such as reading pom.xml, settings.gradle, etc. fail
+     * @param path The path to the microservice
+     * @return Raw microservice name based on the path
+     */
+    public static String fallbackGetMicroserviceNameFromPath(String path) {
         if (!path.startsWith(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR)) {
-            Error.reportAndExit(Error.INVALID_REPO_PATHS, Optional.empty());
+            throw new IllegalArgumentException("A malformed path was provided");
         }
 
         String[] split = path.replace(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR, "").split(SPECIAL_SEPARATOR);
@@ -111,12 +120,9 @@ public class FileUtils {
      * This method creates the default output and clone directories
      */
     public static void makeDirs() {
-        try {
-            new File(getOutputPath()).mkdirs();
-            new File(getClonePath()).mkdirs();
-        } catch (Exception e) {
-            Error.reportAndExit(Error.INVALID_REPO_PATHS, Optional.of(e));
-        }
+        new File(getOutputPath()).mkdirs();
+        new File(getClonePath()).mkdirs();
+        new File(getDocsPath()).mkdirs();
     }
 
     /**

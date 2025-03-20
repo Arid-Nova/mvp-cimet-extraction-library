@@ -1,17 +1,16 @@
 package edu.university.ecs.lab.delta.models;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonSyntaxException;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.university.ecs.lab.common.models.ir.ConfigFile;
 import edu.university.ecs.lab.common.models.ir.JClass;
-import edu.university.ecs.lab.common.models.ir.ProjectFile;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
-import edu.university.ecs.lab.common.services.LoggerManager;
-import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * This class represents a single Delta change between two commits.
@@ -21,9 +20,11 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
-public class Delta implements JsonSerializable {
+@NoArgsConstructor
+@JsonTypeName("Delta")
+public class Delta {
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
-    private static final Gson gson = JsonReadWriteUtils.registerDeserializers();
     /**
      * The new path to the file changed/added
      * Note: The path may be null in the event of an add
@@ -45,30 +46,29 @@ public class Delta implements JsonSerializable {
      * The changed contents, could be a changed class or
      * a changed configuration file
      */
-    private JsonObject data;
+    private JsonNode data;
 
     /**
      * This method returns an instance of JClass if parsable.
      *
      * @return JClass instance if parsable otherwise null
      */
+    @JsonIgnore
     public JClass getClassChange() {
-        if(data.size() == 0) {
+        if(data.isEmpty()) {
             return null;
         }
         try {
-            if(data.get("fileType").getAsString().equals("JCLASS")) {
-                return gson.fromJson(data, JClass.class);
-            } else {
-                return null;
+            if(data.has("fileType") && ("JCLASS".equals(data.get("fileType").asText()) ||
+                "JINTERFACE".equals(data.get("fileType").asText()) ||
+                "JENUM".equals(data.get("fileType").asText()) ||
+                "JRECORD".equals(data.get("fileType").asText()))) {
+                return objectMapper.treeToValue(data, JClass.class);
             }
-        } catch (JsonSyntaxException e) {
-            if(data.get("fileType").getAsString().equals("JCLASS")) {
-                LoggerManager.debug(e::getMessage);
-            }
+        } catch (JsonProcessingException e) {
             return null;
         }
-
+        return null;
     }
 
     /**
@@ -76,37 +76,18 @@ public class Delta implements JsonSerializable {
      *
      * @return ConfigFile instance if parsable otherwise null
      */
+    @JsonIgnore
     public ConfigFile getConfigChange() {
-        if(data.size() == 0) {
+        if(data.isEmpty()) {
             return null;
         }
         try {
-            if(data.get("fileType").getAsString().equals("CONFIG")) {
-                return gson.fromJson(data, ConfigFile.class);
-            } else {
-                return null;
+            if (data.has("fileType") && "CONFIG".equals(data.get("fileType").asText())) {
+                return objectMapper.treeToValue(data, ConfigFile.class);
             }
-        } catch (JsonSyntaxException e) {
-            if(data.get("fileType").getAsString().equals("CONFIG")) {
-                LoggerManager.debug(e::getMessage);
-            }
-
-            return null;
+        } catch (JsonProcessingException e) {
+            throw new RuntimeException(e);
         }
+        return null;
     }
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-
-        jsonObject.addProperty("changeType", changeType.name());
-        jsonObject.addProperty("oldPath", oldPath);
-        jsonObject.addProperty("newPath", newPath);
-        jsonObject.add("data", data);
-
-        return jsonObject;
-    }
-
 }

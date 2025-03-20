@@ -1,7 +1,8 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.JsonObject;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -12,7 +13,14 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = false)
-public class MethodCall extends Node {
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type"
+)
+@JsonSubTypes({@JsonSubTypes.Type(value = RestCall.class, name = "RestCall")})
+@JsonTypeName("MethodCall")
+public class MethodCall extends Component {
 
     /**
      * Name of object that defines the called method (Maybe a static class instance, just whatever is before
@@ -46,7 +54,7 @@ public class MethodCall extends Node {
     protected String className;
 
     public MethodCall(String name, String packageName,String objectType, String objectName, String calledFrom, String parameterContents, String microserviceName,
-                      String className) {
+                      String className, Location location) {
         this.name = name;
         this.packageAndClassName = packageName;
         this.objectName = objectName;
@@ -55,25 +63,7 @@ public class MethodCall extends Node {
         this.parameterContents = parameterContents;
         this.microserviceName = microserviceName;
         this.className = className;
-    }
-
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-
-        jsonObject.addProperty("name", getName());
-        jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
-        jsonObject.addProperty("objectName", getObjectName());
-        jsonObject.addProperty("calledFrom", getCalledFrom());
-        jsonObject.addProperty("objectType", getObjectType());
-        jsonObject.addProperty("parameterContents", getParameterContents());
-        jsonObject.addProperty("microserviceName", microserviceName);
-        jsonObject.addProperty("className", className);
-
-        return jsonObject;
+        this.location = location;
     }
 
     /**

@@ -1,32 +1,30 @@
 package edu.university.ecs.lab.common.utils;
 
 import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.*;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
+import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import com.github.javaparser.ast.type.ReferenceType;
+import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
-import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
-import com.github.javaparser.symbolsolver.model.typesystem.ReferenceTypeImpl;
+import com.github.javaparser.resolution.TypeSolver;
+import com.github.javaparser.resolution.model.typesystem.ReferenceTypeImpl;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.error.Error;
-import edu.university.ecs.lab.common.models.enums.ClassRole;
-import edu.university.ecs.lab.common.models.enums.EndpointTemplate;
-import edu.university.ecs.lab.common.models.enums.HttpMethod;
-import edu.university.ecs.lab.common.models.enums.RestCallTemplate;
+import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
-import edu.university.ecs.lab.common.services.LoggerManager;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -51,10 +49,8 @@ public class SourceToObjectUtils {
         try {
             cu = StaticJavaParser.parse(sourceFile);
         } catch (Exception e) {
-            LoggerManager.warn(() -> "Failed to parse  " + sourceFile.getPath());
             microserviceName = "";
             return;
-//            Error.reportAndExit(Error.JPARSE_FAILED, Optional.of(e));
         }
         if (!cu.findAll(PackageDeclaration.class).isEmpty()) {
             packageName = cu.findAll(PackageDeclaration.class).get(0).getNameAsString();
@@ -84,7 +80,6 @@ public class SourceToObjectUtils {
     public static JClass parseClass(File sourceFile, Config config, String microserviceName) {
         // Guard condition
         if(Objects.isNull(sourceFile) || FileUtils.isConfigurationFile(sourceFile.getPath())) {
-            LoggerManager.warn(() -> "JClass filtered  " + sourceFile.getPath() + " is config or null");
             return null;
         }
 
@@ -101,7 +96,6 @@ public class SourceToObjectUtils {
 
         // Return unknown classRoles where annotation not found
         if (classRole.equals(ClassRole.UNKNOWN)) {
-            LoggerManager.warn(() -> "JClass filtered  " + sourceFile.getPath() + " class role unknown");
             return null;
         }
 
@@ -111,16 +105,12 @@ public class SourceToObjectUtils {
         } else if(classRole == ClassRole.REP_REST_RSC) {
             jClass = handleRepositoryRestResource(requestMapping, classAnnotations);
         } else {
-            jClass = new JClass(
-                    className,
-                    path,
-                    packageName,
-                    classRole,
+            jClass = buildJClass(className, path, packageName, classRole,
+                    parseImports(cu.findAll(ImportDeclaration.class)),
                     parseMethods(cu.findAll(MethodDeclaration.class), requestMapping),
                     parseFields(cu.findAll(FieldDeclaration.class)),
                     parseAnnotations(classAnnotations),
-                    parseMethodCalls(cu.findAll(MethodDeclaration.class)),
-                    cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                    parseMethodCalls(cu.findAll(MethodDeclaration.class)));
         }
 
         // Build the JClass
@@ -128,6 +118,40 @@ public class SourceToObjectUtils {
 
     }
 
+    /**
+     * This method parses importDeclarations list and returns a Set of Import models
+     *
+     * @param importDeclarations the list of importDeclarations to be parsed
+     * @return a set of Import models representing the ImportDeclarations
+     */
+    public static Set<Import> parseImports(List<ImportDeclaration> importDeclarations) {
+        HashSet<Import> imports = new HashSet<>();
+
+        for (ImportDeclaration impDec : importDeclarations) {
+            if (!impDec.isAsterisk()) {
+                String fullImport = impDec.getNameAsString();
+
+                String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
+                String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
+
+                Location range = null;
+                if (impDec.getRange().isPresent()) range = new Location(impDec.getRange().get());
+
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName, range);
+                imports.add(imp);
+            } else {
+                String impPackage = impDec.getNameAsString();
+                String impObject = "*";
+
+                Location range = null;
+                if (impDec.getRange().isPresent()) range = new Location(impDec.getRange().get());
+
+                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName, range);
+                imports.add(imp);
+            }
+        }
+        return imports;
+    }
 
     /**
      * This method parses methodDeclarations list and returns a Set of Method models
@@ -145,6 +169,13 @@ public class SourceToObjectUtils {
                 parameters.add(new edu.university.ecs.lab.common.models.ir.Parameter(parameter, packageAndClassName));
             }
 
+            NodeList<ReferenceType> exceptions = methodDeclaration.getThrownExceptions();
+            Set<String> thrownExceptions = new HashSet<>();
+            exceptions.forEach(exception -> thrownExceptions.add(exception.toString()));
+
+            Location range = null;
+            if (methodDeclaration.getRange().isPresent()) range = new Location(methodDeclaration.getRange().get());
+
             Method method = new Method(
                     methodDeclaration.getNameAsString(),
                     packageAndClassName,
@@ -152,7 +183,13 @@ public class SourceToObjectUtils {
                     methodDeclaration.getTypeAsString(),
                     parseAnnotations(methodDeclaration.getAnnotations()),
                     microserviceName,
-                    className);
+                    className,
+                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()),
+                    methodDeclaration.isAbstract(),
+                    methodDeclaration.isStatic(),
+                    methodDeclaration.isFinal(),
+                    thrownExceptions,
+                    range);
 
             method = convertValidEndpoints(methodDeclaration, method, requestMapping);
 
@@ -207,8 +244,11 @@ public class SourceToObjectUtils {
                 String parameterContents = mce.getArguments().stream().map(Objects::toString).collect(Collectors.joining(","));
 
                 if (Objects.nonNull(calledServiceName)) {
+                    Location range = null;
+                    if (mce.getRange().isPresent()) range = new Location(mce.getRange().get());
+
                     MethodCall methodCall = new MethodCall(methodName, packageAndClassName, calledServiceType, calledServiceName,
-                            methodDeclaration.getNameAsString(), parameterContents, microserviceName, className);
+                            methodDeclaration.getNameAsString(), parameterContents, microserviceName, className, range);
 
                     methodCall = convertValidRestCalls(mce, methodCall);
 
@@ -253,7 +293,12 @@ public class SourceToObjectUtils {
         // loop through class declarations
         for (FieldDeclaration fd : fieldDeclarations) {
             for (VariableDeclarator variable : fd.getVariables()) {
-                javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString()));
+                Location range = null;
+                if (variable.getRange().isPresent()) range = new Location(variable.getRange().get());
+
+                javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
+                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier()),
+                        fd.isStatic(), fd.isFinal(), range));
             }
 
         }
@@ -317,7 +362,10 @@ public class SourceToObjectUtils {
         Set<Annotation> annotations = new HashSet<>();
 
         for (AnnotationExpr ae : annotationExprs) {
-            annotations.add(new Annotation(ae, packageAndClassName));
+            Location range = null;
+            if (ae.getRange().isPresent()) range = new Location(ae.getRange().get());
+
+            annotations.add(new Annotation(ae, packageAndClassName, range));
         }
 
         return annotations;
@@ -385,7 +433,10 @@ public class SourceToObjectUtils {
         for(Method method : methods) {
             if(method instanceof Endpoint) {
                 Endpoint endpoint = (Endpoint) method;
-                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(), method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(), method.getClassName()));
+                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(),
+                        method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(),
+                        method.getClassName(), method.getProtection(), method.isAbstract(), method.isStatic(),
+                        method.isFinal(), method.getThrownExceptions(), method.getLocation()));
 
                 StringBuilder queryParams = new StringBuilder();
                 for(edu.university.ecs.lab.common.models.ir.Parameter parameter : method.getParameters()) {
@@ -409,7 +460,10 @@ public class SourceToObjectUtils {
                     queryParams.replace(0, 1, "?");
                 }
 
-                newRestCalls.add(new RestCall(new MethodCall("exchange", packageAndClassName, "RestCallTemplate", "restCallTemplate", method.getName(), "", endpoint.getMicroserviceName(), endpoint.getClassName()), endpoint.getUrl() + queryParams, endpoint.getHttpMethod()));
+                newRestCalls.add(new RestCall(new MethodCall("exchange", packageAndClassName, "RestCallTemplate",
+                        "restCallTemplate", method.getName(), "", endpoint.getMicroserviceName(),
+                        endpoint.getClassName(), method.getLocation()), endpoint.getUrl() + queryParams,
+                        endpoint.getHttpMethod()));
             } else {
                 newMethods.add(method);
             }
@@ -417,16 +471,16 @@ public class SourceToObjectUtils {
 
 
         // Build the JClass
-        return new JClass(
+        return buildJClass(
                 className,
                 path,
                 packageName,
                 ClassRole.FEIGN_CLIENT,
+                parseImports(cu.findAll(ImportDeclaration.class)),
                 newMethods,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                newRestCalls);
     }
 
     public static ConfigFile parseConfigurationFile(File file, Config config) {
@@ -533,43 +587,80 @@ public class SourceToObjectUtils {
 
 
         // Build the JClass
-        return new JClass(
+        return buildJClass(
                 className,
                 path,
                 packageName,
                 ClassRole.REP_REST_RSC,
+                parseImports(cu.findAll(ImportDeclaration.class)),
                 newEndpoints,
                 parseFields(cu.findAll(FieldDeclaration.class)),
                 parseAnnotations(classAnnotations),
-                newRestCalls,
-                cu.findAll(ClassOrInterfaceDeclaration.class).get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+                newRestCalls);
     }
 
-    private static JClass handleJS(String filePath) {
-        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>());
-        try {
-            Set<RestCall> restCalls = new HashSet<>();
-            // Command to run Node.js script
-            ProcessBuilder processBuilder = new ProcessBuilder("node", "scripts/parser.js");
-            Process process = processBuilder.start();
+    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls) {
+        JClass jClass = null;
 
-            // Capture the output
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                String[] split = line.split(";");
-                restCalls.add(new RestCall(split[0], split[1], split[2], split[3], split[4], split[5], split[6], split[7]));
-                System.out.println("Node.js Output: " + line);
+        List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
+        List<EnumDeclaration> enumDecs = cu.findAll(EnumDeclaration.class);
+        List<RecordDeclaration> recordDecs = cu.findAll(RecordDeclaration.class);
+        if (!classInterfaceDecs.isEmpty()) {
+            AccessModifier protection = AccessModifier.fromAccessSpecifier(classInterfaceDecs.get(0).getAccessSpecifier());
+            Boolean isFinal = classInterfaceDecs.get(0).isFinal();
+            Boolean isAbstract = classInterfaceDecs.get(0).isAbstract();
+            Boolean isStatic = classInterfaceDecs.get(0).isStatic();
+
+            if (!classInterfaceDecs.get(0).isInterface()) {
+                jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                        classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                        protection, isFinal, isAbstract, isStatic);
+            } else {
+                jClass = new JInterface(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                        classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                        protection, isFinal, isStatic);
+
             }
+        } else if (!enumDecs.isEmpty()) {
+            AccessModifier protection = AccessModifier.fromAccessSpecifier(enumDecs.get(0).getAccessSpecifier());
 
-            // Wait for the Node.js process to complete
-            int exitCode = process.waitFor();
-            System.out.println("Node.js process exited with code: " + exitCode);
-        } catch (Exception e) {
-            System.err.println(e);
-            System.exit(1);
+            List<String> enumEntries = new ArrayList<>();
+            enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
+            jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                    enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                    protection, enumEntries);
+        } else if (!recordDecs.isEmpty()) {
+            AccessModifier protection = AccessModifier.fromAccessSpecifier(recordDecs.get(0).getAccessSpecifier());
+            Boolean isStatic = recordDecs.get(0).isStatic();
+
+            jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
+                    protection, isStatic);
         }
 
         return jClass;
     }
+
+//    private static JClass handleJS(String filePath) throws IOException, InterruptedException {
+//        JClass jClass = new JClass(filePath, filePath, "", ClassRole.FEIGN_CLIENT, new HashSet<>(), new HashSet<>(), new HashSet<>(), new HashSet<>(), new ArrayList<>(), new HashSet<>(), new HashSet<>(), AccessModifier.PACKAGE_PRIVATE, false, false, false);
+//
+//        Set<RestCall> restCalls = new HashSet<>();
+//        // Command to run Node.js script
+//        ProcessBuilder processBuilder = new ProcessBuilder("node", "/scripts/parser.js");
+//        Process process = processBuilder.start();
+//
+//        // Capture the output
+//        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+//        String line;
+//        while ((line = reader.readLine()) != null) {
+//            String[] split = line.split(";");
+//            restCalls.add(new RestCall(split[0], split[1], split[2], split[3], split[4], split[5], split[6], split[7]));
+//        }
+//
+//        // Wait for the Node.js process to complete
+//        process.waitFor();
+//
+//        return jClass;
+//    }
 }

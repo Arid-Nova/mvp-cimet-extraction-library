@@ -2,10 +2,10 @@ package edu.university.ecs.lab.common.services;
 
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
-import edu.university.ecs.lab.common.error.Error;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.lib.*;
 import org.eclipse.jgit.revwalk.RevCommit;
@@ -15,10 +15,10 @@ import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
 
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -36,7 +36,7 @@ public class GitService {
      * 
      * @param configPath path to project configuration file
      */
-    public GitService(String configPath) {
+    public GitService(String configPath) throws IOException, InterruptedException {
         this.config = ConfigUtil.readConfig(configPath);
         FileUtils.makeDirs();
         cloneRemote();
@@ -46,7 +46,7 @@ public class GitService {
     /**
      * Method to clone a repository
      */
-    public void cloneRemote() {
+    public void cloneRemote() throws InterruptedException, IOException {
         String repositoryPath = FileUtils.getRepositoryPath(config.getRepoName());
 
         // Check if repository was already cloned
@@ -55,22 +55,11 @@ public class GitService {
         }
 
         // Create and execute operating system process to clone repository
-        try {
-            ProcessBuilder processBuilder =
-                    new ProcessBuilder("git", "clone", config.getRepositoryURL(), repositoryPath);
-            processBuilder.redirectErrorStream(true);
-            Process process = processBuilder.start();
-            int exitCode = process.waitFor();
-
-            if (exitCode != EXIT_SUCCESS) {
-                throw new Exception();
-            }
-
-        } catch (Exception e) {
-            Error.reportAndExit(Error.GIT_FAILED, Optional.of(e));
-        }
-
-        LoggerManager.info(() -> "Cloned repository " + config.getRepoName());
+        ProcessBuilder processBuilder =
+                new ProcessBuilder("git", "clone", config.getRepositoryURL(), repositoryPath);
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        process.waitFor();
     }
 
     /**
@@ -78,7 +67,7 @@ public class GitService {
      * 
      * @param commitID commit id to reset to
      */
-    public void resetLocal(String commitID) {
+    public void resetLocal(String commitID) throws GitAPIException {
         validateLocalExists();
 
         if (Objects.isNull(commitID) || commitID.isEmpty()) {
@@ -88,11 +77,7 @@ public class GitService {
         // Reset branch to old commit
         try (Git git = new Git(repository)) {
             git.reset().setMode(ResetCommand.ResetType.HARD).setRef(commitID).call();
-        } catch (Exception e) {
-            Error.reportAndExit(Error.GIT_FAILED, Optional.of(e));
         }
-
-        LoggerManager.info(() -> "Set repository " + config.getRepoName() + " to " + commitID);
     }
 
     /**
@@ -101,7 +86,7 @@ public class GitService {
     private void validateLocalExists() {
         File file = new File(FileUtils.getRepositoryPath(config.getRepoName()));
         if (!(file.exists() && file.isDirectory())) {
-            Error.reportAndExit(Error.REPO_DONT_EXIST, Optional.empty());
+            throw new IllegalStateException("The local directory does not exist");
         }
     }
 
@@ -110,18 +95,13 @@ public class GitService {
      * 
      * @return file repository
      */
-    public Repository initRepository() {
+    public Repository initRepository() throws IOException {
         validateLocalExists();
 
         Repository repository = null;
 
-        try {
-            File repositoryPath = new File(FileUtils.getRepositoryPath(config.getRepoName()));
-            repository = new FileRepositoryBuilder().setGitDir(new File(repositoryPath, ".git")).build();
-
-        } catch (Exception e) {
-            Error.reportAndExit(Error.GIT_FAILED, Optional.of(e));
-        }
+        File repositoryPath = new File(FileUtils.getRepositoryPath(config.getRepoName()));
+        repository = new FileRepositoryBuilder().setGitDir(new File(repositoryPath, ".git")).build();
 
         return repository;
     }
@@ -133,18 +113,14 @@ public class GitService {
      * @param commitNew new commit id
      * @return list of changes from old commit to new commit
      */
-    public List<DiffEntry> getDifferences(String commitOld, String commitNew) {
+    public List<DiffEntry> getDifferences(String commitOld, String commitNew) throws IOException, GitAPIException {
         List<DiffEntry> returnList = null;
         RevCommit oldCommit = null, newCommit = null;
         RevWalk revWalk = new RevWalk(repository);
 
-        try {
-            // Parse the old and new commits
-            oldCommit = revWalk.parseCommit(repository.resolve(commitOld));
-            newCommit = revWalk.parseCommit(repository.resolve(commitNew));
-        } catch (Exception e) {
-            Error.reportAndExit(Error.GIT_FAILED, Optional.of(e));
-        }
+        // Parse the old and new commits
+        oldCommit = revWalk.parseCommit(repository.resolve(commitOld));
+        newCommit = revWalk.parseCommit(repository.resolve(commitNew));
 
         // Prepare tree parsers for both commits
         try (ObjectReader reader = repository.newObjectReader()) {
@@ -169,11 +145,7 @@ public class GitService {
                         .filter(diff -> isCodeChange(diff, repository, finalOldCommit, finalNewCommit))
                         .collect(Collectors.toList());
             }
-        } catch (Exception e) {
-            Error.reportAndExit(Error.GIT_FAILED, Optional.of(e));
         }
-
-        LoggerManager.debug(() -> "Got differences of repository " + config.getRepoName() + " between " + commitOld + " -> " + commitNew);
 
         return returnList;
     }
@@ -258,13 +230,11 @@ public class GitService {
      * 
      * @return Git log as a list
      */
-    public Iterable<RevCommit> getLog() {
+    public Iterable<RevCommit> getLog() throws GitAPIException {
         Iterable<RevCommit> returnList = null;
 
         try (Git git = new Git(repository)) {
             returnList = git.log().call();
-        } catch (Exception e) {
-            Error.reportAndExit(Error.GIT_FAILED, Optional.of(e));
         }
 
         return returnList;
@@ -275,19 +245,16 @@ public class GitService {
      * 
      * @return commit id of head commit
      */
-    public String getHeadCommit() {
+    public String getHeadCommit() throws IOException {
         String commitID = "";
 
-        try {
-            Ref head = repository.findRef(HEAD_COMMIT);
-            RevWalk walk = new RevWalk(repository);
-            ObjectId commitId = head.getObjectId();
-            RevCommit commit = walk.parseCommit(commitId);
-            commitID = commit.getName();
-            walk.close();
-        } catch (Exception e) {
-            Error.reportAndExit(Error.GIT_FAILED, Optional.of(e));
-        }
+        Ref head = repository.findRef(HEAD_COMMIT);
+        RevWalk walk = new RevWalk(repository);
+        ObjectId commitId = head.getObjectId();
+        RevCommit commit = walk.parseCommit(commitId);
+        commitID = commit.getName();
+        walk.close();
+
 
         return commitID;
     }

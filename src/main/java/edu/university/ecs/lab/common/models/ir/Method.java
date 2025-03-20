@@ -1,9 +1,12 @@
 package edu.university.ecs.lab.common.models.ir;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.body.MethodDeclaration;
-import com.google.gson.JsonObject;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
+import com.github.javaparser.ast.type.ReferenceType;
+import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -16,9 +19,18 @@ import java.util.*;
 @Data
 @NoArgsConstructor
 @EqualsAndHashCode(callSuper = false)
-public class Method extends Node {
-    // Protection Not Yet Implemented
-    // protected String protection;
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type"
+)
+@JsonSubTypes({@JsonSubTypes.Type(value = Endpoint.class, name = "Endpoint")})
+@JsonTypeName("Method")
+public class Method extends Component {
+    /**
+     * The protection level for this Method
+     */
+    protected AccessModifier protection;
 
     /**
      * Set of fields representing parameters
@@ -45,8 +57,28 @@ public class Method extends Node {
      */
     protected String className;
 
+    /**
+     * Whether the function is abstract
+     */
+    private boolean isAbstract;
+
+    /**
+     * Whether the function is static
+     */
+    private boolean isStatic;
+
+    /**
+     * Whether the function is final
+     */
+    private boolean isFinal;
+
+    /**
+     * A list of exceptions that the function can throw when called
+     */
+    private Set<String> thrownExceptions;
+
     public Method(String name, String packageAndClassName, Set<Parameter> parameters, String typeAsString, Set<Annotation> annotations, String microserviceName,
-                  String className) {
+                  String className, AccessModifier protection, Boolean isAbstract, Boolean isStatic, Boolean isFinal, Set<String> thrownExceptions, Location location) {
         this.name = name;
         this.packageAndClassName = packageAndClassName;
         this.parameters = parameters;
@@ -54,30 +86,33 @@ public class Method extends Node {
         this.annotations = annotations;
         this.microserviceName = microserviceName;
         this.className = className;
+        this.protection = protection;
+        this.isAbstract = isAbstract;
+        this.isStatic = isStatic;
+        this.isFinal = isFinal;
+        this.thrownExceptions = thrownExceptions;
+        this.location = location;
+
+        // Fill back references
+        this.parameters.forEach(pam -> pam.setParent(this));
+        this.annotations.forEach(ann -> ann.setParent(this));
     }
 
     public Method(MethodDeclaration methodDeclaration) {
         this.name = methodDeclaration.getNameAsString();
         this.packageAndClassName = methodDeclaration.getClass().getPackageName() + "." + methodDeclaration.getClass().getName();
         this.parameters = parseParameters(methodDeclaration.getParameters());
-    }
+        this.protection = AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier());
+        this.isAbstract = methodDeclaration.isAbstract();
+        this.isStatic = methodDeclaration.isStatic();
+        this.isFinal = methodDeclaration.isFinal();
+        NodeList<ReferenceType> exceptions = methodDeclaration.getThrownExceptions();
+        this.thrownExceptions = new HashSet<>();
+        exceptions.forEach(exception -> this.thrownExceptions.add(exception.toString()));
 
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-
-        jsonObject.addProperty("name", getName());
-        jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
-        jsonObject.add("annotations", JsonSerializable.toJsonArray(getAnnotations()));
-        jsonObject.add("parameters", JsonSerializable.toJsonArray(getParameters()));
-        jsonObject.addProperty("returnType", getReturnType());
-        jsonObject.addProperty("microserviceName", microserviceName);
-        jsonObject.addProperty("className", className);
-
-        return jsonObject;
+        // Fill back references
+        this.parameters.forEach(pam -> pam.setParent(this));
+        this.annotations.forEach(ann -> ann.setParent(this));
     }
 
     /**
@@ -92,7 +127,6 @@ public class Method extends Node {
         for(com.github.javaparser.ast.body.Parameter parameter : parameters) {
             parameterSet.add(new Parameter(parameter, getPackageAndClassName()));
         }
-
 
         return parameterSet;
     }

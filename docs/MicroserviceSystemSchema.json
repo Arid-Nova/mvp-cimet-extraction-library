@@ -1,0 +1,363 @@
+{
+  "type" : "object",
+  "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:MicroserviceSystem",
+  "properties" : {
+    "name" : {
+      "type" : "string"
+    },
+    "commitID" : {
+      "type" : "string"
+    },
+    "microservices" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object",
+        "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Microservice",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "controllers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass",
+              "properties" : {
+                "name" : {
+                  "type" : "string"
+                },
+                "path" : {
+                  "type" : "string"
+                },
+                "fileType" : {
+                  "type" : "string",
+                  "enum" : [ "JCLASS", "JINTERFACE", "JENUM", "JRECORD", "CONFIG", "POM" ]
+                },
+                "packageName" : {
+                  "type" : "string"
+                },
+                "protection" : {
+                  "type" : "string",
+                  "enum" : [ "PUBLIC", "PROTECTED", "PRIVATE", "PACKAGE_PRIVATE" ]
+                },
+                "imports" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Import",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "packageAndClassName" : {
+                        "type" : "string"
+                      },
+                      "location" : {
+                        "type" : "object",
+                        "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location",
+                        "properties" : {
+                          "startLine" : {
+                            "type" : "integer"
+                          },
+                          "endLine" : {
+                            "type" : "integer"
+                          }
+                        }
+                      },
+                      "importPackage" : {
+                        "type" : "string"
+                      },
+                      "importObject" : {
+                        "type" : "string"
+                      },
+                      "isStatic" : {
+                        "type" : "boolean"
+                      }
+                    }
+                  }
+                },
+                "implementedTypes" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "string"
+                  }
+                },
+                "extendedTypes" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "string"
+                  }
+                },
+                "classRole" : {
+                  "type" : "string",
+                  "enum" : [ "CONTROLLER", "SERVICE", "REPOSITORY", "ENTITY", "REP_REST_RSC", "FEIGN_CLIENT", "UNKNOWN" ]
+                },
+                "methods" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Method",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "packageAndClassName" : {
+                        "type" : "string"
+                      },
+                      "location" : {
+                        "type" : "object",
+                        "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location"
+                      },
+                      "protection" : {
+                        "type" : "string",
+                        "enum" : [ "PUBLIC", "PROTECTED", "PRIVATE", "PACKAGE_PRIVATE" ]
+                      },
+                      "parameters" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "object",
+                          "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Parameter",
+                          "properties" : {
+                            "name" : {
+                              "type" : "string"
+                            },
+                            "packageAndClassName" : {
+                              "type" : "string"
+                            },
+                            "location" : {
+                              "type" : "object",
+                              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location"
+                            },
+                            "parameterType" : {
+                              "type" : "string"
+                            },
+                            "annotations" : {
+                              "type" : "array",
+                              "items" : {
+                                "type" : "object",
+                                "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Annotation",
+                                "properties" : {
+                                  "name" : {
+                                    "type" : "string"
+                                  },
+                                  "packageAndClassName" : {
+                                    "type" : "string"
+                                  },
+                                  "location" : {
+                                    "type" : "object",
+                                    "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location"
+                                  },
+                                  "attributes" : {
+                                    "type" : "object",
+                                    "additionalProperties" : {
+                                      "type" : "string"
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            "isVariableParameter" : {
+                              "type" : "boolean"
+                            }
+                          }
+                        }
+                      },
+                      "returnType" : {
+                        "type" : "string"
+                      },
+                      "microserviceName" : {
+                        "type" : "string"
+                      },
+                      "annotations" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "object",
+                          "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Annotation"
+                        }
+                      },
+                      "className" : {
+                        "type" : "string"
+                      },
+                      "thrownExceptions" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "string"
+                        }
+                      },
+                      "static" : {
+                        "type" : "boolean"
+                      },
+                      "final" : {
+                        "type" : "boolean"
+                      },
+                      "abstract" : {
+                        "type" : "boolean"
+                      }
+                    }
+                  }
+                },
+                "fields" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Field",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "packageAndClassName" : {
+                        "type" : "string"
+                      },
+                      "location" : {
+                        "type" : "object",
+                        "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location"
+                      },
+                      "fieldType" : {
+                        "type" : "string"
+                      },
+                      "protection" : {
+                        "type" : "string",
+                        "enum" : [ "PUBLIC", "PROTECTED", "PRIVATE", "PACKAGE_PRIVATE" ]
+                      },
+                      "isStatic" : {
+                        "type" : "boolean"
+                      },
+                      "isFinal" : {
+                        "type" : "boolean"
+                      }
+                    }
+                  }
+                },
+                "annotations" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "object",
+                    "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Annotation"
+                  }
+                },
+                "methodCalls" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:MethodCall",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "packageAndClassName" : {
+                        "type" : "string"
+                      },
+                      "location" : {
+                        "type" : "object",
+                        "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location"
+                      },
+                      "objectName" : {
+                        "type" : "string"
+                      },
+                      "objectType" : {
+                        "type" : "string"
+                      },
+                      "calledFrom" : {
+                        "type" : "string"
+                      },
+                      "parameterContents" : {
+                        "type" : "string"
+                      },
+                      "microserviceName" : {
+                        "type" : "string"
+                      },
+                      "className" : {
+                        "type" : "string"
+                      }
+                    }
+                  }
+                },
+                "static" : {
+                  "type" : "boolean"
+                },
+                "final" : {
+                  "type" : "boolean"
+                },
+                "abstract" : {
+                  "type" : "boolean"
+                }
+              }
+            }
+          },
+          "services" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass"
+            }
+          },
+          "repositories" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass"
+            }
+          },
+          "entities" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass"
+            }
+          },
+          "feignClients" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass"
+            }
+          },
+          "files" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:ConfigFile",
+              "properties" : {
+                "name" : {
+                  "type" : "string"
+                },
+                "path" : {
+                  "type" : "string"
+                },
+                "fileType" : {
+                  "type" : "string",
+                  "enum" : [ "JCLASS", "JINTERFACE", "JENUM", "JRECORD", "CONFIG", "POM" ]
+                },
+                "data" : {
+                  "type" : "any"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "orphans" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object",
+        "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:ProjectFile",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "fileType" : {
+            "type" : "string",
+            "enum" : [ "JCLASS", "JINTERFACE", "JENUM", "JRECORD", "CONFIG", "POM" ]
+          }
+        }
+      }
+    }
+  }
+}

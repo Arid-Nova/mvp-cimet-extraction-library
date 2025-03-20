@@ -1,31 +1,30 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 /**
- * Abstract class for general datatypes that fall under
- * JClass
+ * Class that provides a generic way of storing any type of object/node in a microservice system.
  */
 @Data
-public abstract class Node implements JsonSerializable {
+@NoArgsConstructor
+public abstract class Node {
     /**
-     * Name of the structure
+     * The parent of this Node
      */
-    protected String name;
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @JsonIgnore
+    protected Node parent = null;
 
     /**
-     * Name of the package + class (package path e.g. edu.university.lab.AdminController)
-     */
-    protected String packageAndClassName;
-
-    /**
-     * This method generates a unique ID for datatypes that fall
-     * under a JClass
+     * This method generates a unique ID for datatypes in a microservice system.
      *
      * @return the string unique ID
      */
-    public final String getID() {
-        return packageAndClassName + "." + name;
-    }
+    @JsonIgnore
+    public abstract String getID();
 }

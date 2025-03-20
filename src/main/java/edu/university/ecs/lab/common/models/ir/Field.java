@@ -1,39 +1,46 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.JsonObject;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 /**
  * Represents a field attribute in a Java class or in our case a JClass.
  */
 @Data
+@NoArgsConstructor
 @EqualsAndHashCode
-public class Field extends Node {
+@JsonTypeName("Field")
+public class Field extends Component {
     /**
      * Java class type of the class variable e.g. String
      */
-    private String type;
-
-    public Field(String name, String packageAndClassName, String type) {
-        this.name = name;
-        this.packageAndClassName = packageAndClassName;
-        this.type = type;
-    }
-
+    private String fieldType;
 
     /**
-     * see {@link JsonSerializable#toJsonObject()}
+     * The protection applied to this Field
      */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
+    private AccessModifier protection;
 
-        jsonObject.addProperty("name", getName());
-        jsonObject.addProperty("packageAndClassName", getPackageAndClassName());
-        jsonObject.addProperty("type", getType());
+    /**
+     * Whether the field is static
+     */
+    private Boolean isStatic;
 
-        return jsonObject;
+    /**
+     * Whether the field is final
+     */
+    private Boolean isFinal;
+
+    public Field(String name, String packageAndClassName, String fieldType, AccessModifier protection, Boolean isStatic, Boolean isFinal, Location location) {
+        this.name = name;
+        this.packageAndClassName = packageAndClassName;
+        this.fieldType = fieldType;
+        this.protection = protection;
+        this.isStatic = isStatic;
+        this.isFinal = isFinal;
+        this.location = location;
     }
 }

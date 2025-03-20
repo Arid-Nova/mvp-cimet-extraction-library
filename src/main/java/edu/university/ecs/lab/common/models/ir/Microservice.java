@@ -1,12 +1,12 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.utils.FileUtils;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.util.HashSet;
 import java.util.List;
@@ -18,9 +18,10 @@ import java.util.stream.Collectors;
  * hold all information in that class.
  */
 @Data
-@AllArgsConstructor
-@EqualsAndHashCode
-public class Microservice implements JsonSerializable {
+@NoArgsConstructor
+@EqualsAndHashCode(callSuper = true)
+@JsonTypeName("Microservice")
+public class Microservice extends Node {
     /**
      * The name of the service (ex: "ts-assurance-service")
      */
@@ -34,22 +35,26 @@ public class Microservice implements JsonSerializable {
     /**
      * Controller classes belonging to the microservice.
      */
-    private final Set<JClass> controllers;
+    @JsonDeserialize(as = HashSet.class)
+    private Set<JClass> controllers;
 
     /**
      * Service classes to the microservice.
      */
-    private final Set<JClass> services;
+    @JsonDeserialize(as = HashSet.class)
+    private Set<JClass> services;
 
     /**
      * Repository classes belonging to the microservice.
      */
-    private final Set<JClass> repositories;
+    @JsonDeserialize(as = HashSet.class)
+    private Set<JClass> repositories;
 
     /**
      * Entity classes belonging to the microservice.
      */
-    private final Set<JClass> entities;
+    @JsonDeserialize(as = HashSet.class)
+    private Set<JClass> entities;
 
     /**
      * Embeddable classes belonging to the microservice.
@@ -59,12 +64,14 @@ public class Microservice implements JsonSerializable {
     /**
      * Feign client classes belonging to the microservice.
      */
-    private final Set<JClass> feignClients;
+    @JsonDeserialize(as = HashSet.class)
+    private Set<JClass> feignClients;
 
     /**
      * Static files belonging to the microservice.
      */
-    private final Set<ConfigFile> files;
+    @JsonDeserialize(as = HashSet.class)
+    private Set<ConfigFile> files;
 
     public Microservice(String name, String path) {
         this.name = name;
@@ -79,44 +86,14 @@ public class Microservice implements JsonSerializable {
     }
 
     /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
-
-        jsonObject.addProperty("name", name);
-        jsonObject.addProperty("path", path);
-        jsonObject.add("controllers", JsonSerializable.toJsonArray(controllers));
-        jsonObject.add("entities", JsonSerializable.toJsonArray(entities));
-        jsonObject.add("feignClients", JsonSerializable.toJsonArray(feignClients));
-        jsonObject.add("services", JsonSerializable.toJsonArray(services));
-        jsonObject.add("repositories", JsonSerializable.toJsonArray(repositories));
-        jsonObject.add("files", JsonSerializable.toJsonArray(files));
-
-        return jsonObject;
-    }
-
-
-    /**
-     * see {@link JsonSerializable#toJsonArray(Iterable)}
-     */
-    private static JsonArray toJsonArray(Iterable<JsonObject> list) {
-        JsonArray jsonArray = new JsonArray();
-        for (JsonObject object : list) {
-            jsonArray.add(object);
-        }
-        return jsonArray;
-    }
-
-    /**
-     * Update's the microservice name of the JClass and add's
+     * Update's the microservice name of the JClass and adds
      * it to the appropriate Set
      *
      * @param jClass the JClass to add
      */
     public void addJClass(JClass jClass) {
         jClass.updateMicroserviceName(getName());
+        jClass.setParent(this);
 
         switch (jClass.getClassRole()) {
             case CONTROLLER:
@@ -135,8 +112,6 @@ public class Microservice implements JsonSerializable {
             case FEIGN_CLIENT:
                 feignClients.add(jClass);
                 break;
-
-
         }
     }
 
@@ -161,6 +136,8 @@ public class Microservice implements JsonSerializable {
         if (removeClass == null) {
             return;
         }
+
+        removeClass.setParent(null);
 
         switch (removeClass.getClassRole()) {
             case CONTROLLER:
@@ -206,6 +183,8 @@ public class Microservice implements JsonSerializable {
                 return;
             }
 
+            removeFile.setParent(null);
+
             getFiles().remove(removeFile);
 
         } else {
@@ -223,6 +202,8 @@ public class Microservice implements JsonSerializable {
             if (removeClass == null) {
                 return;
             }
+
+            removeClass.setParent(null);
 
             switch (removeClass.getClassRole()) {
                 case CONTROLLER:
@@ -251,6 +232,7 @@ public class Microservice implements JsonSerializable {
      *
      * @return the set of all JClasses
      */
+    @JsonIgnore
     public Set<JClass> getClasses() {
         Set<JClass> classes = new HashSet<>();
         classes.addAll(getControllers());
@@ -268,6 +250,7 @@ public class Microservice implements JsonSerializable {
      *
      * @return the set of all classes and files
      */
+    @JsonIgnore
     public Set<ProjectFile> getAllFiles() {
         Set<ProjectFile> set = new HashSet<>(getClasses());
         set.addAll(getFiles());
@@ -280,7 +263,8 @@ public class Microservice implements JsonSerializable {
      *
      * @return the list of all rest calls
      */
-    public List<RestCall> getRestCalls () {
+    @JsonIgnore
+    public List<RestCall> getRestCalls() {
         return getClasses().stream()
                 .flatMap(jClass -> jClass.getRestCalls().stream()).collect(Collectors.toList());
     }
@@ -290,7 +274,8 @@ public class Microservice implements JsonSerializable {
      *
      * @return the set of all endpoints
      */
-    public Set<Endpoint> getEndpoints () {
+    @JsonIgnore
+    public Set<Endpoint> getEndpoints() {
         return getControllers().stream().flatMap(controller ->
                 controller.getEndpoints().stream()).collect(Collectors.toSet());
     }
@@ -300,7 +285,8 @@ public class Microservice implements JsonSerializable {
      *
      * @return the set of all method calls
      */
-    public Set<MethodCall> getMethodCalls () {
+    @JsonIgnore
+    public Set<MethodCall> getMethodCalls() {
         return getClasses().stream().flatMap(jClass -> jClass.getMethodCalls().stream()).collect(Collectors.toSet());
     }
 
@@ -309,9 +295,17 @@ public class Microservice implements JsonSerializable {
      *
      * @return the set of all methods
      */
-    public Set<Method> getMethods () {
+    @JsonIgnore
+    public Set<Method> getMethods() {
         return getClasses().stream().flatMap(jClass -> jClass.getMethods().stream()).collect(Collectors.toSet());
     }
 
-
+    /**
+     * See {@link Node#getID()}
+     */
+    @Override
+    @JsonIgnore
+    public String getID() {
+        return this.path;
+    }
 }

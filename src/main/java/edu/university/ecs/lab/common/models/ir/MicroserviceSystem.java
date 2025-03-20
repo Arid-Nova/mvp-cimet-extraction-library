@@ -1,11 +1,12 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.FileType;
-import edu.university.ecs.lab.common.models.serialization.JsonSerializable;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -14,9 +15,10 @@ import java.util.Set;
  * Represents the intermediate structure of a microservice system.
  */
 @Data
-@AllArgsConstructor
-@EqualsAndHashCode
-public class MicroserviceSystem implements JsonSerializable {
+@NoArgsConstructor
+@EqualsAndHashCode(callSuper = true)
+@JsonTypeName("MicroserviceSystem")
+public class MicroserviceSystem extends Node {
     /**
      * The name of the system
      */
@@ -30,26 +32,24 @@ public class MicroserviceSystem implements JsonSerializable {
     /**
      * Set of microservices in the system
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<Microservice> microservices;
 
     /**
      * Set of present files (class or configurations) who have no microservice
      */
+    @JsonDeserialize(as = HashSet.class)
     private Set<ProjectFile> orphans;
 
-    /**
-     * see {@link JsonSerializable#toJsonObject()}
-     */
-    @Override
-    public JsonObject toJsonObject() {
-        JsonObject jsonObject = new JsonObject();
+    public MicroserviceSystem(String name, String commitID, Set<Microservice> microservices, Set<ProjectFile> orphans) {
+        this.name = name;
+        this.commitID = commitID;
+        this.microservices = microservices;
+        this.orphans = orphans;
 
-        jsonObject.addProperty("name", name);
-        jsonObject.addProperty("commitID", commitID);
-        jsonObject.add("microservices", JsonSerializable.toJsonArray(microservices));
-        jsonObject.add("orphans", JsonSerializable.toJsonArray(orphans));
-
-        return jsonObject;
+        // Fill back references
+        this.microservices.forEach(mis -> mis.setParent(this));
+        this.orphans.forEach(orp -> orp.setParent(this));
     }
 
     /**
@@ -62,7 +62,6 @@ public class MicroserviceSystem implements JsonSerializable {
         return getMicroservices().stream().filter(microservice -> path.startsWith(microservice.getPath())).findFirst().orElse(null);
     }
 
-
     /**
      * Given an existing microservice, if it must now be orphanized
      * then all JClasses belonging to that service will be added to
@@ -73,6 +72,7 @@ public class MicroserviceSystem implements JsonSerializable {
     public void orphanize(Microservice microservice) {
         Set<JClass> classes = microservice.getClasses();
         classes.forEach(c -> c.updateMicroserviceName(""));
+        classes.forEach(c -> c.setParent(this));
         orphans.addAll(classes);
     }
 
@@ -92,17 +92,17 @@ public class MicroserviceSystem implements JsonSerializable {
                 if(file.getFileType().equals(FileType.JCLASS)) {
                     JClass jClass = (JClass) file;
                     jClass.updateMicroserviceName(microservice.getName());
+                    jClass.setParent(microservice);
                     microservice.addJClass(jClass);
                     updatedOrphans.remove(file);
                 } else {
                     microservice.getFiles().add((ConfigFile) file);
+                    file.setParent(microservice);
                 }
             }
 
         }
-
         setOrphans(updatedOrphans);
-
     }
 
     /**
@@ -111,6 +111,7 @@ public class MicroserviceSystem implements JsonSerializable {
      * @param path endpoint 
      * @return class that endpoint is in
      */
+    @JsonIgnore
     public JClass findClass(String path){
         JClass returnClass = null;
         returnClass = getMicroservices().stream().flatMap(m -> m.getClasses().stream()).filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
@@ -127,6 +128,7 @@ public class MicroserviceSystem implements JsonSerializable {
      * @param path endpoint
      * @return file that endpoint is in
      */
+    @JsonIgnore
     public ProjectFile findFile(String path){
         ProjectFile returnFile = null;
         returnFile = getMicroservices().stream().flatMap(m -> m.getAllFiles().stream()).filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
@@ -145,6 +147,7 @@ public class MicroserviceSystem implements JsonSerializable {
      * @param path the ProjectFile path
      * @return string name of microservice or "" if it does not exist
      */
+    @JsonIgnore
     public String getMicroserviceFromFile(String path){
         for(Microservice microservice : getMicroservices()) {
             for(ProjectFile file : microservice.getFiles()) {
@@ -164,5 +167,19 @@ public class MicroserviceSystem implements JsonSerializable {
         }
     }
 
+    /**
+     * Microservice systems don't have parents, so none can be set
+     * @param parent Ignored parameter
+     */
+    @Override
+    public void setParent(Node parent) {}
 
+    /**
+     * See {@link Node#getID()}
+     */
+    @Override
+    @JsonIgnore
+    public String getID() {
+        return this.name + " " + this.commitID;
+    }
 }
