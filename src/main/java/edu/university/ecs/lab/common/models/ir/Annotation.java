@@ -24,14 +24,14 @@ public class Annotation extends Component {
 
     public Annotation(AnnotationExpr annotationExpr, String packageAndClassName, Location location) {
         this.name = annotationExpr.getNameAsString();
-        this.packageAndClassName = packageAndClassName;
+        setPackageAndClassNames(packageAndClassName);
         this.attributes = parseAttributes(annotationExpr);
         this.location = location;
     }
 
     public Annotation(String name, String packageAndClassName, HashMap<String, String> attributes, Location location) {
         this.name = name;
-        this.packageAndClassName = packageAndClassName;
+        setPackageAndClassNames(packageAndClassName);
         this.attributes = attributes;
         this.location = location;
     }

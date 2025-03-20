@@ -48,20 +48,15 @@ public class MethodCall extends Component {
      */
     protected String microserviceName;
 
-    /**
-     * The class id that this MethodCall is called from
-     */
-    protected String className;
-
-    public MethodCall(String name, String packageName,String objectType, String objectName, String calledFrom, String parameterContents, String microserviceName,
+    public MethodCall(String name, String packageName, String objectType, String objectName, String calledFrom, String parameterContents, String microserviceName,
                       String className, Location location) {
         this.name = name;
-        this.packageAndClassName = packageName;
         this.objectName = objectName;
         this.objectType = objectType;
         this.calledFrom = calledFrom;
         this.parameterContents = parameterContents;
         this.microserviceName = microserviceName;
+        this.packageName = packageName;
         this.className = className;
         this.location = location;
     }

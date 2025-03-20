@@ -28,7 +28,7 @@ public class Endpoint extends Method {
     private HttpMethod httpMethod;
 
     public Endpoint(Method method, String url, HttpMethod httpMethod) {
-        super(method.name, method.packageAndClassName, method.parameters, method.returnType, method.annotations, method.microserviceName, method.className, method.protection, method.isAbstract(), method.isStatic(), method.isFinal(), method.getThrownExceptions(), method.getLocation());
+        super(method.name, method.packageName + "." + method.className, method.parameters, method.returnType, method.annotations, method.microserviceName, method.className, method.protection, method.isAbstract(), method.isStatic(), method.isFinal(), method.getThrownExceptions(), method.getLocation());
         this.url = url;
         this.httpMethod = httpMethod;
     }

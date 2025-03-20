@@ -31,7 +31,7 @@ public class RestCall extends MethodCall {
     private HttpMethod httpMethod;
 
     public RestCall(MethodCall methodCall, String url, HttpMethod httpMethod) {
-        super(methodCall.name, methodCall.packageAndClassName, methodCall.objectType, methodCall.objectName, methodCall.calledFrom, methodCall.parameterContents,
+        super(methodCall.name, methodCall.packageName + "." + methodCall.className, methodCall.objectType, methodCall.objectName, methodCall.calledFrom, methodCall.parameterContents,
                 methodCall.microserviceName, methodCall.className, methodCall.location);
         this.url = url;
         this.httpMethod = httpMethod;

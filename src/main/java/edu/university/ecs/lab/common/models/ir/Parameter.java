@@ -3,6 +3,7 @@ package edu.university.ecs.lab.common.models.ir;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.util.HashSet;
@@ -12,6 +13,7 @@ import java.util.stream.Collectors;
 /**
  * Represents a method call parameter
  */
+@EqualsAndHashCode(callSuper = true)
 @Data
 @NoArgsConstructor
 @JsonTypeName("Parameter")
@@ -30,7 +32,7 @@ public class Parameter extends Component {
 
     public Parameter(String name, String packageAndClassName, String parameterType, Set<Annotation> annotations, Boolean isVariableParameter, Location location) {
         this.name = name;
-        this.packageAndClassName = packageAndClassName;
+        setPackageAndClassNames(packageAndClassName);
         this.parameterType = parameterType;
         this.annotations = annotations;
         this.isVariableParameter = isVariableParameter;
@@ -43,7 +45,7 @@ public class Parameter extends Component {
     public Parameter(com.github.javaparser.ast.body.Parameter parameter, String packageAndClassName) {
         this.name = parameter.getNameAsString();
         this.parameterType = parameter.getTypeAsString();
-        this.packageAndClassName = packageAndClassName;
+        setPackageAndClassNames(packageAndClassName);
         this.annotations = parameter.getAnnotations().stream().map(annotationExpr -> new Annotation(annotationExpr,
                 packageAndClassName, new Location(annotationExpr.getRange().get()))).collect(Collectors.toSet());
         this.isVariableParameter = parameter.isVarArgs();
