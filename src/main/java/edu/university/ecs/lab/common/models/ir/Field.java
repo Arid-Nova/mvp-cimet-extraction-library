@@ -34,7 +34,12 @@ public class Field extends Component {
      */
     private Boolean isFinal;
 
-    public Field(String name, String packageAndClassName, String fieldType, AccessModifier protection, Boolean isStatic, Boolean isFinal, Location location) {
+    /**
+     * The initializer of the field, if present
+     */
+    private String initializer;
+
+    public Field(String name, String packageAndClassName, String fieldType, AccessModifier protection, Boolean isStatic, Boolean isFinal, Location location, String initializer) {
         this.name = name;
         setPackageAndClassNames(packageAndClassName);
         this.fieldType = fieldType;
@@ -42,5 +47,6 @@ public class Field extends Component {
         this.isStatic = isStatic;
         this.isFinal = isFinal;
         this.location = location;
+        this.initializer = initializer;
     }
 }
