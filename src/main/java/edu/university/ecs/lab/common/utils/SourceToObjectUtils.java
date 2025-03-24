@@ -7,9 +7,7 @@ import com.github.javaparser.ast.body.*;
 import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
-import com.github.javaparser.ast.type.ClassOrInterfaceType;
 import com.github.javaparser.ast.type.ReferenceType;
-import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
@@ -22,10 +20,7 @@ import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -92,7 +87,13 @@ public class SourceToObjectUtils {
         Set<AnnotationExpr> classAnnotations = filterClassAnnotations();
         AnnotationExpr requestMapping = classAnnotations.stream().filter(ae -> ae.getNameAsString().equals("RequestMapping")).findFirst().orElse(null);
 
-        ClassRole classRole = parseClassRole(classAnnotations);
+        // Identify instances of MongoRepository and CrudRepository
+        List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
+        Set<String> s = new HashSet<>();
+        if (!classInterfaceDecs.isEmpty())
+            s = classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet());
+
+        ClassRole classRole = parseClassRole(classAnnotations, s);
 
         // Return unknown classRoles where annotation not found
         if (classRole.equals(ClassRole.UNKNOWN)) {
@@ -296,9 +297,15 @@ public class SourceToObjectUtils {
                 Location range = null;
                 if (variable.getRange().isPresent()) range = new Location(variable.getRange().get());
 
+                String init = "";
+                Optional<Expression> optInitExpr = variable.getInitializer();
+                if (optInitExpr.isPresent()) {
+                    init = optInitExpr.get().toString();
+                }
+
                 javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
                         AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier()),
-                        fd.isStatic(), fd.isFinal(), range));
+                        fd.isStatic(), fd.isFinal(), range, init));
             }
 
         }
@@ -377,7 +384,7 @@ public class SourceToObjectUtils {
      * @param annotations the list of annotations to search
      * @return the ClassRole determined
      */
-    private static ClassRole parseClassRole(Set<AnnotationExpr> annotations) {
+    private static ClassRole parseClassRole(Set<AnnotationExpr> annotations, Set<String> extendedTypes) {
         for (AnnotationExpr annotation : annotations) {
             switch (annotation.getNameAsString()) {
                 case "RestController":
@@ -395,6 +402,10 @@ public class SourceToObjectUtils {
                 case "FeignClient":
                     return ClassRole.FEIGN_CLIENT;
             }
+        }
+        for (String type : extendedTypes) {
+            if (type.equals("MongoRepository") || type.equals("CrudRepository"))
+                return ClassRole.REPOSITORY;
         }
         return ClassRole.UNKNOWN;
     }
