@@ -2,7 +2,6 @@ package edu.university.ecs.lab.common.config;
 
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
 
 /**
@@ -25,6 +24,4 @@ public class ConfigUtil {
     public static Config readConfig(String configPath) throws IOException {
         return JsonReadWriteUtils.readFromJSON(configPath, Config.class);
     }
-
-
 }

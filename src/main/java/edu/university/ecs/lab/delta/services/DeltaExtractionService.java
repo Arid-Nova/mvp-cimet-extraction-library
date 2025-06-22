@@ -5,21 +5,23 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
-import edu.university.ecs.lab.common.models.ir.ConfigFile;
-import edu.university.ecs.lab.common.models.ir.JClass;
+import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
-import edu.university.ecs.lab.delta.models.Delta;
-import edu.university.ecs.lab.delta.models.SystemChange;
+import edu.university.ecs.lab.delta.models.*;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
+import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.List;
+import java.nio.file.Path;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Service for extracting the differences between two commits of a repository.
@@ -64,6 +66,11 @@ public class DeltaExtractionService {
      */
     private String outputPath;
 
+    /**
+     * The path to the output file
+     */
+    private MicroserviceSystem microserviceSystem;
+
 
     /**
      * Constructor for the DeltaExtractionService
@@ -73,12 +80,13 @@ public class DeltaExtractionService {
      * @param commitOld old commit for comparison
      * @param commitNew new commit for comparison
      */
-    private DeltaExtractionService(String configPath, String outputPath, String commitOld, String commitNew) throws IOException, InterruptedException {
+    private DeltaExtractionService(String configPath, String oldIRPath, String outputPath, String commitOld, String commitNew) throws IOException, InterruptedException {
         this.config = ConfigUtil.readConfig(configPath);
         this.gitService = new GitService(configPath);
         this.commitOld = commitOld;
         this.commitNew = commitNew;
         this.outputPath = outputPath.isEmpty() ? "./Delta.json" : outputPath;
+        this.microserviceSystem = IRExtractionService.read(Path.of(oldIRPath));
     }
 
     /**
@@ -103,7 +111,7 @@ public class DeltaExtractionService {
 
     /**
      * Process differences between commits
-     * 
+     *
      * @param diffEntries list of differences
      */
     private void processDelta(List<DiffEntry> diffEntries) {
@@ -111,7 +119,7 @@ public class DeltaExtractionService {
         systemChange = new SystemChange();
         systemChange.setOldCommit(commitOld);
         systemChange.setNewCommit(commitNew);
-        JsonNode data = null;
+        AbstractDelta abstractDelta = null;
 
 
         // process each difference
@@ -126,7 +134,7 @@ public class DeltaExtractionService {
 
             // Guard condition, skip invalid files
             if(!FileUtils.isValidFile(path)) {
-               continue;
+                continue;
             }
 
             // Setup oldPath, newPath for Delta
@@ -151,16 +159,16 @@ public class DeltaExtractionService {
 
             switch(changeType) {
                 case ADD:
-                    data = add(newPath);
+                    abstractDelta = add(Path.of(newPath));
                     break;
                 case MODIFY:
-                    data = add(oldPath);
+                    abstractDelta = modify(Path.of(oldPath), microserviceSystem);
                     break;
                 case DELETE:
-                    data = delete();
+                    abstractDelta = delete(Path.of(oldPath));
             }
 
-            systemChange.getChanges().add(new Delta(oldPath, newPath, changeType, data));
+            systemChange.getChanges().add(abstractDelta);
         }
 
         // Output the system changes
@@ -175,17 +183,182 @@ public class DeltaExtractionService {
      * @param newPath git path of new file
      * @return JsonObject of data of the new file
      */
-    private JsonNode add(String newPath) {
-        if (FileUtils.isConfigurationFile(newPath)) {
-            ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(
-                    new File(FileUtils.gitPathToLocalPath(newPath, config.getRepoName())), config);
-            return (configFile == null || configFile.getData() == null) ? JsonNodeFactory.instance.objectNode() : objectMapper.valueToTree(configFile);
+    private AbstractDelta add(Path newPath) {
+        ProjectFile projectFile = null;
+        if (FileUtils.isConfigurationFile(newPath.toString())) {
+            projectFile = SourceToObjectUtils.parseConfigurationFile(
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config);
         } else {
-            JClass jClass = SourceToObjectUtils.parseClass(
-                    new File(FileUtils.gitPathToLocalPath(newPath, config.getRepoName())), config, "");
-            return (jClass == null) ? JsonNodeFactory.instance.objectNode() : objectMapper.valueToTree(jClass);
+            // TODO null right here?
+            projectFile = SourceToObjectUtils.parseClass(null,
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config, "", false);
+        }
+
+        return new SimpleDelta(newPath, ChangeType.ADD, projectFile);
+    }
+
+
+    /**
+     * This method parses a newly added file into a JsonObject containing
+     * the data of the change (updated file). Returns a blank JsonObject if
+     * parsing fails (returns null).
+     *
+     * @return JsonObject of data of the new file
+     */
+    private AbstractDelta modify(Path newPath, MicroserviceSystem microserviceSystem) {
+        if (FileUtils.isConfigurationFile(newPath.toString())) {
+            ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config);
+            return new ModifyDelta(newPath, new ArrayList<>());
+        } else {
+
+            // TODO null right here?
+            AbstractClass modifyClass = SourceToObjectUtils.parseClass(null,
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config, "", false);
+
+            AbstractClass oldClass = microserviceSystem.findClass(newPath.toString());
+
+            if(oldClass == null && modifyClass != null) {
+                throw new RuntimeException("Failed to find old class");
+            } else if(oldClass == null) {
+                return null;
+            } else if(modifyClass == null) {
+                return null;
+
+            }
+
+            List<ComponentDelta> componentDeltas = new ArrayList<>();
+
+            // 1. Create maps for efficient lookup by component ID
+            // Use getDescendants() which should recursively get all components
+            Map<String, Component> oldComponentsMap = oldClass.getDescendants().stream()
+//                    .filter(Objects::nonNull) // Filter out potential nulls
+                    .filter(o -> o instanceof MethodCall)
+                    .collect(Collectors.toMap(Component::getID, Function.identity(), (existing, replacement) -> existing)); // Handle potential duplicate IDs if necessary
+
+            Map<String, Component> modifyComponentsMap = modifyClass.getDescendants().stream()
+//                    .filter(Objects::nonNull) // Filter out potential nulls
+                    .filter(o -> o instanceof MethodCall)
+                    .collect(Collectors.toMap(Component::getID, Function.identity(), (existing, replacement) -> existing)); // Handle potential duplicate IDs
+
+            // 2. Identify MODIFIED and DELETED components
+            for (Map.Entry<String, Component> oldEntry : oldComponentsMap.entrySet()) {
+                String id = oldEntry.getKey();
+                Component oldComponent = oldEntry.getValue();
+                Component modifyComponent = modifyComponentsMap.get(id);
+
+                if (modifyComponent != null) {
+                    // Component exists in both: Check for modification
+                    if (!Objects.equals(oldComponent, modifyComponent)) {
+                        // Components with the same ID are not equal, hence modified
+                        componentDeltas.add(new ComponentDelta(ChangeType.MODIFY, modifyComponent));
+                    }
+                    // Remove from modifyMap to track processed components
+                    modifyComponentsMap.remove(id);
+                } else {
+                    // Component exists in old but not in modify: DELETED
+                    componentDeltas.add(new ComponentDelta(ChangeType.DELETE, oldComponent));
+                }
+            }
+
+            // 3. Identify ADDED components
+            // Any components left in modifyComponentsMap were not in the old map
+            for (Map.Entry<String, Component> modifyEntry : modifyComponentsMap.entrySet()) {
+                componentDeltas.add(new ComponentDelta(ChangeType.ADD, modifyEntry.getValue()));
+            }
+
+
+
+
+            return new ModifyDelta(newPath, componentDeltas);
         }
     }
+
+    /**
+     * Special consideration since MethodCall does not have unique ID
+     *
+     * @param oldMethodCalls
+     * @param newMethodCalls
+     * @return
+     */
+    private List<ComponentDelta> modifyMethodCalls(List<MethodCall> oldMethodCalls, List<MethodCall> newMethodCalls) {
+        List<ComponentDelta> deltas = new ArrayList<>();
+
+        // Ensure lists are not null to avoid NullPointerExceptions
+        List<MethodCall> oldCalls = Objects.requireNonNullElse(oldMethodCalls, Collections.emptyList());
+        List<MethodCall> newCalls = Objects.requireNonNullElse(newMethodCalls, Collections.emptyList());
+
+        // 1. Create frequency maps (ID -> Count)
+        Map<String, Long> oldCounts = oldCalls.stream()
+                .filter(Objects::nonNull) // Ensure method call itself isn't null
+                .map(MethodCall::getID)    // Get the ID (assuming getID() returns the non-unique identifier)
+                .filter(Objects::nonNull) // Ensure ID isn't null
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+
+        Map<String, Long> newCounts = newCalls.stream()
+                .filter(Objects::nonNull)
+                .map(MethodCall::getID)
+                .filter(Objects::nonNull)
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+
+        // 2. Create maps to easily find a representative MethodCall instance by ID
+        // We only need one instance per ID to create the Delta object
+        Map<String, MethodCall> oldRepresentativeMap = oldCalls.stream()
+                .filter(mc -> mc != null && mc.getID() != null)
+                .collect(Collectors.toMap(MethodCall::getID, Function.identity(), (existing, replacement) -> existing)); // Keep first found
+
+        Map<String, MethodCall> newRepresentativeMap = newCalls.stream()
+                .filter(mc -> mc != null && mc.getID() != null)
+                .collect(Collectors.toMap(MethodCall::getID, Function.identity(), (existing, replacement) -> existing)); // Keep first found
+
+
+        // 3. Get all unique IDs from both lists
+        Set<String> allIds = new HashSet<>(oldCounts.keySet());
+        allIds.addAll(newCounts.keySet());
+
+        // 4. Compare counts for each ID
+        for (String id : allIds) {
+            long oldCount = oldCounts.getOrDefault(id, 0L);
+            long newCount = newCounts.getOrDefault(id, 0L);
+            long difference = newCount - oldCount;
+
+            if (difference > 0) {
+                // More instances in the new list -> ADD
+                MethodCall representativeNewCall = newRepresentativeMap.get(id);
+                if (representativeNewCall != null) { // Should always be non-null if difference > 0
+                    for (int i = 0; i < difference; i++) {
+                        // Use the static factory method from ComponentDelta if available
+                        deltas.add(new ComponentDelta(ChangeType.ADD, representativeNewCall));
+                        // Or use the constructor directly if static methods aren't used:
+                        // deltas.add(new ComponentDelta(ChangeType.ADD, null, representativeNewCall));
+                    }
+                } else {
+                    // Log a warning or handle error - shouldn't happen if logic is correct
+                    System.err.println("Warning: Could not find representative new MethodCall for added ID: " + id);
+                }
+            } else if (difference < 0) {
+                // Fewer instances in the new list -> DELETE
+                MethodCall representativeOldCall = oldRepresentativeMap.get(id);
+                if (representativeOldCall != null) { // Should always be non-null if difference < 0
+                    long numToDelete = Math.abs(difference);
+                    for (int i = 0; i < numToDelete; i++) {
+                        // Use the static factory method from ComponentDelta if available
+                        deltas.add(new ComponentDelta(ChangeType.DELETE, representativeOldCall));
+                        // Or use the constructor directly:
+                        // deltas.add(new ComponentDelta(ChangeType.DELETE, representativeOldCall, null));
+                    }
+                } else {
+                    // Log a warning or handle error - shouldn't happen if logic is correct
+                    System.err.println("Warning: Could not find representative old MethodCall for deleted ID: " + id);
+                }
+            }
+            // If difference == 0, counts are the same, no delta needed.
+        }
+
+        return deltas;
+    }
+
+
 
     private SystemChange getSystemChange() {
         return this.systemChange;
@@ -196,18 +369,18 @@ public class DeltaExtractionService {
      *
      * @return JsonObject that is empty
      */
-    private JsonNode delete() {
-        return JsonNodeFactory.instance.objectNode();
+    private AbstractDelta delete(Path oldPath) {
+        return new SimpleDelta(oldPath, ChangeType.DELETE, null);
     }
 
-    public static SystemChange create(String configPath, String oldCommit, String newCommit) throws IOException, InterruptedException, GitAPIException {
-        DeltaExtractionService extractionService = new DeltaExtractionService(configPath, "", oldCommit, newCommit);
+    public static SystemChange create(String configPath, String oldIRPath,  String oldCommit, String newCommit) throws IOException, InterruptedException, GitAPIException {
+        DeltaExtractionService extractionService = new DeltaExtractionService(configPath,oldIRPath, "", oldCommit, newCommit);
         extractionService.generateDelta();
         return extractionService.getSystemChange();
     }
 
-    public static void createAndWrite(String configPath, String oldCommit, String newCommit, String outputPath) throws GitAPIException, IOException, InterruptedException {
-        SystemChange systemChange = DeltaExtractionService.create(configPath, oldCommit, newCommit);
+    public static void createAndWrite(String configPath, String oldIRPath, String oldCommit, String newCommit, String outputPath) throws GitAPIException, IOException, InterruptedException {
+        SystemChange systemChange = DeltaExtractionService.create(configPath,oldIRPath, oldCommit, newCommit);
         JsonReadWriteUtils.writeToJSON(outputPath, systemChange);
     }
 

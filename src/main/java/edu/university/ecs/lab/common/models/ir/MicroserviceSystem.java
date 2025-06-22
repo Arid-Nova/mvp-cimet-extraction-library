@@ -8,8 +8,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Represents the intermediate structure of a microservice system.
@@ -48,8 +47,8 @@ public class MicroserviceSystem extends Node {
         this.orphans = orphans;
 
         // Fill back references
-        this.microservices.forEach(mis -> mis.setParent(this));
-        this.orphans.forEach(orp -> orp.setParent(this));
+        this.microservices.forEach(mis -> mis.setParent(Optional.of(this)));
+        this.orphans.forEach(orp -> orp.setParent(Optional.of(this)));
     }
 
     /**
@@ -70,9 +69,9 @@ public class MicroserviceSystem extends Node {
      * @param microservice the microservice to orphanize
      */
     public void orphanize(Microservice microservice) {
-        Set<JClass> classes = microservice.getClasses();
+        Set<AbstractClass> classes = microservice.getClasses();
         classes.forEach(c -> c.updateMicroserviceName(""));
-        classes.forEach(c -> c.setParent(this));
+        classes.forEach(c -> c.setParent(Optional.of(this)));
         orphans.addAll(classes);
     }
 
@@ -85,19 +84,19 @@ public class MicroserviceSystem extends Node {
      */
     public void adopt(Microservice microservice) {
         Set<ProjectFile> updatedOrphans = new HashSet<>(getOrphans());
-
+        // TODO correct with parents here?
         for (ProjectFile file : getOrphans()) {
             // If the microservice is in the same folder as the path to the microservice
-            if (file.getPath().contains(microservice.getPath())) {
-                if(file.getFileType().equals(FileType.JCLASS)) {
-                    JClass jClass = (JClass) file;
-                    jClass.updateMicroserviceName(microservice.getName());
-                    jClass.setParent(microservice);
-                    microservice.addJClass(jClass);
+            if (file.getPath().toString().contains(microservice.getPath())) {
+                if(file instanceof AbstractClass) {
+                    AbstractClass abstractClass = (AbstractClass) file;
+                    abstractClass.updateMicroserviceName(microservice.getName());
+//                  abstractClass.setParent(microservice);
+                    microservice.addAbstractClass(abstractClass);
                     updatedOrphans.remove(file);
                 } else {
                     microservice.getFiles().add((ConfigFile) file);
-                    file.setParent(microservice);
+//                  file.setParent(microservice);
                 }
             }
 
@@ -112,8 +111,8 @@ public class MicroserviceSystem extends Node {
      * @return class that endpoint is in
      */
     @JsonIgnore
-    public JClass findClass(String path){
-        JClass returnClass = null;
+    public AbstractClass findClass(String path){
+        AbstractClass returnClass = null;
         returnClass = getMicroservices().stream().flatMap(m -> m.getClasses().stream()).filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
         if(returnClass == null){
             returnClass = getOrphans().stream().filter(c -> c instanceof JClass).filter(c -> c.getPath().equals(path)).map(c -> (JClass) c).findFirst().orElse(null);
@@ -168,18 +167,50 @@ public class MicroserviceSystem extends Node {
     }
 
     /**
-     * Microservice systems don't have parents, so none can be set
-     * @param parent Ignored parameter
-     */
-    @Override
-    public void setParent(Node parent) {}
-
-    /**
      * See {@link Node#getID()}
      */
     @Override
     @JsonIgnore
     public String getID() {
         return this.name + " " + this.commitID;
+    }
+
+    @Override
+    public List<? extends Node> getChildren() {
+        return getMicroservices().stream().toList();
+    }
+
+    @Override
+    public List<? extends Node> getDescendants() {
+        return new ArrayList<>();
+    }
+
+    /**
+     * Recursively traverses the Node hierarchy starting from the given node
+     * and sets the parent reference for each child node.
+     *
+     * @param node   The current node being processed.
+     * @param parent The parent of the current node (null for the root).
+     */
+    public static void setParentReferencesRecursively(Node node, Node parent) {
+        if (node == null) {
+            return; // Base case: Stop if the node is null
+        }
+
+        // Set the parent for the current node
+        // Assuming Node has a setParent(Optional<Node>) method
+        node.setParent(Optional.ofNullable(parent));
+
+        // Get the children of the current node
+        // Assuming Node has a getChildren() method returning List<? extends Node>
+        List<? extends Node> children = node.getChildren();
+
+        if (children != null) {
+            // Recursively call the function for each child
+            for (Node child : children) {
+                // Pass the current node 'node' as the parent for the 'child'
+                setParentReferencesRecursively(child, node);
+            }
+        }
     }
 }

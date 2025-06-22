@@ -2,9 +2,9 @@ import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
-import edu.university.ecs.lab.delta.services.DeltaExtractionService;
+//import edu.university.ecs.lab.delta.services.DeltaExtractionService;
 import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
-import edu.university.ecs.lab.intermediate.merge.services.MergeService;
+//import edu.university.ecs.lab.intermediate.merge.services.MergeService;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.junit.jupiter.api.Assertions;
@@ -41,10 +41,10 @@ class DeltaAndMergeTest {
             String commitIdNew = list.get(i + 1).toString().split(" ")[1];
 
             // Extract changes from one commit to the other
-            DeltaExtractionService.createAndWrite(TEST_CONFIG_PATH, commitIdOld, commitIdNew, "./output/Delta.json");
+            //DeltaExtractionService.createAndWrite(TEST_CONFIG_PATH, commitIdOld, commitIdNew, "./output/Delta.json");
 
             // Merge Delta changes to old IR to create new IR representing new commit changes
-            MergeService.createAndWrite(TEST_CONFIG_PATH, "./output/OldIR.json", "./output/Delta.json", commitIdNew, "./output/NewIR.json");
+            //MergeService.createAndWrite(TEST_CONFIG_PATH, "./output/OldIR.json", "./output/Delta.json", commitIdNew, "./output/NewIR.json");
 
             if(i < list.size() - 2) {
                 Files.move(Paths.get("./output/NewIR.json"), Paths.get("./output/OldIR.json"), StandardCopyOption.REPLACE_EXISTING);

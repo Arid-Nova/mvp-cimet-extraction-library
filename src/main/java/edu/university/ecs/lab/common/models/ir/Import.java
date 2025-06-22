@@ -1,49 +1,55 @@
 package edu.university.ecs.lab.common.models.ir;
 
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import com.github.javaparser.ast.ImportDeclaration;
+import lombok.*;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  *
  */
-@Data
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
+@Getter
+@Setter
+@EqualsAndHashCode(callSuper = true)
 @JsonTypeName("Import")
 public class Import extends Component {
     /**
      * String containing the package being imported
      */
-    private String importPackage;
+    protected String importPackage;
 
     /**
      * String containing the object being imported from importPackage.
      * Will be an asterisk if all objects from a package are being imported.
      */
-    private String importObject;
+    protected String importObject;
 
     /**
      * Boolean indicating if the import was static or not
      */
-    private Boolean isStatic;
+    protected Boolean isStatic;
 
     /**
      * Creates a new Import model
      *
-     * @param importPackage the package from which importObject is being imported from
-     * @param importObject the object(s) being imported from the importPackage
-     * @param isStatic whether the import was static
-     * @param packageAndClassName the package and class name where the import statement is listed
      */
-    public Import(String importPackage, String importObject, Boolean isStatic, String packageAndClassName, Location location) {
-        this.name = importPackage + "." + importObject;
-        setPackageAndClassNames(packageAndClassName);
-        this.importPackage = importPackage;
-        this.importObject = importObject;
-        this.isStatic = isStatic;
-        this.location = location;
+    public Import(Node parent, ImportDeclaration importDeclaration) {
+        super(parent, importDeclaration.getNameAsString(), new Location(importDeclaration.getRange().get()));
+
+        if (importDeclaration.isAsterisk()) {
+            this.importPackage = importDeclaration.getNameAsString();
+            this.importObject = "*";
+
+        } else {
+            this.importPackage = importDeclaration.getNameAsString().substring(0, importDeclaration.getNameAsString().lastIndexOf("."));
+            this.importObject = importDeclaration.getNameAsString().substring(importDeclaration.getNameAsString().lastIndexOf(".") + 1);
+
+        }
+
+        this.isStatic = importDeclaration.isStatic();
     }
 
     /**
@@ -52,5 +58,10 @@ public class Import extends Component {
      */
     public Boolean importsEntirePackage() {
         return importObject.equals("*");
+    }
+
+    @Override
+    public List<Component> getChildren() {
+        return new ArrayList<>();
     }
 }

@@ -15,6 +15,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import java.io.*;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.*;
 
@@ -48,12 +49,13 @@ public class NonJsonReadWriteUtils {
             return null;
         }
 
-        return new ConfigFile(FileUtils.localPathToGitPath(path, config.getRepoName()), new File(path).getName(), data);
+        // todo wrong it should be ms, also path might not be right
+        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path, config.getRepoName())), data);
     }
 
-    public static ConfigFile readFromDocker(String path, Config config) {
+    public static ConfigFile readFromDocker(Path path, Config config) {
         ArrayNode jsonArray = mapper.createArrayNode();
-        try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+        try (BufferedReader br = new BufferedReader(new FileReader(path.toFile()))) {
             String line;
             while ((line = br.readLine()) != null) {
                 jsonArray.add(line.trim());
@@ -63,14 +65,15 @@ public class NonJsonReadWriteUtils {
         }
         ObjectNode jsonObject = mapper.createObjectNode();
         jsonObject.set("instructions", jsonArray);
+        // todo wrong it should be ms, also path might not be right
 
-        return new ConfigFile(FileUtils.localPathToGitPath(path, config.getRepoName()), new File(path).getName(), jsonObject);
+        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
     }
 
-    public static ConfigFile readFromPom(String path, Config config) {
+    public static ConfigFile readFromPom(Path path, Config config) {
         JsonNode jsonObject;
         try {
-            String xmlContent = new String(Files.readAllBytes(Paths.get(path))).trim();
+            String xmlContent = new String(Files.readAllBytes(path)).trim();
             if (xmlContent.isEmpty()) {
                 jsonObject = JsonNodeFactory.instance.objectNode();
             } else {
@@ -80,16 +83,17 @@ public class NonJsonReadWriteUtils {
         } catch (Exception e) {
             return null;
         }
+        // todo wrong it should be ms, also path might not be right
 
-        return new ConfigFile(FileUtils.localPathToGitPath(path, config.getRepoName()), new File(path).getName(), jsonObject);
+        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
     }
 
-    public static ConfigFile readFromGradle(String path, Config config) {
+    public static ConfigFile readFromGradle(Path path, Config config) {
         ObjectNode jsonObject = mapper.createObjectNode();
         Stack<ObjectNode> jsonStack = new Stack<>();
         jsonStack.push(jsonObject);
 
-        try (BufferedReader br = new BufferedReader(new FileReader(path))) {
+        try (BufferedReader br = new BufferedReader(new FileReader(path.toFile()))) {
             String line;
             String currentKey = null;
 
@@ -126,6 +130,8 @@ public class NonJsonReadWriteUtils {
             return null;
         }
 
-        return new ConfigFile(FileUtils.localPathToGitPath(path, config.getRepoName()), new File(path).getName(), jsonObject);
+        // todo wrong it should be ms, also path might not be right
+
+        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
     }
 }

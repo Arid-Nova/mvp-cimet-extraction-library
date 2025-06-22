@@ -1,14 +1,11 @@
 package edu.university.ecs.lab.common.models.enums;
 
-import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.expr.*;
 import edu.university.ecs.lab.intermediate.utils.StringParserUtils;
 import lombok.Getter;
 
 import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Factory class for generating an endpoint template from annotations
@@ -19,8 +16,6 @@ public class EndpointTemplate {
     private final HttpMethod httpMethod;
     private final String name;
     private final String url;
-
-
 
     public EndpointTemplate(AnnotationExpr requestMapping, AnnotationExpr endpointMapping) {
         HttpMethod finalHttpMethod = HttpMethod.ALL;
@@ -85,7 +80,6 @@ public class EndpointTemplate {
 
 
         // Get query Parameters
-
         this.httpMethod = finalHttpMethod;
         this.name = endpointMapping.getNameAsString();
         this.url = simplifyEndpointURL(finalURL);
@@ -158,6 +152,4 @@ public class EndpointTemplate {
     public static String simplifyEndpointURL(String url) {
         return url.replaceAll("\\{[^{}]*\\}", "{?}");
     }
-
-
 }
