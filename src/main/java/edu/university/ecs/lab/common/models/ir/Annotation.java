@@ -62,7 +62,6 @@ public class Annotation extends Component {
                 if(mvp.getValue() instanceof StringLiteralExpr sle) {
                     attributes.put(mvp.getNameAsString(), sle.asString());
                 } else {
-                    // TODO DO I NEED THIS?
                     attributes.put(mvp.getNameAsString(), mvp.getValue().toString());
                 }
             }
@@ -75,4 +74,7 @@ public class Annotation extends Component {
     public List<Component> getChildren() {
         return new ArrayList<>();
     }
+
+    @Override
+    public void clearDescendants() {}
 }

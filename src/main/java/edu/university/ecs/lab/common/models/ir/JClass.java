@@ -49,8 +49,8 @@ public class JClass extends AbstractClass {
         this.implementedTypes = implementedTypes;
     }
 
-    public JClass(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Boolean isFinal, Boolean isStatic, Boolean isAbstract, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, Set<Method> methods, List<MethodCall> methodCalls, String extendedType, Set<String> implementedTypes) {
-        super(parent, path, classRole, ClassType.CLASS, packageName, accessModifier, isFinal, isStatic, isAbstract, imports, annotations, fields, methods, methodCalls);
+    public JClass(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Boolean isFinal, Boolean isStatic, Boolean isAbstract, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, Set<Method> methods, String extendedType, Set<String> implementedTypes) {
+        super(parent, path, classRole, ClassType.CLASS, packageName, accessModifier, isFinal, isStatic, isAbstract, imports, annotations, fields, methods);
 
         this.extendedType = extendedType;
         this.implementedTypes = implementedTypes;

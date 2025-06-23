@@ -1,5 +1,6 @@
 package edu.university.ecs.lab.common.models.ir;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeName;
@@ -11,6 +12,7 @@ import lombok.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -50,12 +52,6 @@ public class MethodCall extends Component {
      */
     protected String parameterContents;
 
-    /**
-     * The name of the microservice this MethodCall is called from
-     */
-    @EqualsAndHashCode.Exclude
-    protected String microserviceName;
-
     public MethodCall(Node parent, String name, Location location) {
         super(parent, name, location);
 
@@ -63,8 +59,6 @@ public class MethodCall extends Component {
         this.objectType = "";
         this.calledFrom = "";
         this.parameterContents = "";
-        this.microserviceName = "";
-
     }
 
     public MethodCall(MethodCall methodCall) {
@@ -73,7 +67,6 @@ public class MethodCall extends Component {
         this.objectType = methodCall.getObjectType();
         this.calledFrom = methodCall.getCalledFrom();
         this.parameterContents = methodCall.getParameterContents();
-        this.microserviceName = methodCall.getMicroserviceName();
     }
 
     public MethodCall(Node parent, MethodCallExpr methodCallExpr, String objectType) {
@@ -96,8 +89,28 @@ public class MethodCall extends Component {
         return "";
     }
 
+    @JsonIgnore
+    public Microservice getParentMicroservice() {
+        if (this.parent.isPresent()) {
+            Node p = this.parent.get();
+            while (!(p instanceof Microservice) && p.parent.isPresent()) {
+                p = p.parent.get();
+            }
+            if (p instanceof Microservice) {
+                return (Microservice) p;
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
     @Override
     public List<Component> getChildren() {
         return new ArrayList<>();
     }
+
+    @Override
+    public void clearDescendants() {}
 }

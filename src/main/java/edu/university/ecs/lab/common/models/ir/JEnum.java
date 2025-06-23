@@ -40,8 +40,8 @@ public class JEnum extends AbstractClass {
         this.enumTypes = enumTypes;
     }
 
-    public JEnum(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, Set<Method> methods, List<MethodCall> methodCalls, Set<String> implementedTypes, @NonNull Set<String> enumTypes) {
-        super(parent, path, classRole, ClassType.ENUM, packageName, accessModifier, Boolean.TRUE, Boolean.TRUE, Boolean.FALSE, imports, annotations, fields, methods, methodCalls);
+    public JEnum(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, Set<Method> methods, Set<String> implementedTypes, @NonNull Set<String> enumTypes) {
+        super(parent, path, classRole, ClassType.ENUM, packageName, accessModifier, Boolean.TRUE, Boolean.TRUE, Boolean.FALSE, imports, annotations, fields, methods);
 
         this.implementedTypes = new HashSet<>(implementedTypes);
         this.enumTypes = new HashSet<>(enumTypes);

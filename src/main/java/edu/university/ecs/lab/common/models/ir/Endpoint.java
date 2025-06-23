@@ -32,5 +32,4 @@ public class Endpoint extends Method {
         this.url = url;
         this.httpMethod = httpMethod;
     }
-
 }

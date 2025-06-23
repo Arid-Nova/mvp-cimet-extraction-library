@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.models.ir.ConfigFile;
+import edu.university.ecs.lab.common.models.ir.Microservice;
 import org.json.JSONObject;
 import org.json.XML;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -35,7 +36,7 @@ public class NonJsonReadWriteUtils {
      * @param path the path to the YAML file.
      * @return JsonObject YAML file structure as json object
      */
-    public static ConfigFile readFromYaml(String path, Config config) {
+    public static ConfigFile readFromYaml(String path, Config config, Microservice microservice) {
         JsonNode data;
         Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
 
@@ -48,12 +49,10 @@ public class NonJsonReadWriteUtils {
             // Handle I/O errors (file not found, etc.)
             return null;
         }
-
-        // todo wrong it should be ms, also path might not be right
-        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path, config.getRepoName())), data);
+        return new ConfigFile(microservice, Path.of(FileUtils.localPathToGitPath(path, config.getRepoName())), data);
     }
 
-    public static ConfigFile readFromDocker(Path path, Config config) {
+    public static ConfigFile readFromDocker(Path path, Config config, Microservice microservice) {
         ArrayNode jsonArray = mapper.createArrayNode();
         try (BufferedReader br = new BufferedReader(new FileReader(path.toFile()))) {
             String line;
@@ -65,12 +64,10 @@ public class NonJsonReadWriteUtils {
         }
         ObjectNode jsonObject = mapper.createObjectNode();
         jsonObject.set("instructions", jsonArray);
-        // todo wrong it should be ms, also path might not be right
-
-        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
+        return new ConfigFile(microservice, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
     }
 
-    public static ConfigFile readFromPom(Path path, Config config) {
+    public static ConfigFile readFromPom(Path path, Config config, Microservice microservice) {
         JsonNode jsonObject;
         try {
             String xmlContent = new String(Files.readAllBytes(path)).trim();
@@ -83,12 +80,10 @@ public class NonJsonReadWriteUtils {
         } catch (Exception e) {
             return null;
         }
-        // todo wrong it should be ms, also path might not be right
-
-        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
+        return new ConfigFile(microservice, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
     }
 
-    public static ConfigFile readFromGradle(Path path, Config config) {
+    public static ConfigFile readFromGradle(Path path, Config config, Microservice microservice) {
         ObjectNode jsonObject = mapper.createObjectNode();
         Stack<ObjectNode> jsonStack = new Stack<>();
         jsonStack.push(jsonObject);
@@ -129,9 +124,6 @@ public class NonJsonReadWriteUtils {
         } catch (IOException e) {
             return null;
         }
-
-        // todo wrong it should be ms, also path might not be right
-
-        return new ConfigFile(null, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
+        return new ConfigFile(microservice, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
     }
 }

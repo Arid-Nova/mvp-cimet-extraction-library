@@ -1,5 +1,6 @@
 package edu.university.ecs.lab.common.models.ir;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeName;
@@ -53,11 +54,6 @@ public class Method extends Component {
     protected String returnType;
 
     /**
-     * The microservice id that this method belongs to
-     */
-    protected String microserviceName;
-
-    /**
      * Method definition level annotations
      */
     protected Set<Annotation> annotations;
@@ -105,6 +101,7 @@ public class Method extends Component {
         this.isStatic = method.getIsStatic();
         this.isFinal = method.getIsFinal();
         this.thrownExceptions = method.getThrownExceptions();
+        this.methodCalls = method.getMethodCalls();
     }
 
     public Method(Node parent, MethodDeclaration methodDeclaration) {
@@ -112,7 +109,7 @@ public class Method extends Component {
 
         this.annotations = SourceToObjectUtils.parseAnnotations(this, methodDeclaration.getAnnotations());
         this.parameters = parseParameters(methodDeclaration.getParameters());
-        this.methodCalls = SourceToObjectUtils.parseMethodCalls(this, methodDeclaration.getChildNodes().stream().filter(m -> m instanceof MethodCallExpr).map(m -> (MethodCallExpr) m).collect(Collectors.toList()));
+        this.methodCalls = SourceToObjectUtils.parseMethodCalls(this, methodDeclaration.findAll(MethodCallExpr.class));
         this.protection = AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier());
         this.isAbstract = methodDeclaration.isAbstract();
         this.isStatic = methodDeclaration.isStatic();
@@ -136,6 +133,23 @@ public class Method extends Component {
         return parameterSet;
     }
 
+    @JsonIgnore
+    public Microservice getParentMicroservice() {
+        if (this.parent.isPresent()) {
+            Node p = this.parent.get();
+            while (!(p instanceof Microservice) && p.parent.isPresent()) {
+                p = p.parent.get();
+            }
+            if (p instanceof Microservice) {
+                return (Microservice) p;
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
     @Override
     public List<Component> getChildren() {
         List<Component> children = new ArrayList<>();
@@ -144,5 +158,12 @@ public class Method extends Component {
         children.addAll(getMethodCalls());
 
         return children;
+    }
+
+    @Override
+    public void clearDescendants() {
+        setParameters(new HashSet<>());
+        setAnnotations(new HashSet<>());
+        setMethodCalls(new ArrayList<>());
     }
 }

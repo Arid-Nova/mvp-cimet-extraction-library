@@ -99,7 +99,6 @@ public class Microservice extends Node {
      * @param abstractClass the AbstractClass to add
      */
     public void addAbstractClass(AbstractClass abstractClass) {
-        abstractClass.updateMicroserviceName(getName());
         abstractClass.setParent(Optional.of(this));
 
         switch (abstractClass.getClassRole()) {
@@ -334,4 +333,7 @@ public class Microservice extends Node {
     public List<? extends Node> getDescendants() {
         return new ArrayList<>();
     }
+
+    @Override
+    public void clearDescendants() {}
 }

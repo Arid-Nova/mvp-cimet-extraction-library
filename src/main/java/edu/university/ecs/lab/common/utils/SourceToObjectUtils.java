@@ -66,7 +66,7 @@ public class SourceToObjectUtils {
      * @param sourceFile the file to parse
      * @return the AbstractClass object representing the file
      */
-    public static AbstractClass parseClass(Microservice microservice, File sourceFile, Config config, String microserviceName, Boolean filterOutUnknownClassRoles) {
+    public static AbstractClass parseClass(Microservice microservice, File sourceFile, Config config, Boolean filterOutUnknownClassRoles) {
         // Guard condition
         if(Objects.isNull(sourceFile) || FileUtils.isConfigurationFile(sourceFile.getPath())) {
             return null;
@@ -357,8 +357,6 @@ public class SourceToObjectUtils {
 
         // New methods for conversion
         Set<Method> newMethods = new HashSet<>();
-        // New rest calls for conversion
-        List<MethodCall> newRestCalls = new ArrayList<>();
 
         // For each method that is detected as an endpoint convert into a Method + RestCall
         for(Method method : methods) {
@@ -390,11 +388,10 @@ public class SourceToObjectUtils {
 
                 MethodCall methodCall = new MethodCall(abstractClass, "exchange", method.getLocation());
                 methodCall.setCalledFrom(method.getName());
-                methodCall.setMicroserviceName(microservice.getName());
                 methodCall.setObjectType("RestCallTemplate");
                 methodCall.setObjectName("restCallTemplate");
 
-                newRestCalls.add(new RestCall(methodCall, endpoint.getUrl() + queryParams,
+                method.getMethodCalls().add(new RestCall(methodCall, endpoint.getUrl() + queryParams,
                         endpoint.getHttpMethod()));
             } else {
                 newMethods.add(method);
@@ -405,20 +402,19 @@ public class SourceToObjectUtils {
         abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
         abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
         abstractClass.setMethods(newMethods);
-        abstractClass.setMethodCalls(newRestCalls);
 
         return abstractClass;
     }
 
-    public static ConfigFile parseConfigurationFile(File file, Config config) {
+    public static ConfigFile parseConfigurationFile(File file, Config config, Microservice microservice) {
         if(file.getName().endsWith(".yml")) {
-            return NonJsonReadWriteUtils.readFromYaml(file.getPath(), config);
+            return NonJsonReadWriteUtils.readFromYaml(file.getPath(), config, microservice);
         } else if(file.getName().equals("DockerFile")) {
-            return NonJsonReadWriteUtils.readFromDocker(file.toPath(), config);
+            return NonJsonReadWriteUtils.readFromDocker(file.toPath(), config, microservice);
         } else if(file.getName().equals("pom.xml")) {
-            return NonJsonReadWriteUtils.readFromPom(file.toPath(), config);
+            return NonJsonReadWriteUtils.readFromPom(file.toPath(), config, microservice);
         } else if (file.getName().equals("build.gradle")){
-            return NonJsonReadWriteUtils.readFromGradle(file.toPath(), config);
+            return NonJsonReadWriteUtils.readFromGradle(file.toPath(), config, microservice);
         } else {
             return null;
         }

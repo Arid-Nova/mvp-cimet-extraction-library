@@ -57,4 +57,9 @@ public class Parameter extends Component {
     public List<Component> getChildren() {
         return new ArrayList<>(getAnnotations());
     }
+
+    @Override
+    public void clearDescendants() {
+        setAnnotations(new HashSet<>());
+    }
 }

@@ -81,4 +81,11 @@ public abstract class Node {
      */
     @JsonIgnore
     public abstract List<? extends Node> getDescendants();
+
+    /**
+     * This method deletes all the descendants under this Node e.g. it's
+     * children's children and so on.
+     */
+    @JsonIgnore
+    public abstract void clearDescendants();
 }

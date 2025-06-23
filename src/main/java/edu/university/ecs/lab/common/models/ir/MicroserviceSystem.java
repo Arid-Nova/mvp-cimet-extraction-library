@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.nio.file.Path;
 import java.util.*;
 
 /**
@@ -70,7 +71,6 @@ public class MicroserviceSystem extends Node {
      */
     public void orphanize(Microservice microservice) {
         Set<AbstractClass> classes = microservice.getClasses();
-        classes.forEach(c -> c.updateMicroserviceName(""));
         classes.forEach(c -> c.setParent(Optional.of(this)));
         orphans.addAll(classes);
     }
@@ -84,19 +84,17 @@ public class MicroserviceSystem extends Node {
      */
     public void adopt(Microservice microservice) {
         Set<ProjectFile> updatedOrphans = new HashSet<>(getOrphans());
-        // TODO correct with parents here?
         for (ProjectFile file : getOrphans()) {
             // If the microservice is in the same folder as the path to the microservice
             if (file.getPath().toString().contains(microservice.getPath())) {
                 if(file instanceof AbstractClass) {
                     AbstractClass abstractClass = (AbstractClass) file;
-                    abstractClass.updateMicroserviceName(microservice.getName());
-//                  abstractClass.setParent(microservice);
+                    abstractClass.setParent(Optional.of(microservice));
                     microservice.addAbstractClass(abstractClass);
                     updatedOrphans.remove(file);
                 } else {
                     microservice.getFiles().add((ConfigFile) file);
-//                  file.setParent(microservice);
+                    file.setParent(Optional.of(microservice));
                 }
             }
 
@@ -111,11 +109,11 @@ public class MicroserviceSystem extends Node {
      * @return class that endpoint is in
      */
     @JsonIgnore
-    public AbstractClass findClass(String path){
+    public AbstractClass findClass(Path path){
         AbstractClass returnClass = null;
         returnClass = getMicroservices().stream().flatMap(m -> m.getClasses().stream()).filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
         if(returnClass == null){
-            returnClass = getOrphans().stream().filter(c -> c instanceof JClass).filter(c -> c.getPath().equals(path)).map(c -> (JClass) c).findFirst().orElse(null);
+            returnClass = getOrphans().stream().filter(c -> c instanceof AbstractClass).filter(c -> c.getPath().equals(path)).map(c -> (JClass) c).findFirst().orElse(null);
         }
 
         return returnClass;
@@ -128,7 +126,7 @@ public class MicroserviceSystem extends Node {
      * @return file that endpoint is in
      */
     @JsonIgnore
-    public ProjectFile findFile(String path){
+    public ProjectFile findFile(Path path){
         ProjectFile returnFile = null;
         returnFile = getMicroservices().stream().flatMap(m -> m.getAllFiles().stream()).filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
         if(returnFile == null){
@@ -184,6 +182,8 @@ public class MicroserviceSystem extends Node {
     public List<? extends Node> getDescendants() {
         return new ArrayList<>();
     }
+
+    @Override public void clearDescendants() {}
 
     /**
      * Recursively traverses the Node hierarchy starting from the given node

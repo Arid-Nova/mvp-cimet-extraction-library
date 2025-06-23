@@ -1,5 +1,6 @@
 package edu.university.ecs.lab.delta.models;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import edu.university.ecs.lab.common.models.ir.Component;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
 import lombok.Getter;

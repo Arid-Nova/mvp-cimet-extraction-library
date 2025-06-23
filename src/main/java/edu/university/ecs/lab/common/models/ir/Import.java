@@ -64,4 +64,7 @@ public class Import extends Component {
     public List<Component> getChildren() {
         return new ArrayList<>();
     }
+
+    @Override
+    public void clearDescendants() {}
 }

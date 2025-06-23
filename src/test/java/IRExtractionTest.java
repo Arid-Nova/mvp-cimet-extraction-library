@@ -40,8 +40,8 @@ public class IRExtractionTest {
         Microservice ms2 = new Microservice();
         ms2.setName("ms2");
 
-        AbstractClass abstractClass1 = SourceToObjectUtils.parseClass(ms1, new File(TEST_FILE1), ConfigUtil.readConfig(TEST_CONFIG_FILE), "a", false);
-        AbstractClass abstractClass2 = SourceToObjectUtils.parseClass(ms2, new File(TEST_FILE2), ConfigUtil.readConfig(TEST_CONFIG_FILE), "b", false);
+        AbstractClass abstractClass1 = SourceToObjectUtils.parseClass(ms1, new File(TEST_FILE1), ConfigUtil.readConfig(TEST_CONFIG_FILE), false);
+        AbstractClass abstractClass2 = SourceToObjectUtils.parseClass(ms2, new File(TEST_FILE2), ConfigUtil.readConfig(TEST_CONFIG_FILE), false);
 
         assert abstractClass1 != null;
         assert abstractClass2 != null;

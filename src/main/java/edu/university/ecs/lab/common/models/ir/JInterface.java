@@ -32,8 +32,8 @@ public class JInterface extends AbstractClass {
         this.extendedTypes = extendedTypes;
     }
 
-    public JInterface(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Boolean isFinal, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, @NonNull Set<Method> methods, List<MethodCall> methodCalls, Set<String> extendedTypes) {
-        super(parent, path, classRole, ClassType.INTERFACE, packageName, accessModifier, isFinal, Boolean.FALSE, Boolean.FALSE, imports, annotations, fields, methods, methodCalls);
+    public JInterface(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Boolean isFinal, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, @NonNull Set<Method> methods, Set<String> extendedTypes) {
+        super(parent, path, classRole, ClassType.INTERFACE, packageName, accessModifier, isFinal, Boolean.FALSE, Boolean.FALSE, imports, annotations, fields, methods);
         this.extendedTypes = extendedTypes;
     }
 }

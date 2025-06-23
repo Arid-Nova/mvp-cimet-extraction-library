@@ -51,4 +51,7 @@ public class Field extends Component {
     public List<Component> getChildren() {
         return new ArrayList<>();
     }
+
+    @Override
+    public void clearDescendants() {}
 }

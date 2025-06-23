@@ -45,4 +45,7 @@ public class ConfigFile extends ProjectFile {
     public List<? extends Node> getDescendants() {
         return new ArrayList<>();
     }
+
+    @Override
+    public void clearDescendants() {}
 }

@@ -100,12 +100,6 @@ public abstract class AbstractClass extends ProjectFile {
     @JsonDeserialize(as = HashSet.class)
     protected Set<Method> methods;
 
-    /**
-     * List of method invocations made at the class level
-     */
-    @JsonDeserialize(as = ArrayList.class)
-    protected List<MethodCall> methodCalls;
-
     public AbstractClass(Node parent, Path path, @NonNull ClassRole classRole, @NonNull ClassType classType, String packageName, @NonNull AccessModifier protection, @NonNull Boolean isFinal, @NonNull Boolean isStatic, @NonNull Boolean isAbstract) {
         super(parent, path);
 
@@ -121,10 +115,9 @@ public abstract class AbstractClass extends ProjectFile {
         this.annotations = new HashSet<>();
         this.fields = new HashSet<>();
         this.methods = new HashSet<>();
-        this.methodCalls = new ArrayList<>();
     }
 
-    public AbstractClass(Node parent, Path path, @NonNull ClassRole classRole, @NonNull ClassType classType, String packageName, @NonNull AccessModifier protection, @NonNull Boolean isFinal, @NonNull Boolean isStatic, @NonNull Boolean isAbstract, @NonNull Set<Import> imports, @NonNull Set<Annotation> annotations, @NonNull Set<Field> fields, @NonNull Set<Method> methods, @NonNull List<MethodCall> methodCalls) {
+    public AbstractClass(Node parent, Path path, @NonNull ClassRole classRole, @NonNull ClassType classType, String packageName, @NonNull AccessModifier protection, @NonNull Boolean isFinal, @NonNull Boolean isStatic, @NonNull Boolean isAbstract, @NonNull Set<Import> imports, @NonNull Set<Annotation> annotations, @NonNull Set<Field> fields, @NonNull Set<Method> methods) {
         super(parent, path);
 
         this.classRole = classRole;
@@ -139,14 +132,12 @@ public abstract class AbstractClass extends ProjectFile {
         this.annotations = new HashSet<>(annotations);
         this.fields = new HashSet<>(fields);
         this.methods = new HashSet<>(methods);
-        this.methodCalls = new ArrayList<>(methodCalls);
 
         // Fill back references
         this.imports.forEach(imp -> imp.setParent(Optional.of(this)));
         this.methods.forEach(met -> met.setParent(Optional.of(this)));
         this.fields.forEach(fie -> fie.setParent(Optional.of(this)));
         this.annotations.forEach(ann -> ann.setParent(Optional.of(this)));
-        this.methodCalls.forEach(mec -> mec.setParent(Optional.of(this)));
     }
 
     @Override
@@ -157,7 +148,6 @@ public abstract class AbstractClass extends ProjectFile {
     @Override
     public List<Component> getChildren() {
         List<Component> children = new ArrayList<>();
-        children.addAll(getMethodCalls());
         children.addAll(getFields());
         children.addAll(getAnnotations());
         children.addAll(getMethods());
@@ -185,6 +175,11 @@ public abstract class AbstractClass extends ProjectFile {
         return allDescendants;
     }
 
+    @JsonIgnore
+    public List<MethodCall> getMethodCalls() {
+        return getDescendants().stream().filter(obj -> obj instanceof MethodCall).map(obj -> (MethodCall) obj).toList();
+    }
+
     /**
      * This method returns all restCalls found in the methodCalls of this class,
      * grouped under the same list as an RestCall is an extension of a MethodCall
@@ -193,8 +188,7 @@ public abstract class AbstractClass extends ProjectFile {
      */
     @JsonIgnore
     public List<RestCall> getRestCalls() {
-
-        return methodCalls.stream().filter(methodCall -> methodCall instanceof RestCall).map(methodCall -> (RestCall) methodCall).collect(Collectors.toUnmodifiableList());
+        return getMethodCalls().stream().filter(methodCall -> methodCall instanceof RestCall).map(methodCall -> (RestCall) methodCall).collect(Collectors.toUnmodifiableList());
     }
 
     /**
@@ -211,13 +205,11 @@ public abstract class AbstractClass extends ProjectFile {
         return methods.stream().filter(method -> method instanceof Endpoint).map(method -> (Endpoint) method).collect(Collectors.toUnmodifiableSet());
     }
 
-    /**
-     * If we are adding a class or a class is being adopted/orphanized lets update ms name
-     *
-     * @param name the microservice name
-     */
-    public void updateMicroserviceName(String name) {
-        methodCalls.forEach(methodCall -> methodCall.setMicroserviceName(name));
-        methods.forEach(methodCall -> methodCall.setMicroserviceName(name));
+    @Override
+    public void clearDescendants() {
+        setFields(new HashSet<>());
+        setAnnotations(new HashSet<>());
+        setMethods(new HashSet<>());
+        setImports(new HashSet<>());
     }
 }

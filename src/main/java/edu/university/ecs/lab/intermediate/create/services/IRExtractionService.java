@@ -197,7 +197,6 @@ public class IRExtractionService {
             throw new IOException("Microservice path must exist and be directory");
         }
 
-
         Microservice model = new Microservice(microserviceSystem, FileUtils.getMicroserviceNameFromPath(rootMicroservicePath),
                 FileUtils.localPathToGitPath(rootMicroservicePath, config.getRepoName()));
         scanDirectory(localDir, model);
@@ -221,12 +220,12 @@ public class IRExtractionService {
                     scanDirectory(file, microservice);
                 } else if (FileUtils.isValidFile(file.getPath())) {
                     if(FileUtils.isConfigurationFile(file.getPath())) {
-                        ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(file, config);
+                        ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(file, config, microservice);
                         if(configFile != null) {
                             microservice.getFiles().add(configFile);
                         }
                     } else {
-                        AbstractClass abstractClass = SourceToObjectUtils.parseClass(microservice, file, config, microservice.getName(), false);
+                        AbstractClass abstractClass = SourceToObjectUtils.parseClass(microservice, file, config, false);
                         if (abstractClass != null) {
                             microservice.addAbstractClass(abstractClass);
                         }
@@ -238,6 +237,15 @@ public class IRExtractionService {
 
     public static MicroserviceSystem create(Path configPath) throws GitAPIException, IOException, InterruptedException {
         IRExtractionService extractionService = new IRExtractionService(configPath.toString(), Optional.empty());
+        MicroserviceSystem microserviceSystem = new MicroserviceSystem(extractionService.config.getSystemName(), extractionService.commitID, new HashSet<>(), new HashSet<>());
+
+        Set<Microservice> microservices = extractionService.cloneAndScanServices(microserviceSystem);
+        microserviceSystem.setMicroservices(microservices);
+        return microserviceSystem;
+    }
+
+    public static MicroserviceSystem create(Path configPath, String commitID) throws GitAPIException, IOException, InterruptedException {
+        IRExtractionService extractionService = new IRExtractionService(configPath.toString(), Optional.of(commitID));
         MicroserviceSystem microserviceSystem = new MicroserviceSystem(extractionService.config.getSystemName(), extractionService.commitID, new HashSet<>(), new HashSet<>());
 
         Set<Microservice> microservices = extractionService.cloneAndScanServices(microserviceSystem);

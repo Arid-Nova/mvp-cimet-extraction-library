@@ -31,8 +31,8 @@ public class JRecord extends AbstractClass {
         this.implementedTypes = implementedTypes;
     }
 
-    public JRecord(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Boolean isStatic, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, Set<Method> methods, List<MethodCall> methodCalls, Set<String> implementedTypes) {
-        super(parent, path, classRole, ClassType.RECORD, packageName, accessModifier, Boolean.TRUE, isStatic, Boolean.FALSE, imports, annotations, fields, methods, methodCalls);
+    public JRecord(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Boolean isStatic, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, Set<Method> methods, Set<String> implementedTypes) {
+        super(parent, path, classRole, ClassType.RECORD, packageName, accessModifier, Boolean.TRUE, isStatic, Boolean.FALSE, imports, annotations, fields, methods);
         this.implementedTypes = new HashSet<>(implementedTypes);
     }
 }

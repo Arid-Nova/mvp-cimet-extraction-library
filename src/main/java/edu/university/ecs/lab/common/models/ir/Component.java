@@ -42,6 +42,9 @@ public abstract class Component extends Node {
     public Component(Node parent, String name, Location location) {
         super(parent, name);
 
+        if (!(parent instanceof AbstractClass) && !(parent instanceof Component))
+            throw new RuntimeException("Invalid parent provided to Component.");
+
         this.location = location;
     }
 
@@ -55,15 +58,11 @@ public abstract class Component extends Node {
     public String getID() {
         if(getParent().isPresent()) {
             if(getParent().get() instanceof AbstractClass abstractClass) {
-                return abstractClass.getPackageName() + "." + abstractClass.getName() + "." + getName();
-            } else if(getParent().get() instanceof ProjectFile) {
-                // TODO Better if we enforce some check on parent when component is first set
-                throw new RuntimeException("Cannot ID a component with a parent of ProjectFile");
+                return abstractClass.getPackageName() + "." + abstractClass.getName() + "&" + getName();
             } else {
-                return getParent().get().getID() + "." + getName();
+                return getParent().get().getID() + "&" + getName();
             }
         } else {
-            // TODO or should it be ""?
             return getName();
         }
     }
