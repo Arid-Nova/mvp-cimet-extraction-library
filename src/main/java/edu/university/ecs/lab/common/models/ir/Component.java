@@ -28,6 +28,7 @@ import java.util.Objects;
         @JsonSubTypes.Type(value = Method.class, name = "Method"),
         @JsonSubTypes.Type(value = MethodCall.class, name = "MethodCall"),
         @JsonSubTypes.Type(value = Parameter.class, name = "Parameter"),
+        @JsonSubTypes.Type(value = Import.class, name = "Import"),
 })
 @JsonTypeName("Component")
 @EqualsAndHashCode(callSuper = true)
@@ -56,6 +57,9 @@ public abstract class Component extends Node {
      */
     @Override
     public String getID() {
+        if(getParent() == null) {
+            return getOriginalDeserializedID();
+        }
         if(getParent().isPresent()) {
             if(getParent().get() instanceof AbstractClass abstractClass) {
                 return abstractClass.getPackageName() + "." + abstractClass.getName() + "&" + getName();

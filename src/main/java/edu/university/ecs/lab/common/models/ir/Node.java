@@ -32,13 +32,6 @@ public abstract class Node {
     protected Optional<Node> parent;
 
     /**
-     * The children of this Node in the tree structure.
-     */
-    @JsonIgnore
-    @EqualsAndHashCode.Exclude
-    protected List<Node> children;
-
-    /**
      * The name of the node
      */
     @NonNull
@@ -51,6 +44,14 @@ public abstract class Node {
     @Getter
     protected JSONObject metadata;
 
+    /**
+     * Keep track of the original stored ID for flattened Node structures.
+     */
+    @JsonIgnore
+    @Getter
+    private transient String originalDeserializedID;
+
+
     public Node(Node parent, @NonNull String name) {
         this.parent = Optional.ofNullable(parent);
         this.name = name;
@@ -62,7 +63,7 @@ public abstract class Node {
      *
      * @return the string unique ID
      */
-    @JsonProperty(value = "id", access = JsonProperty.Access.READ_ONLY) // Add this annotation
+    //@JsonProperty(value = "id", access = JsonProperty.Access.READ_ONLY) // Add this annotation
     public abstract String getID();
 
     /**
@@ -88,4 +89,12 @@ public abstract class Node {
      */
     @JsonIgnore
     public abstract void clearDescendants();
+
+
+    @JsonAnySetter
+    public void handleUnknown(String key, Object value) {
+        if ("id".equals(key)) {
+            this.originalDeserializedID = value.toString();
+        }
+    }
 }

@@ -201,7 +201,7 @@ public class DeltaExtractionService {
         if (FileUtils.isConfigurationFile(newPath.toString())) {
             ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(
                     new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config, null);
-            return new ModifyDelta(newPath, new ArrayList<>());
+            return new ModifyDelta(newPath, new ArrayList<>(), new SimpleDelta(newPath, ChangeType.MODIFY, configFile));
         } else {
             AbstractClass modifyClass = SourceToObjectUtils.parseClass(null,
                     new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config,  false);
@@ -258,7 +258,9 @@ public class DeltaExtractionService {
                 componentDeltas.add(new ComponentDelta(ChangeType.ADD, modifyEntry.getValue()));
             }
 
-            return new ModifyDelta(newPath, componentDeltas);
+            modifyClass.clearDescendants();
+
+            return new ModifyDelta(newPath, componentDeltas, new SimpleDelta(newPath, ChangeType.MODIFY, modifyClass));
         }
     }
 

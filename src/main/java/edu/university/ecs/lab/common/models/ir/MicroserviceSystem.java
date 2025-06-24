@@ -58,7 +58,7 @@ public class MicroserviceSystem extends Node {
      * @param path the path to search for
      * @return microservice instance of matching path or null
      */
-    public Microservice findMicroserviceByPath(String path) {
+    public Microservice findMicroserviceByPath(Path path) {
         return getMicroservices().stream().filter(microservice -> path.startsWith(microservice.getPath())).findFirst().orElse(null);
     }
 
@@ -86,7 +86,7 @@ public class MicroserviceSystem extends Node {
         Set<ProjectFile> updatedOrphans = new HashSet<>(getOrphans());
         for (ProjectFile file : getOrphans()) {
             // If the microservice is in the same folder as the path to the microservice
-            if (file.getPath().toString().contains(microservice.getPath())) {
+            if (file.getPath().normalize().toString().contains(microservice.getPath().normalize().toString())) {
                 if(file instanceof AbstractClass) {
                     AbstractClass abstractClass = (AbstractClass) file;
                     abstractClass.setParent(Optional.of(microservice));

@@ -2,11 +2,13 @@ package edu.university.ecs.lab.common.utils;
 
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.fasterxml.jackson.databind.ObjectWriter;
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.*;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 
 import java.io.*;
+import java.nio.file.Path;
 
 /**
  * Utility class for reading and writing JSON to a file.
@@ -42,12 +44,30 @@ public class JsonReadWriteUtils {
     }
 
     public static ObjectWriter setupObjectWriter() {
-        return new ObjectMapper().writerWithDefaultPrettyPrinter();
+        ObjectMapper objectMapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+
+        module.addSerializer(new PathSerializer());
+        objectMapper.registerModule(module);
+
+        return objectMapper.writerWithDefaultPrettyPrinter();
     }
 
     public static ObjectReader setupObjectReader() {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
         return objectMapper.reader();
+    }
+
+    public static class PathSerializer extends StdSerializer<Path> {
+
+        public PathSerializer() {
+            super(Path.class);
+        }
+
+        @Override
+        public void serialize(Path path, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            gen.writeString(path.normalize().toString());
+        }
     }
 }

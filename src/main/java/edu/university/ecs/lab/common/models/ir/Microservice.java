@@ -8,6 +8,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -28,7 +29,7 @@ public class Microservice extends Node {
     /**
      * The path to the folder that represents the microservice
      */
-    private String path;
+    private Path path;
 
     /**
      * Controller classes belonging to the microservice.
@@ -77,7 +78,7 @@ public class Microservice extends Node {
     @JsonDeserialize(as = HashSet.class)
     private Set<ConfigFile> files;
 
-    public Microservice(Node parent, String name, String path) {
+    public Microservice(Node parent, String name, Path path) {
         super(parent, name);
 
         this.name = name;
@@ -321,7 +322,7 @@ public class Microservice extends Node {
     @Override
     @JsonIgnore
     public String getID() {
-        return this.path;
+        return this.path.normalize().toString();
     }
 
     @Override

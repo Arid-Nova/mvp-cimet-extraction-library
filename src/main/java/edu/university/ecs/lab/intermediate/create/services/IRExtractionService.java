@@ -198,7 +198,7 @@ public class IRExtractionService {
         }
 
         Microservice model = new Microservice(microserviceSystem, FileUtils.getMicroserviceNameFromPath(rootMicroservicePath),
-                FileUtils.localPathToGitPath(rootMicroservicePath, config.getRepoName()));
+                Path.of(FileUtils.localPathToGitPath(rootMicroservicePath, config.getRepoName())));
         scanDirectory(localDir, model);
 
         return model;

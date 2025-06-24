@@ -1,10 +1,16 @@
 package edu.university.ecs.lab.delta.models;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import edu.university.ecs.lab.common.models.ir.JClass;
+import edu.university.ecs.lab.common.models.ir.JEnum;
+import edu.university.ecs.lab.common.models.ir.JInterface;
+import edu.university.ecs.lab.common.models.ir.JRecord;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
 import lombok.*;
 
@@ -19,19 +25,28 @@ import java.nio.file.Path;
  */
 @Getter
 @Setter
-public abstract class AbstractDelta {
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.PROPERTY,
+        property = "type"
+)
+@JsonSubTypes({@JsonSubTypes.Type(value = SimpleDelta.class, name = "SimpleDelta"),
+        @JsonSubTypes.Type(value = ModifyDelta.class, name = "ModifyDelta")})
 
+@JsonTypeName("AbstractDelta")
+public abstract class AbstractDelta {
     /**
      * The path to the changed file in question
      */
     @JsonSerialize(using = PathSerializer.class)
-    protected final Path path;
+    protected Path path;
 
     /**
      * The type of change that occurred
      */
-    protected final ChangeType changeType;
+    protected ChangeType changeType;
+
+    protected AbstractDelta() {}
 
     protected AbstractDelta(Path path, ChangeType changeType) {
         this.path = path;
