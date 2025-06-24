@@ -3,10 +3,12 @@ package edu.university.ecs.lab.common.services;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
 import edu.university.ecs.lab.common.utils.FileUtils;
+import lombok.Getter;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.diff.DiffEntry;
+import org.eclipse.jgit.diff.EditList;
 import org.eclipse.jgit.lib.*;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
@@ -18,26 +20,28 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * Service to perform Git opperations
+ * Service to perform Git operations
  */
 public class GitService {
-    private static final int EXIT_SUCCESS = 0;
     private static final String HEAD_COMMIT = "HEAD";
 
     private final Config config;
+
+    @Getter
     private final Repository repository;
 
     /**
      * Create a Git service object from a project configuration file
      * 
-     * @param configPath path to project configuration file
+     * @param config the Config for this project
      */
-    public GitService(String configPath) throws IOException, InterruptedException {
-        this.config = ConfigUtil.readConfig(configPath);
+    public GitService(Config config) throws IOException, InterruptedException {
+        this.config = config;
         FileUtils.makeDirs();
         cloneRemote();
         this.repository = initRepository();
@@ -148,6 +152,65 @@ public class GitService {
         }
 
         return returnList;
+    }
+
+    /**
+     * Method to get differences between old and new commits
+     * on a line by line basis
+     *
+     * @param commitOld old commit id
+     * @param commitNew new commit id
+     * @return list of changes from old commit to new commit
+     */
+    public Map<DiffEntry, EditList> getGranularDifferences(String commitOld, String commitNew) throws IOException, GitAPIException {
+        Map<DiffEntry, EditList> returnMap = null;
+        RevCommit oldCommit = null, newCommit = null;
+        RevWalk revWalk = new RevWalk(repository);
+
+        // Parse the old and new commits
+        oldCommit = revWalk.parseCommit(repository.resolve(commitOld));
+        newCommit = revWalk.parseCommit(repository.resolve(commitNew));
+
+
+        // Prepare tree parsers for both commits
+        ObjectReader reader = repository.newObjectReader();
+        CanonicalTreeParser oldTreeParser = new CanonicalTreeParser();
+        CanonicalTreeParser newTreeParser = new CanonicalTreeParser();
+
+        // Use tree objects from the commits
+        oldTreeParser.reset(reader, oldCommit.getTree().getId());
+        newTreeParser.reset(reader, newCommit.getTree().getId());
+
+        // Compute differences between the trees of the two commits
+        Git git = new Git(repository);
+        List<DiffEntry> diffEntryList = git.diff()
+                .setOldTree(oldTreeParser)
+                .setNewTree(newTreeParser)
+                .call();
+
+        // Filter out diffs that only contain whitespace or comment changes
+        RevCommit finalOldCommit = oldCommit;
+        RevCommit finalNewCommit = newCommit;
+
+//                returnMap = rawDiffs.stream()
+//                        .filter(diff -> isCodeChange(diff, repository, finalOldCommit, finalNewCommit))
+//                        .collect(Collectors.toList());
+
+        for(DiffEntry diffEntry : diffEntryList) {
+            switch (diffEntry.getChangeType()) {
+                case ADD:
+                    returnMap.put(diffEntry, new EditList());
+                    break;
+                case MODIFY:
+
+                    break;
+                case DELETE:
+                    returnMap.put(diffEntry, new EditList());
+                    break;
+            }
+        }
+
+        return returnMap;
     }
 
     /**

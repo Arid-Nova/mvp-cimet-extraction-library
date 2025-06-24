@@ -7,7 +7,9 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -22,18 +24,10 @@ public class Annotation extends Component {
 
     private Map<String, String> attributes;
 
-    public Annotation(AnnotationExpr annotationExpr, String packageAndClassName, Location location) {
-        this.name = annotationExpr.getNameAsString();
-        setPackageAndClassNames(packageAndClassName);
-        this.attributes = parseAttributes(annotationExpr);
-        this.location = location;
-    }
+    public Annotation(Node parent, AnnotationExpr annotationExpr) {
+        super(parent, annotationExpr.getNameAsString(), new Location(annotationExpr.getRange().get()));
 
-    public Annotation(String name, String packageAndClassName, HashMap<String, String> attributes, Location location) {
-        this.name = name;
-        setPackageAndClassNames(packageAndClassName);
-        this.attributes = attributes;
-        this.location = location;
+        this.attributes = parseAttributes(annotationExpr);
     }
 
     /**
@@ -48,7 +42,7 @@ public class Annotation extends Component {
 
     /**
      * Map attributes from annotation expression
-     * 
+     *
      * @param annotationExpr annotation expression object to parse
      * @return map of annotation attributes and their values
      */
@@ -67,10 +61,20 @@ public class Annotation extends Component {
             for(MemberValuePair mvp : nAnnotationExpr.getPairs()) {
                 if(mvp.getValue() instanceof StringLiteralExpr sle) {
                     attributes.put(mvp.getNameAsString(), sle.asString());
+                } else {
+                    attributes.put(mvp.getNameAsString(), mvp.getValue().toString());
                 }
             }
         }
 
         return attributes;
     }
+
+    @Override
+    public List<Component> getChildren() {
+        return new ArrayList<>();
+    }
+
+    @Override
+    public void clearDescendants() {}
 }

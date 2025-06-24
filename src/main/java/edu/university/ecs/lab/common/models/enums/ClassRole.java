@@ -6,6 +6,7 @@ import lombok.Getter;
 /**
  * Enum to represent the role of a class in a system
  */
+@Getter
 public enum ClassRole {
     CONTROLLER(JClass.class),
     SERVICE(JClass.class),
@@ -18,7 +19,6 @@ public enum ClassRole {
     /**
      * Get the associated class type for a role
      */
-    @Getter
     private final Class<? extends JClass> classType;
 
     /**

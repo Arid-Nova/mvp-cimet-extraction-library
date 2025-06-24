@@ -4,10 +4,8 @@ import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.*;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.*;
-import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.expr.*;
 import com.github.javaparser.ast.nodeTypes.NodeWithSimpleName;
-import com.github.javaparser.ast.type.ReferenceType;
 import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.javaparsermodel.JavaParserFacade;
@@ -21,6 +19,7 @@ import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
 
 import java.io.File;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -29,11 +28,9 @@ import java.util.stream.Collectors;
  */
 public class SourceToObjectUtils {
     private static CompilationUnit cu;
-    private static String microserviceName = "";
-    private static String path;
+    private static Path path;
     private static String className;
     private static String packageName;
-    private static String packageAndClassName;
     private static CombinedTypeSolver combinedTypeSolver;
     private static Config config;
 
@@ -44,14 +41,12 @@ public class SourceToObjectUtils {
         try {
             cu = StaticJavaParser.parse(sourceFile);
         } catch (Exception e) {
-            microserviceName = "";
             return;
         }
         if (!cu.findAll(PackageDeclaration.class).isEmpty()) {
             packageName = cu.findAll(PackageDeclaration.class).get(0).getNameAsString();
-            packageAndClassName = packageName + "." + sourceFile.getName().replace(".java", "");
         }
-        path = FileUtils.localPathToGitPath(sourceFile.getPath(), config.getRepoName());
+        path = Path.of(FileUtils.localPathToGitPath(sourceFile.getPath(), config.getRepoName()));
 
         TypeSolver reflectionTypeSolver = new ReflectionTypeSolver();
         TypeSolver javaParserTypeSolver = new JavaParserTypeSolver(FileUtils.getRepositoryPath(config.getRepoName()));
@@ -63,25 +58,21 @@ public class SourceToObjectUtils {
         JavaSymbolSolver symbolSolver = new JavaSymbolSolver(combinedTypeSolver);
         StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
         className = sourceFile.getName().replace(".java", "");
-
     }
 
     /**
-     * This method parses a Java class file and return a JClass object.
+     * This method parses a Java class file and return an AbstractClass object.
      *
      * @param sourceFile the file to parse
-     * @return the JClass object representing the file
+     * @return the AbstractClass object representing the file
      */
-    public static JClass parseClass(File sourceFile, Config config, String microserviceName) {
+    public static AbstractClass parseClass(Microservice microservice, File sourceFile, Config config, Boolean filterOutUnknownClassRoles) {
         // Guard condition
         if(Objects.isNull(sourceFile) || FileUtils.isConfigurationFile(sourceFile.getPath())) {
             return null;
         }
 
         generateStaticValues(sourceFile, config);
-        if (!microserviceName.isEmpty()) {
-            SourceToObjectUtils.microserviceName = microserviceName;
-        }
 
         // Calculate early to determine classrole based on annotation, filter for class based annotations only
         Set<AnnotationExpr> classAnnotations = filterClassAnnotations();
@@ -96,26 +87,32 @@ public class SourceToObjectUtils {
         ClassRole classRole = parseClassRole(classAnnotations, s);
 
         // Return unknown classRoles where annotation not found
-        if (classRole.equals(ClassRole.UNKNOWN)) {
+        if (filterOutUnknownClassRoles && classRole.equals(ClassRole.UNKNOWN)) {
             return null;
         }
 
-        JClass jClass = null;
+        AbstractClass abstractClass = null;
+
         if(classRole == ClassRole.FEIGN_CLIENT) {
-            jClass = handleFeignClient(requestMapping, classAnnotations);
+            abstractClass = handleFeignClient(microservice, requestMapping, classAnnotations);
         } else if(classRole == ClassRole.REP_REST_RSC) {
-            jClass = handleRepositoryRestResource(requestMapping, classAnnotations);
+            abstractClass = handleRepositoryRestResource(microservice, requestMapping, classAnnotations);
         } else {
-            jClass = buildJClass(className, path, packageName, classRole,
-                    parseImports(cu.findAll(ImportDeclaration.class)),
-                    parseMethods(cu.findAll(MethodDeclaration.class), requestMapping),
-                    parseFields(cu.findAll(FieldDeclaration.class)),
-                    parseAnnotations(classAnnotations),
-                    parseMethodCalls(cu.findAll(MethodDeclaration.class)));
+            abstractClass = prepareClass(microservice, path, packageName);
+
+            if (abstractClass == null) {
+                return null;
+            }
+
+            abstractClass.setClassRole(classRole);
+            abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
+            abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
+            abstractClass.setMethods(parseMethods(abstractClass, cu.findAll(MethodDeclaration.class), requestMapping));
+            abstractClass.setImports(parseImports(abstractClass, cu.findAll(ImportDeclaration.class)));
         }
 
-        // Build the JClass
-        return jClass;
+        // Build the AbstractClass
+        return abstractClass;
 
     }
 
@@ -125,31 +122,11 @@ public class SourceToObjectUtils {
      * @param importDeclarations the list of importDeclarations to be parsed
      * @return a set of Import models representing the ImportDeclarations
      */
-    public static Set<Import> parseImports(List<ImportDeclaration> importDeclarations) {
+    public static Set<Import> parseImports(edu.university.ecs.lab.common.models.ir.Node parent, List<ImportDeclaration> importDeclarations) {
         HashSet<Import> imports = new HashSet<>();
 
         for (ImportDeclaration impDec : importDeclarations) {
-            if (!impDec.isAsterisk()) {
-                String fullImport = impDec.getNameAsString();
-
-                String impPackage = fullImport.substring(0, fullImport.lastIndexOf("."));
-                String impObject = fullImport.substring(fullImport.lastIndexOf(".") + 1);
-
-                Location range = null;
-                if (impDec.getRange().isPresent()) range = new Location(impDec.getRange().get());
-
-                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName, range);
-                imports.add(imp);
-            } else {
-                String impPackage = impDec.getNameAsString();
-                String impObject = "*";
-
-                Location range = null;
-                if (impDec.getRange().isPresent()) range = new Location(impDec.getRange().get());
-
-                Import imp = new Import(impPackage, impObject, impDec.isStatic(), packageAndClassName, range);
-                imports.add(imp);
-            }
+            imports.add(new Import(parent, impDec));
         }
         return imports;
     }
@@ -160,37 +137,12 @@ public class SourceToObjectUtils {
      * @param methodDeclarations the list of methodDeclarations to be parsed
      * @return a set of Method models representing the MethodDeclarations
      */
-    public static Set<Method> parseMethods(List<MethodDeclaration> methodDeclarations, AnnotationExpr requestMapping) {
+    public static Set<Method> parseMethods(edu.university.ecs.lab.common.models.ir.Node parent, List<MethodDeclaration> methodDeclarations, AnnotationExpr requestMapping) {
         // Get params and returnType
         Set<Method> methods = new HashSet<>();
 
         for (MethodDeclaration methodDeclaration : methodDeclarations) {
-            Set<edu.university.ecs.lab.common.models.ir.Parameter> parameters = new HashSet<>();
-            for (Parameter parameter : methodDeclaration.getParameters()) {
-                parameters.add(new edu.university.ecs.lab.common.models.ir.Parameter(parameter, packageAndClassName));
-            }
-
-            NodeList<ReferenceType> exceptions = methodDeclaration.getThrownExceptions();
-            Set<String> thrownExceptions = new HashSet<>();
-            exceptions.forEach(exception -> thrownExceptions.add(exception.toString()));
-
-            Location range = null;
-            if (methodDeclaration.getRange().isPresent()) range = new Location(methodDeclaration.getRange().get());
-
-            Method method = new Method(
-                    methodDeclaration.getNameAsString(),
-                    packageAndClassName,
-                    parameters,
-                    methodDeclaration.getTypeAsString(),
-                    parseAnnotations(methodDeclaration.getAnnotations()),
-                    microserviceName,
-                    className,
-                    AccessModifier.fromAccessSpecifier(methodDeclaration.getAccessSpecifier()),
-                    methodDeclaration.isAbstract(),
-                    methodDeclaration.isStatic(),
-                    methodDeclaration.isFinal(),
-                    thrownExceptions,
-                    range);
+            Method method = new Method(parent, methodDeclaration);
 
             method = convertValidEndpoints(methodDeclaration, method, requestMapping);
 
@@ -223,39 +175,21 @@ public class SourceToObjectUtils {
         return method;
     }
 
-
-
     /**
-     * This method parses methodDeclarations list and returns a Set of MethodCall models
+     * This method parses a MethodCallExpr list and returns a Set of MethodCall models
      *
-     * @param methodDeclarations the list of methodDeclarations to be parsed
-     * @return a set of MethodCall models representing MethodCallExpressions found in the MethodDeclarations
+     * @param methodCallExprs the list of methodCallExprs to be parsed
+     * @return a set of MethodCall models representing MethodCallExpressions
      */
-    public static List<MethodCall> parseMethodCalls(List<MethodDeclaration> methodDeclarations) {
+    public static List<MethodCall> parseMethodCalls(edu.university.ecs.lab.common.models.ir.Node parent, List<MethodCallExpr> methodCallExprs) {
         List<MethodCall> methodCalls = new ArrayList<>();
 
         // loop through method calls
-        for (MethodDeclaration methodDeclaration : methodDeclarations) {
-            for (MethodCallExpr mce : methodDeclaration.findAll(MethodCallExpr.class)) {
-                String methodName = mce.getNameAsString();
+        for (MethodCallExpr mce : methodCallExprs) {
+            MethodCall methodCall = new MethodCall(parent, mce, getCallingObjectType(mce));
 
-                String calledServiceName = getCallingObjectName(mce);
-                String calledServiceType = getCallingObjectType(mce);
-
-                String parameterContents = mce.getArguments().stream().map(Objects::toString).collect(Collectors.joining(","));
-
-                if (Objects.nonNull(calledServiceName)) {
-                    Location range = null;
-                    if (mce.getRange().isPresent()) range = new Location(mce.getRange().get());
-
-                    MethodCall methodCall = new MethodCall(methodName, packageAndClassName, calledServiceType, calledServiceName,
-                            methodDeclaration.getNameAsString(), parameterContents, microserviceName, className, range);
-
-                    methodCall = convertValidRestCalls(mce, methodCall);
-
-                    methodCalls.add(methodCall);
-                }
-            }
+            methodCall = convertValidRestCalls(mce, methodCall);
+            methodCalls.add(methodCall);
         }
 
         return methodCalls;
@@ -288,26 +222,14 @@ public class SourceToObjectUtils {
      * @param fieldDeclarations the field declarations to parse
      * @return the set of Field models
      */
-    private static Set<Field> parseFields(List<FieldDeclaration> fieldDeclarations) {
+    private static Set<Field> parseFields(edu.university.ecs.lab.common.models.ir.Node parent, List<FieldDeclaration> fieldDeclarations) {
         Set<Field> javaFields = new HashSet<>();
 
         // loop through class declarations
         for (FieldDeclaration fd : fieldDeclarations) {
             for (VariableDeclarator variable : fd.getVariables()) {
-                Location range = null;
-                if (variable.getRange().isPresent()) range = new Location(variable.getRange().get());
-
-                String init = "";
-                Optional<Expression> optInitExpr = variable.getInitializer();
-                if (optInitExpr.isPresent()) {
-                    init = optInitExpr.get().toString();
-                }
-
-                javaFields.add(new Field(variable.getNameAsString(), packageAndClassName, variable.getTypeAsString(),
-                        AccessModifier.fromAccessSpecifier(fd.getAccessSpecifier()),
-                        fd.isStatic(), fd.isFinal(), range, init));
+                javaFields.add(new Field(parent, fd, variable));
             }
-
         }
 
         return javaFields;
@@ -320,8 +242,6 @@ public class SourceToObjectUtils {
      * @return the name of the object the method is being called from
      */
     private static String getCallingObjectName(MethodCallExpr mce) {
-
-
         Expression scope = mce.getScope().orElse(null);
 
         if (Objects.nonNull(scope) && scope instanceof NameExpr) {
@@ -330,11 +250,9 @@ public class SourceToObjectUtils {
         }
 
         return "";
-
     }
 
     private static String getCallingObjectType(MethodCallExpr mce) {
-
         Expression scope = mce.getScope().orElse(null);
 
         if (Objects.isNull(scope)) {
@@ -365,14 +283,11 @@ public class SourceToObjectUtils {
      * @param annotationExprs the annotation expressions to parse
      * @return the Set of Annotation models
      */
-    private static Set<Annotation> parseAnnotations(Iterable<AnnotationExpr> annotationExprs) {
+    public static Set<Annotation> parseAnnotations(edu.university.ecs.lab.common.models.ir.Node parent, Iterable<AnnotationExpr> annotationExprs) {
         Set<Annotation> annotations = new HashSet<>();
 
         for (AnnotationExpr ae : annotationExprs) {
-            Location range = null;
-            if (ae.getRange().isPresent()) range = new Location(ae.getRange().get());
-
-            annotations.add(new Annotation(ae, packageAndClassName, range));
+            annotations.add(new Annotation(parent, ae));
         }
 
         return annotations;
@@ -430,24 +345,24 @@ public class SourceToObjectUtils {
      * @param classAnnotations
      * @return
      */
-    private static JClass handleFeignClient(AnnotationExpr requestMapping, Set<AnnotationExpr> classAnnotations) {
+    private static AbstractClass handleFeignClient(Microservice microservice, AnnotationExpr requestMapping, Set<AnnotationExpr> classAnnotations) {
+        AbstractClass abstractClass = prepareClass(microservice, path, packageName);
+
+        if (abstractClass == null) {
+            return null;
+        }
 
         // Parse the methods
-        Set<Method> methods = parseMethods(cu.findAll(MethodDeclaration.class), requestMapping);
+        Set<Method> methods = parseMethods(abstractClass, cu.findAll(MethodDeclaration.class), requestMapping);
 
         // New methods for conversion
         Set<Method> newMethods = new HashSet<>();
-        // New rest calls for conversion
-        List<MethodCall> newRestCalls = new ArrayList<>();
 
         // For each method that is detected as an endpoint convert into a Method + RestCall
         for(Method method : methods) {
             if(method instanceof Endpoint) {
                 Endpoint endpoint = (Endpoint) method;
-                newMethods.add(new Method(method.getName(), packageAndClassName, method.getParameters(),
-                        method.getReturnType(), method.getAnnotations(), method.getMicroserviceName(),
-                        method.getClassName(), method.getProtection(), method.isAbstract(), method.isStatic(),
-                        method.isFinal(), method.getThrownExceptions(), method.getLocation()));
+                newMethods.add(new Method(method));
 
                 StringBuilder queryParams = new StringBuilder();
                 for(edu.university.ecs.lab.common.models.ir.Parameter parameter : method.getParameters()) {
@@ -471,38 +386,35 @@ public class SourceToObjectUtils {
                     queryParams.replace(0, 1, "?");
                 }
 
-                newRestCalls.add(new RestCall(new MethodCall("exchange", packageAndClassName, "RestCallTemplate",
-                        "restCallTemplate", method.getName(), "", endpoint.getMicroserviceName(),
-                        endpoint.getClassName(), method.getLocation()), endpoint.getUrl() + queryParams,
+                MethodCall methodCall = new MethodCall(abstractClass, "exchange", method.getLocation());
+                methodCall.setCalledFrom(method.getName());
+                methodCall.setObjectType("RestCallTemplate");
+                methodCall.setObjectName("restCallTemplate");
+
+                method.getMethodCalls().add(new RestCall(methodCall, endpoint.getUrl() + queryParams,
                         endpoint.getHttpMethod()));
             } else {
                 newMethods.add(method);
             }
         }
 
+        abstractClass.setClassRole(ClassRole.FEIGN_CLIENT);
+        abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
+        abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
+        abstractClass.setMethods(newMethods);
 
-        // Build the JClass
-        return buildJClass(
-                className,
-                path,
-                packageName,
-                ClassRole.FEIGN_CLIENT,
-                parseImports(cu.findAll(ImportDeclaration.class)),
-                newMethods,
-                parseFields(cu.findAll(FieldDeclaration.class)),
-                parseAnnotations(classAnnotations),
-                newRestCalls);
+        return abstractClass;
     }
 
-    public static ConfigFile parseConfigurationFile(File file, Config config) {
+    public static ConfigFile parseConfigurationFile(File file, Config config, Microservice microservice) {
         if(file.getName().endsWith(".yml")) {
-            return NonJsonReadWriteUtils.readFromYaml(file.getPath(), config);
+            return NonJsonReadWriteUtils.readFromYaml(file.getPath(), config, microservice);
         } else if(file.getName().equals("DockerFile")) {
-            return NonJsonReadWriteUtils.readFromDocker(file.getPath(), config);
+            return NonJsonReadWriteUtils.readFromDocker(file.toPath(), config, microservice);
         } else if(file.getName().equals("pom.xml")) {
-            return NonJsonReadWriteUtils.readFromPom(file.getPath(), config);
+            return NonJsonReadWriteUtils.readFromPom(file.toPath(), config, microservice);
         } else if (file.getName().equals("build.gradle")){
-            return NonJsonReadWriteUtils.readFromGradle(file.getPath(), config);
+            return NonJsonReadWriteUtils.readFromGradle(file.toPath(), config, microservice);
         } else {
             return null;
         }
@@ -530,10 +442,15 @@ public class SourceToObjectUtils {
      * @param classAnnotations
      * @return
      */
-    private static JClass handleRepositoryRestResource(AnnotationExpr requestMapping, Set<AnnotationExpr> classAnnotations) {
+    private static AbstractClass handleRepositoryRestResource(Microservice microservice, AnnotationExpr requestMapping, Set<AnnotationExpr> classAnnotations) {
+        AbstractClass abstractClass = prepareClass(microservice, path, packageName);
+
+        if (abstractClass == null) {
+            return null;
+        }
 
         // Parse the methods
-        Set<Method> methods = parseMethods(cu.findAll(MethodDeclaration.class), requestMapping);
+        Set<Method> methods = parseMethods(abstractClass, cu.findAll(MethodDeclaration.class), requestMapping);
 
         // New methods for conversion
         Set<Method> newEndpoints = new HashSet<>();
@@ -562,7 +479,6 @@ public class SourceToObjectUtils {
 
         // For each method that is detected as an endpoint convert into a Method + RestCall
         for(Method method : methods) {
-
             String url = "/search";
             boolean restResourceFound = false;
             boolean isExported = true;
@@ -596,26 +512,22 @@ public class SourceToObjectUtils {
             newEndpoints.add(endpoint);
         }
 
-
         // Build the JClass
-        return buildJClass(
-                className,
-                path,
-                packageName,
-                ClassRole.REP_REST_RSC,
-                parseImports(cu.findAll(ImportDeclaration.class)),
-                newEndpoints,
-                parseFields(cu.findAll(FieldDeclaration.class)),
-                parseAnnotations(classAnnotations),
-                newRestCalls);
+        abstractClass.setClassRole(ClassRole.REP_REST_RSC);
+        abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
+        abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
+        abstractClass.setMethods(newEndpoints);
+
+        return abstractClass;
     }
 
-    private static JClass buildJClass(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls) {
-        JClass jClass = null;
+    private static AbstractClass prepareClass(edu.university.ecs.lab.common.models.ir.Node parent, Path path, String packageName) {
+        AbstractClass abstractClass = null;
 
         List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
         List<EnumDeclaration> enumDecs = cu.findAll(EnumDeclaration.class);
         List<RecordDeclaration> recordDecs = cu.findAll(RecordDeclaration.class);
+
         if (!classInterfaceDecs.isEmpty()) {
             AccessModifier protection = AccessModifier.fromAccessSpecifier(classInterfaceDecs.get(0).getAccessSpecifier());
             Boolean isFinal = classInterfaceDecs.get(0).isFinal();
@@ -623,34 +535,43 @@ public class SourceToObjectUtils {
             Boolean isStatic = classInterfaceDecs.get(0).isStatic();
 
             if (!classInterfaceDecs.get(0).isInterface()) {
-                jClass = new JClass(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
-                        classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
-                        protection, isFinal, isAbstract, isStatic);
-            } else {
-                jClass = new JInterface(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                        classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
-                        protection, isFinal, isStatic);
+                List<String> extendedTypes = classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).toList();
+                String extendedType = "";
+                if (!extendedTypes.isEmpty())
+                    extendedType = extendedTypes.get(0);
 
+                abstractClass = new JClass(parent, path, packageName, extendedType,
+                        classInterfaceDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+            } else {
+                abstractClass = new JInterface(parent, path, packageName, classInterfaceDecs.get(0).getExtendedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
             }
+
+            abstractClass.setProtection(protection);
+            abstractClass.setIsFinal(isFinal);
+            abstractClass.setIsAbstract(isAbstract);
+            abstractClass.setIsStatic(isStatic);
+
         } else if (!enumDecs.isEmpty()) {
             AccessModifier protection = AccessModifier.fromAccessSpecifier(enumDecs.get(0).getAccessSpecifier());
 
-            List<String> enumEntries = new ArrayList<>();
+            Set<String> enumEntries = new HashSet<>();
             enumDecs.get(0).getEntries().forEach(entry -> enumEntries.add(entry.getNameAsString()));
-            jClass = new JEnum(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
+            abstractClass = new JEnum(parent, path, packageName,
                     enumDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
-                    protection, enumEntries);
+                    enumEntries);
+
+            abstractClass.setProtection(protection);
         } else if (!recordDecs.isEmpty()) {
             AccessModifier protection = AccessModifier.fromAccessSpecifier(recordDecs.get(0).getAccessSpecifier());
             Boolean isStatic = recordDecs.get(0).isStatic();
 
-            jClass = new JRecord(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls,
-                    recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()),
-                    protection, isStatic);
+            abstractClass = new JRecord(parent, path, packageName, recordDecs.get(0).getImplementedTypes().stream().map(NodeWithSimpleName::getNameAsString).collect(Collectors.toSet()));
+
+            abstractClass.setProtection(protection);
+            abstractClass.setIsStatic(isStatic);
         }
 
-        return jClass;
+        return abstractClass;
     }
 
 //    private static JClass handleJS(String filePath) throws IOException, InterruptedException {

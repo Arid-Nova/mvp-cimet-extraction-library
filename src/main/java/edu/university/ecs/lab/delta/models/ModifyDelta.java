@@ -1,0 +1,30 @@
+package edu.university.ecs.lab.delta.models;
+
+import com.fasterxml.jackson.annotation.JsonTypeName;
+import edu.university.ecs.lab.delta.models.enums.ChangeType;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.NonNull;
+import lombok.Setter;
+
+import java.nio.file.Path;
+import java.util.List;
+
+@Getter
+@Setter
+@NoArgsConstructor
+@JsonTypeName("ModifyDelta")
+public class ModifyDelta extends AbstractDelta {
+    @NonNull
+    protected List<ComponentDelta> componentDeltas;
+
+    @NonNull
+    protected SimpleDelta fileDelta;
+
+    public ModifyDelta(Path path, @NonNull List<ComponentDelta> componentDeltas, @NonNull SimpleDelta fileDelta) {
+        super(path, ChangeType.MODIFY);
+
+        this.componentDeltas = componentDeltas;
+        this.fileDelta = fileDelta;
+    }
+}

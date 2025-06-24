@@ -4,16 +4,18 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Abstract class for all code components that fall under a JClass
  * structure.
  */
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @JsonTypeInfo(
         use = JsonTypeInfo.Id.NAME,
@@ -26,78 +28,68 @@ import java.util.Objects;
         @JsonSubTypes.Type(value = Method.class, name = "Method"),
         @JsonSubTypes.Type(value = MethodCall.class, name = "MethodCall"),
         @JsonSubTypes.Type(value = Parameter.class, name = "Parameter"),
+        @JsonSubTypes.Type(value = Import.class, name = "Import"),
 })
 @JsonTypeName("Component")
+@EqualsAndHashCode(callSuper = true)
 public abstract class Component extends Node {
-    /**
-     * Name of the structure
-     */
-    protected String name;
-
-    /**
-     * Name of the package + class (package path e.g. edu.university.lab.AdminController)
-     */
-    protected String packageName;
-
-    /**
-     * Name of the package + class (package path e.g. edu.university.lab.AdminController)
-     */
-    protected String className;
-
     /**
      * The line range of the component
      */
+    @JsonIgnore
+    @EqualsAndHashCode.Exclude
     protected Location location;
 
-    /**
-     * See {@link Node#getID()}
-     */
-    @Override
-    @JsonIgnore
-    public final String getID() {
-        String id = String.join(".", packageName, className, name);
+    public Component(Node parent, String name, Location location) {
+        super(parent, name);
 
-        // TODO: Perhaps a better implementation strategy instead of checking type here
-        if(this instanceof MethodCall) {
-            id += "[" + location.startLine + "-" + location.endLine + "]";
-        }
+        if (!(parent instanceof AbstractClass) && !(parent instanceof Component))
+            throw new RuntimeException("Invalid parent provided to Component.");
 
-        return id;
+        this.location = location;
     }
 
     /**
-     * Equals implementation for components, if the ID is equivalent they should
-     * be treated as the same component
+     * This method generates a unique ID for datatypes that fall
+     * under a JClass
      *
-     * @param o object to compare to
-     * @return boolean equality
+     * @return the string unique ID
      */
     @Override
-    public boolean equals(Object o) {
-        if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
-        Component component = (Component) o;
-        return Objects.equals(getID(), component.getID()) ;
+    public String getID() {
+        if(getParent() == null) {
+            return getOriginalDeserializedID();
+        }
+        if(getParent().isPresent()) {
+            if(getParent().get() instanceof AbstractClass abstractClass) {
+                return abstractClass.getPackageName() + "." + abstractClass.getName() + "&" + getName();
+            } else {
+                return getParent().get().getID() + "&" + getName();
+            }
+        } else {
+            return getName();
+        }
     }
 
     @Override
-    public int hashCode() {
-        return Objects.hash(super.hashCode(), name, packageName, className, location);
-    }
+    public abstract List<Component> getChildren();
 
-    /**
-     * Converts a packageAndClassName to separate package and class names
-     * @param packageAndClassName The package and class name to set for this Component
-     */
-    public void setPackageAndClassNames(String packageAndClassName) {
-        int lastDot = packageAndClassName.lastIndexOf(".");
-        if (lastDot == -1) {
-            packageName = packageAndClassName;
-            className = "";
+    @Override
+    public final List<Component> getDescendants() {
+        List<Component> allDescendants = new ArrayList<>();
+        List<Component> thisChildren = getChildren();
+
+        if (thisChildren != null && !thisChildren.isEmpty()) {
+            allDescendants.addAll(thisChildren);
+
+            for (Component child : thisChildren) {
+                if (child != null) {
+                    allDescendants.addAll(child.getDescendants());
+                }
+            }
         }
-        else {
-            packageName = packageAndClassName.substring(0, lastDot);
-            className = packageAndClassName.substring(lastDot + 1);
-        }
+
+        // Return the populated list (or an empty list if no children were found)
+        return allDescendants;
     }
 }

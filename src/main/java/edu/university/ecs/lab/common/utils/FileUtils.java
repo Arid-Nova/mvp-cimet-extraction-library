@@ -91,7 +91,7 @@ public class FileUtils {
      * @param path The path to the microservice
      * @return Raw microservice name based on the path
      */
-    public static String fallbackGetMicroserviceNameFromPath(String path) {
+    public static String getMicroserviceNameFromPath(String path) {
         if (!path.startsWith(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR)) {
             throw new IllegalArgumentException("A malformed path was provided");
         }

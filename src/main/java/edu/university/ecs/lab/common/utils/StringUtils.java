@@ -1,17 +1,25 @@
-package edu.university.ecs.lab.intermediate.utils;
-
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.PackageDeclaration;
-import org.apache.commons.io.FilenameUtils;
+package edu.university.ecs.lab.common.utils;
 
 /**
- * Utility class for parsing strings.
+ * This class provides various String utilities.
  */
-public class StringParserUtils {
+public class StringUtils {
+
     /**
-     * Private constructor to prevent instantiation.
+     * Prevent instantiation
      */
-    private StringParserUtils() {
+    public StringUtils() {
+
+    }
+
+    /**
+     * Counts the number of occurrences of a substring in a string.
+     * @param str The string
+     * @param sub The substring to search for in str
+     * @return The count of occurrences of sub in str
+     */
+    public static Integer countOccurrences(String str, String sub) {
+        return str.split(sub, -1).length - 1;
     }
 
     /**

@@ -2,9 +2,7 @@ package edu.university.ecs.lab.common.models.ir;
 
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import edu.university.ecs.lab.common.models.enums.HttpMethod;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.util.Set;
 
@@ -13,39 +11,41 @@ import java.util.Set;
  * Represents an extension of a method call. A rest call exists at the service level and represents
  * a call to an endpoint mapping.
  */
-@Data
 @NoArgsConstructor
-@EqualsAndHashCode(callSuper=true)
+@Getter
+@Setter
 @JsonTypeName("RestCall")
+@EqualsAndHashCode(callSuper = true)
 public class RestCall extends MethodCall {
 
     /**
      * The URL of the rest call e.g. /api/v1/users/login, May have dynamic parameters
      * which are converted to {?}
      */
-    private String url;
+    protected String url;
 
     /**
      * The httpMethod of the api endpoint e.g. GET, POST, PUT see semantics.models.enums.httpMethod
      */
-    private HttpMethod httpMethod;
+    protected HttpMethod httpMethod;
+
 
     public RestCall(MethodCall methodCall, String url, HttpMethod httpMethod) {
-        super(methodCall.name, methodCall.packageName + "." + methodCall.className, methodCall.objectType, methodCall.objectName, methodCall.calledFrom, methodCall.parameterContents,
-                methodCall.microserviceName, methodCall.className, methodCall.location);
+        super(methodCall);
+
         this.url = url;
         this.httpMethod = httpMethod;
     }
 
     /**
      * Checks if a rest call matches a given endpoint
-     * 
+     *
      * @param restcall rest call to match
      * @param endpoint endpoint to match
      * @return true if rest call and enpoint match, false otherwise
      */
     public static boolean matchEndpoint(RestCall restcall, Endpoint endpoint){
-        if(restcall.getMicroserviceName().equals(endpoint.getMicroserviceName())){
+        if(restcall.getParentMicroservice().getName().equals(endpoint.getParentMicroservice().getName())){
             return false;
         }
 
@@ -56,7 +56,7 @@ public class RestCall extends MethodCall {
 
     /**
      * Checks if rest call parameters match parameters for the target endpoint
-     * 
+     *
      * @param restCall rest call to match
      * @param endpoint endpoint to match
      * @param queryParamIndex string index at which query parameters start
@@ -87,5 +87,4 @@ public class RestCall extends MethodCall {
         }
         return true;
     }
-
 }
