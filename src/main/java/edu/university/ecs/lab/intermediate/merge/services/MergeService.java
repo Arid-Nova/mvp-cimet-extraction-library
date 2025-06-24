@@ -1,12 +1,11 @@
 package edu.university.ecs.lab.intermediate.merge.services;
 
-import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.config.ConfigUtil;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.StringUtils;
 import edu.university.ecs.lab.delta.models.*;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
+import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,26 +20,20 @@ import java.util.stream.Collectors;
  * IR
  */
 public class MergeService {
-    private final Config config;
     private final MicroserviceSystem microserviceSystem;
     private final SystemChange systemChange;
-    private final String outputPath;
 
     public MergeService(
-            String intermediatePath,
-            String deltaPath,
-            String configPath,
-            String outputPath) throws IOException {
-        this.config = ConfigUtil.readConfig(configPath);
-        this.microserviceSystem = JsonReadWriteUtils.readFromJSON(Path.of(intermediatePath).toAbsolutePath().toString(), MicroserviceSystem.class);
-        this.systemChange = JsonReadWriteUtils.readFromJSON(Path.of(deltaPath).toAbsolutePath().toString(), SystemChange.class);
-        this.outputPath = outputPath.isEmpty() ? "./NewIR.json" : outputPath;
+            MicroserviceSystem intermediateSystem,
+            SystemChange delta) {
+        this.microserviceSystem = intermediateSystem;
+        this.systemChange = delta;
     }
 
     /**
      * This method generates the new IR from the old IR + Delta file
      */
-    public void generateMergeIR(String newCommitID) {
+    public void generateMergeIR() {
         // If no changes are present, return
         if (Objects.isNull(systemChange.getChanges())) {
             return;
@@ -383,14 +376,54 @@ public class MergeService {
         return this.microserviceSystem;
     }
 
-    public static MicroserviceSystem create(String configPath, String intermediatePath, String deltaPath, String newCommitID) throws IOException {
-        MergeService mergeService = new MergeService(intermediatePath, deltaPath, configPath, "");
-        mergeService.generateMergeIR(newCommitID);
+    /**
+     * Creates a new IR at commit B from an existing IR at commit A and a Delta from commit A to commit B.
+     * @param intermediateSystem The MicroserviceSystem at commit A
+     * @param delta The SystemChange from commit A to commit B
+     * @return A {@link MicroserviceSystem} at commit B
+     */
+    public static MicroserviceSystem create(MicroserviceSystem intermediateSystem, SystemChange delta) throws IOException {
+        MergeService mergeService = new MergeService(intermediateSystem, delta);
+        mergeService.generateMergeIR();
         return mergeService.getMicroserviceSystem();
     }
 
-    public static void createAndWrite(String configPath, String intermediatePath, String deltaPath, String newCommitID, String outputPath) throws IOException {
-        MicroserviceSystem microserviceSystem = create(configPath, intermediatePath, deltaPath, newCommitID);
+    /**
+     * Creates a new IR at commit B from an existing IR at commit A and a Delta from commit A to commit B.
+     * @param intermediatePath A path to the intermediate representation
+     * @param deltaPath A path to the delta
+     * @return A {@link MicroserviceSystem} at commit B
+     */
+    public static MicroserviceSystem create(Path intermediatePath, Path deltaPath) throws IOException {
+        MicroserviceSystem microserviceSystem = IRExtractionService.read(intermediatePath);
+        SystemChange systemChange = JsonReadWriteUtils.readFromJSON(deltaPath, SystemChange.class);
+
+        return create(microserviceSystem, systemChange);
+    }
+
+    /**
+     * Creates a new IR at commit B from an existing IR at commit A and a Delta from commit A to commit B.
+     * Additionally, it writes the resulting {@link MicroserviceSystem} to the specified path.
+     * @param intermediatePath A path to the intermediate representation
+     * @param deltaPath A path to the delta
+     * @return A {@link MicroserviceSystem} at commit B
+     */
+    public static MicroserviceSystem createAndWrite(Path intermediatePath, Path deltaPath, Path outputPath) throws IOException {
+        MicroserviceSystem microserviceSystem = create(intermediatePath, deltaPath);
         JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
+        return microserviceSystem;
+    }
+
+    /**
+     * Creates a new IR at commit B from an existing IR at commit A and a Delta from commit A to commit B.
+     * Additionally, it writes the resulting {@link MicroserviceSystem} to the specified path.
+     * @param intermediateSystem The MicroserviceSystem at commit A
+     * @param delta The SystemChange from commit A to commit B
+     * @return A {@link MicroserviceSystem} at commit B
+     */
+    public static MicroserviceSystem createAndWrite(MicroserviceSystem intermediateSystem, SystemChange delta, Path outputPath) throws IOException {
+        MicroserviceSystem microserviceSystem = create(intermediateSystem, delta);
+        JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
+        return microserviceSystem;
     }
 }

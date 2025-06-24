@@ -27,8 +27,8 @@ public class JsonReadWriteUtils {
      * @param object   the object to serialize into JSON
      * @param filePath the file path where the JSON should be saved
      */
-    public static <T> void writeToJSON(String filePath, T object) throws IOException {
-        setupObjectWriter().writeValue(new File(filePath), object);
+    public static <T> void writeToJSON(Path filePath, T object) throws IOException {
+        setupObjectWriter().writeValue(new File(filePath.normalize().toString()), object);
     }
 
     /**
@@ -39,8 +39,20 @@ public class JsonReadWriteUtils {
      * @param type     the Class representing the type of the object to deserialize
      * @return an object of type T containing the data from the JSON file
      */
-    public static <T> T readFromJSON(String filePath, Class<T> type) throws IOException {
-        return setupObjectReader().readValue(new File(filePath), type);
+    public static <T> T readFromJSON(Path filePath, Class<T> type) throws IOException {
+        return setupObjectReader().readValue(new File(filePath.normalize().toString()), type);
+    }
+
+    /**
+     * Reads a JSON object from a String
+     *
+     * @param <T>      the type of the object to return
+     * @param data     the String containing JSON data
+     * @param type     the Class representing the type of the object to deserialize
+     * @return an object of type T containing the data from the JSON file
+     */
+    public static <T> T readFromJSONString(String data, Class<T> type) throws IOException {
+        return setupObjectReader().readValue(data, type);
     }
 
     public static ObjectWriter setupObjectWriter() {
@@ -66,8 +78,14 @@ public class JsonReadWriteUtils {
         }
 
         @Override
-        public void serialize(Path path, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-            gen.writeString(path.normalize().toString());
+        public void serialize(Path value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+            if (value != null) {
+                // Convert the Path object to a simple string in the JSON
+                gen.writeString(value.toString().replace('\\', '/'));
+            } else {
+                // Handle null Path objects by writing a JSON null
+                gen.writeNull();
+            }
         }
     }
 }

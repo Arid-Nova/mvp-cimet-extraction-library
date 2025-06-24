@@ -38,10 +38,10 @@ public class GitService {
     /**
      * Create a Git service object from a project configuration file
      * 
-     * @param configPath path to project configuration file
+     * @param config the Config for this project
      */
-    public GitService(String configPath) throws IOException, InterruptedException {
-        this.config = ConfigUtil.readConfig(configPath);
+    public GitService(Config config) throws IOException, InterruptedException {
+        this.config = config;
         FileUtils.makeDirs();
         cloneRemote();
         this.repository = initRepository();

@@ -1,3 +1,5 @@
+import edu.university.ecs.lab.common.config.Config;
+import edu.university.ecs.lab.common.config.ConfigUtil;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.FileUtils;
@@ -22,16 +24,26 @@ import java.util.*;
 class DeltaAndMergeTest {
     private static IRExtractionService irExtractionService;
     private static List<RevCommit> list;
-    final static String TEST_CONFIG_PATH = TestUtilities.CONFIGS_PATH + File.separator + "test_config3.json";
+    private static Config config;
+
+    final static Path TEST_CONFIG_PATH = Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config3.json");
+    final static Path OLD_IR_PATH = Path.of("." + File.separator + "output" + File.separator + "OldIR.json");
+    final static Path DELTA_PATH = Path.of("." + File.separator + "output" + File.separator + "Delta.json");
+    final static Path NEW_IR_PATH = Path.of("." + File.separator + "output" + File.separator + "NewIR.json");
+    final static Path TEST_IR_PATH = Path.of("." + File.separator + "output" + File.separator + "TestIR.json");
+    final static Path CONFIG2_PATH = Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config2.json");
+    final static Path TEST2_IR_PATH = Path.of("." + File.separator + "output" + File.separator + "Test2IR.json");
+    final static Path DELTA2_PATH = Path.of("." + File.separator + "output" + File.separator + "Delta2.json");
 
     @BeforeAll
     public static void setUp() throws GitAPIException, IOException, InterruptedException {
         FileUtils.makeDirs();
-        GitService gitService = new GitService(TEST_CONFIG_PATH);
+        config = ConfigUtil.readConfigFromFile(TEST_CONFIG_PATH);
+        GitService gitService = new GitService(config);
 
         list = TestUtilities.iterableToList(gitService.getLog());
-        irExtractionService = new IRExtractionService(TEST_CONFIG_PATH, Optional.of(list.get(0).toString().split(" ")[1]));
-        irExtractionService.generateIR("./output/OldIR.json");
+        irExtractionService = new IRExtractionService(config, Optional.of(list.get(0).toString().split(" ")[1]));
+        irExtractionService.generateIR(OLD_IR_PATH);
     }
 
     @Test
@@ -43,10 +55,10 @@ class DeltaAndMergeTest {
             String commitIdNew = list.get(i + 1).toString().split(" ")[1];
 
             // Extract changes from one commit to the other
-            DeltaExtractionService.createAndWrite(TEST_CONFIG_PATH, "./output/OldIR.json", commitIdOld, commitIdNew, "./output/Delta.json");
+            DeltaExtractionService.createAndWrite(config, OLD_IR_PATH, commitIdNew, DELTA_PATH);
 
             // Merge Delta changes to old IR to create new IR representing new commit changes
-            MergeService.createAndWrite(TEST_CONFIG_PATH, "./output/OldIR.json", "./output/Delta.json", commitIdNew, "./output/NewIR.json");
+            MergeService.createAndWrite(OLD_IR_PATH, DELTA_PATH, NEW_IR_PATH);
 
             if(i < list.size() - 2) {
                 Files.move(Paths.get("./output/NewIR.json"), Paths.get("./output/OldIR.json"), StandardCopyOption.REPLACE_EXISTING);
@@ -54,12 +66,12 @@ class DeltaAndMergeTest {
         }
 
         // Create IR of last commit
-        irExtractionService = new IRExtractionService(TEST_CONFIG_PATH, Optional.of(list.get(list.size() - 1).toString().split(" ")[1]));
-        irExtractionService.generateIR("./output/TestIR.json");
+        irExtractionService = new IRExtractionService(config, Optional.of(list.get(list.size() - 1).toString().split(" ")[1]));
+        irExtractionService.generateIR(TEST_IR_PATH);
 
         // Compare two IRs for equivalence
-        MicroserviceSystem microserviceSystem1 = JsonReadWriteUtils.readFromJSON("./output/NewIR.json", MicroserviceSystem.class);
-        MicroserviceSystem microserviceSystem2 = JsonReadWriteUtils.readFromJSON("./output/TestIR.json", MicroserviceSystem.class);
+        MicroserviceSystem microserviceSystem1 = JsonReadWriteUtils.readFromJSON(NEW_IR_PATH, MicroserviceSystem.class);
+        MicroserviceSystem microserviceSystem2 = JsonReadWriteUtils.readFromJSON(TEST_IR_PATH, MicroserviceSystem.class);
 
         microserviceSystem1.setOrphans(new HashSet<>());
         microserviceSystem2.setOrphans(new HashSet<>());
@@ -74,13 +86,9 @@ class DeltaAndMergeTest {
         String oldCommitHash = "9bdd9a28f0033e91dec4595d257da81cc7016e47";
         String newCommitHash = "313886e99befb94be6cd45f085c98e0019f59829";
 
-        MicroserviceSystem msSystem = IRExtractionService.create(Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config2.json"), oldCommitHash);
-        JsonReadWriteUtils.writeToJSON("output\\TestingIR.json", msSystem);
+        MicroserviceSystem msSystem = IRExtractionService.create(ConfigUtil.readConfigFromFile(CONFIG2_PATH), oldCommitHash);
+        JsonReadWriteUtils.writeToJSON(TEST2_IR_PATH, msSystem);
 
-        DeltaExtractionService.createAndWrite(TestUtilities.CONFIGS_PATH + File.separator + "test_config2.json",
-                "./output/TestingIR.json",
-                oldCommitHash,
-                newCommitHash,
-                "./output/RevisedDelta.json");
+        DeltaExtractionService.createAndWrite(ConfigUtil.readConfigFromFile(CONFIG2_PATH), TEST2_IR_PATH, newCommitHash, DELTA2_PATH);
     }
 }

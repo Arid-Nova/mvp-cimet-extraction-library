@@ -1,14 +1,12 @@
 package edu.university.ecs.lab.intermediate.create.services;
 
 import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.config.ConfigUtil;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import org.eclipse.jgit.api.errors.GitAPIException;
-import org.w3c.dom.DOMException;
 import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 
@@ -17,8 +15,6 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.*;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 
 /**
@@ -45,12 +41,12 @@ public class IRExtractionService {
      * This constructor initializes a new IRExtractionService and instantiates a
      * GitService object for repository manipulation
      *
-     * @param configPath path to configuration file
+     * @param config the Config to use
      * @param commitID optional commitID for extraction, if empty resolves to HEAD
      * @see GitService
      */
-    public IRExtractionService(String configPath, Optional<String> commitID) throws IOException, InterruptedException, GitAPIException {
-        gitService = new GitService(configPath);
+    public IRExtractionService(Config config, Optional<String> commitID) throws IOException, InterruptedException, GitAPIException {
+        gitService = new GitService(config);
 
         if(commitID.isPresent()) {
             this.commitID = commitID.get();
@@ -59,7 +55,7 @@ public class IRExtractionService {
             this.commitID = gitService.getHeadCommit();
         }
 
-        config = ConfigUtil.readConfig(configPath);
+        this.config = config;
     }
 
     /**
@@ -67,7 +63,7 @@ public class IRExtractionService {
      *
      * @param fileName name of output file for IR extraction
      */
-    public void generateIR(String fileName) throws IOException, InterruptedException {
+    public void generateIR(Path fileName) throws IOException, InterruptedException {
         MicroserviceSystem microserviceSystem = new MicroserviceSystem(config.getSystemName(), commitID, new HashSet<>(), new HashSet<>());
 
         // Clone remote repositories and scan through each cloned repo to extract endpoints
@@ -180,7 +176,7 @@ public class IRExtractionService {
      * @param microserviceSystem a MicroserviceSystem extracted from repository
      * @param fileName the name of the output file for IR
      */
-    private void writeToFile(MicroserviceSystem microserviceSystem, String fileName) throws IOException {
+    private void writeToFile(MicroserviceSystem microserviceSystem, Path fileName) throws IOException {
         JsonReadWriteUtils.writeToJSON(fileName, microserviceSystem);
     }
 
@@ -235,8 +231,13 @@ public class IRExtractionService {
         }
     }
 
-    public static MicroserviceSystem create(Path configPath) throws GitAPIException, IOException, InterruptedException {
-        IRExtractionService extractionService = new IRExtractionService(configPath.toString(), Optional.empty());
+    /**
+     * Creates a MicroserviceSystem that can be written to a file as an intermediate representation. Generates the system at the latest available commit ID.
+     * @param config The configuration to use (see {@link Config})
+     * @return The {@link MicroserviceSystem} derived from the codebase in the specified configuration
+     */
+    public static MicroserviceSystem create(Config config) throws GitAPIException, IOException, InterruptedException {
+        IRExtractionService extractionService = new IRExtractionService(config, Optional.empty());
         MicroserviceSystem microserviceSystem = new MicroserviceSystem(extractionService.config.getSystemName(), extractionService.commitID, new HashSet<>(), new HashSet<>());
 
         Set<Microservice> microservices = extractionService.cloneAndScanServices(microserviceSystem);
@@ -244,8 +245,14 @@ public class IRExtractionService {
         return microserviceSystem;
     }
 
-    public static MicroserviceSystem create(Path configPath, String commitID) throws GitAPIException, IOException, InterruptedException {
-        IRExtractionService extractionService = new IRExtractionService(configPath.toString(), Optional.of(commitID));
+    /**
+     * Creates a MicroserviceSystem that can be written to a file as an intermediate representation.
+     * @param config The configuration to use (see {@link Config})
+     * @param commitID The commit ID to make the MicroserviceSystem at
+     * @return The {@link MicroserviceSystem} derived from the codebase in the specified configuration
+     */
+    public static MicroserviceSystem create(Config config, String commitID) throws GitAPIException, IOException, InterruptedException {
+        IRExtractionService extractionService = new IRExtractionService(config, Optional.of(commitID));
         MicroserviceSystem microserviceSystem = new MicroserviceSystem(extractionService.config.getSystemName(), extractionService.commitID, new HashSet<>(), new HashSet<>());
 
         Set<Microservice> microservices = extractionService.cloneAndScanServices(microserviceSystem);
@@ -253,16 +260,41 @@ public class IRExtractionService {
         return microserviceSystem;
     }
 
-    public static void createAndWrite(Path configPath, Path outputPath) throws GitAPIException, IOException, InterruptedException {
-        MicroserviceSystem microserviceSystem = create(configPath.toAbsolutePath());
-        JsonReadWriteUtils.writeToJSON(outputPath.toString(), microserviceSystem);
+    /**
+     * Creates a MicroserviceSystem that can be written to a file as an intermediate representation.
+     * Additionally, it writes the MicroserviceSystem to a file.
+     * @param config The configuration to use (see {@link Config})
+     * @param outputPath The path to where the output should be written
+     * @return The {@link MicroserviceSystem} derived from the codebase in the specified configuration
+     */
+    public static MicroserviceSystem createAndWrite(Config config, Path outputPath) throws GitAPIException, IOException, InterruptedException {
+        MicroserviceSystem microserviceSystem = create(config);
+        JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
+        return microserviceSystem;
     }
 
+    /**
+     * Creates a MicroserviceSystem that can be written to a file as an intermediate representation.
+     * Additionally, it writes the MicroserviceSystem to a file.
+     * @param config The configuration to use (see {@link Config})
+     * @param commitID The commit ID to make the MicroserviceSystem at
+     * @param outputPath The path to where the output should be written
+     * @return The {@link MicroserviceSystem} derived from the codebase in the specified configuration
+     */
+    public static MicroserviceSystem createAndWrite(Config config, String commitID, Path outputPath) throws GitAPIException, IOException, InterruptedException {
+        MicroserviceSystem microserviceSystem = create(config, commitID);
+        JsonReadWriteUtils.writeToJSON(outputPath, microserviceSystem);
+        return microserviceSystem;
+    }
+
+    /**
+     * Reads a MicroserviceSystem from the given intermediate representation.
+     * @param inputPath The path to the intermediate representation
+     * @return A {@link MicroserviceSystem} derived from the IR
+     */
     public static MicroserviceSystem read(Path inputPath) throws IOException {
-        MicroserviceSystem microserviceSystem = JsonReadWriteUtils.readFromJSON(inputPath.toString(), MicroserviceSystem.class);
+        MicroserviceSystem microserviceSystem = JsonReadWriteUtils.readFromJSON(inputPath, MicroserviceSystem.class);
         MicroserviceSystem.setParentReferencesRecursively(microserviceSystem, null);
         return microserviceSystem;
     }
-
-
 }
