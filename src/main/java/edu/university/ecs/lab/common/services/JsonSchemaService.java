@@ -11,6 +11,7 @@ import edu.university.ecs.lab.delta.models.SystemChange;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * Service for authomatically generating JSON documentation.
@@ -53,7 +54,7 @@ public class JsonSchemaService {
         // Ensure the local directories exist
         FileUtils.makeDirs();
 
-        JsonReadWriteUtils.writeToJSON(directoryPath + "MicroserviceSystemSchema.json", getMicroserviceSystemSchema());
-        JsonReadWriteUtils.writeToJSON(directoryPath + "SystemChangeSchema.json", getSystemChangeSchema());
+        JsonReadWriteUtils.writeToJSON(Path.of(directoryPath + "MicroserviceSystemSchema.json"), getMicroserviceSystemSchema());
+        JsonReadWriteUtils.writeToJSON(Path.of(directoryPath + "SystemChangeSchema.json"), getSystemChangeSchema());
     }
 }

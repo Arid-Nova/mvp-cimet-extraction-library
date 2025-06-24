@@ -73,5 +73,4 @@ public class Config {
         int lastDotIndex = repositoryURL.lastIndexOf('.');
         return repositoryURL.substring(lastSlashIndex + 1, lastDotIndex);
     }
-
 }

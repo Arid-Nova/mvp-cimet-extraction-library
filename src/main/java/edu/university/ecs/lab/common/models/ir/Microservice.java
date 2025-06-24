@@ -8,9 +8,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.nio.file.Path;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -30,42 +29,48 @@ public class Microservice extends Node {
     /**
      * The path to the folder that represents the microservice
      */
-    private String path;
+    private Path path;
 
     /**
      * Controller classes belonging to the microservice.
      */
     @JsonDeserialize(as = HashSet.class)
-    private Set<JClass> controllers;
+    private Set<AbstractClass> controllers;
 
     /**
      * Service classes to the microservice.
      */
     @JsonDeserialize(as = HashSet.class)
-    private Set<JClass> services;
+    private Set<AbstractClass> services;
 
     /**
      * Repository classes belonging to the microservice.
      */
     @JsonDeserialize(as = HashSet.class)
-    private Set<JClass> repositories;
+    private Set<AbstractClass> repositories;
 
     /**
      * Entity classes belonging to the microservice.
      */
     @JsonDeserialize(as = HashSet.class)
-    private Set<JClass> entities;
+    private Set<AbstractClass> entities;
+
+    /**
+     * Entity classes belonging to the microservice.
+     */
+     @JsonDeserialize(as = HashSet.class)
+     protected Set<AbstractClass> unknowns;
 
     /**
      * Embeddable classes belonging to the microservice.
      */
-//    private final Set<JClass> embeddables;
+//    private final Set<AbstractClass> embeddables;
 
     /**
      * Feign client classes belonging to the microservice.
      */
     @JsonDeserialize(as = HashSet.class)
-    private Set<JClass> feignClients;
+    private Set<AbstractClass> feignClients;
 
     /**
      * Static files belonging to the microservice.
@@ -73,61 +78,66 @@ public class Microservice extends Node {
     @JsonDeserialize(as = HashSet.class)
     private Set<ConfigFile> files;
 
-    public Microservice(String name, String path) {
+    public Microservice(Node parent, String name, Path path) {
+        super(parent, name);
+
         this.name = name;
         this.path = path;
         this.controllers = new HashSet<>();
         this.services = new HashSet<>();
         this.repositories = new HashSet<>();
         this.entities = new HashSet<>();
+        this.unknowns = new HashSet<>();
 //        this.embeddables = new HashSet<>();
         this.feignClients = new HashSet<>();
         this.files = new HashSet<>();
     }
 
     /**
-     * Update's the microservice name of the JClass and adds
+     * Update's the microservice name of the AbstractClass and adds
      * it to the appropriate Set
      *
-     * @param jClass the JClass to add
+     * @param abstractClass the AbstractClass to add
      */
-    public void addJClass(JClass jClass) {
-        jClass.updateMicroserviceName(getName());
-        jClass.setParent(this);
+    public void addAbstractClass(AbstractClass abstractClass) {
+        abstractClass.setParent(Optional.of(this));
 
-        switch (jClass.getClassRole()) {
+        switch (abstractClass.getClassRole()) {
             case CONTROLLER:
-                controllers.add(jClass);
+                controllers.add(abstractClass);
                 break;
             case SERVICE:
-                services.add(jClass);
+                services.add(abstractClass);
                 break;
             case REPOSITORY:
             case REP_REST_RSC:
-                repositories.add(jClass);
+                repositories.add(abstractClass);
                 break;
             case ENTITY:
-                entities.add(jClass);
+                entities.add(abstractClass);
                 break;
             case FEIGN_CLIENT:
-                feignClients.add(jClass);
+                feignClients.add(abstractClass);
+                break;
+            case UNKNOWN:
+                unknowns.add(abstractClass);
                 break;
         }
     }
 
     /**
-     * This method removes a JClass from the microservice
+     * This method removes an AbstractClass from the microservice
      * by looking up it's path
      *
      * @param path the path to search for removal
      */
-    public void removeJClass(String path) {
-        Set<JClass> classes = getClasses();
-        JClass removeClass = null;
+    public void removeAbstractClass(String path) {
+        Set<AbstractClass> classes = getClasses();
+        AbstractClass removeClass = null;
 
-        for (JClass jClass : classes) {
-            if (jClass.getPath().equals(path)) {
-                removeClass = jClass;
+        for (AbstractClass abstractClass : classes) {
+            if (abstractClass.getPath().equals(path)) {
+                removeClass = abstractClass;
                 break;
             }
         }
@@ -156,6 +166,9 @@ public class Microservice extends Node {
             case FEIGN_CLIENT:
                 feignClients.remove(removeClass);
                 break;
+            case UNKNOWN:
+                unknowns.remove(removeClass);
+                break;
         }
     }
 
@@ -166,7 +179,6 @@ public class Microservice extends Node {
      * @param filePath the path to search for
      */
     public void removeProjectFile(String filePath) {
-
         if(FileUtils.isConfigurationFile(filePath)) {
             // First search configFile because there are less
             ConfigFile removeFile = null;
@@ -188,12 +200,12 @@ public class Microservice extends Node {
             getFiles().remove(removeFile);
 
         } else {
-            Set<JClass> classes = getClasses();
-            JClass removeClass = null;
+            Set<AbstractClass> classes = getClasses();
+            AbstractClass removeClass = null;
 
-            for (JClass jClass : classes) {
-                if (jClass.getPath().equals(filePath)) {
-                    removeClass = jClass;
+            for (AbstractClass abstractClass : classes) {
+                if (abstractClass.getPath().equals(filePath)) {
+                    removeClass = abstractClass;
                     break;
                 }
             }
@@ -222,6 +234,9 @@ public class Microservice extends Node {
                 case FEIGN_CLIENT:
                     feignClients.remove(removeClass);
                     break;
+                case UNKNOWN:
+                    unknowns.remove(removeClass);
+                    break;
             }
 
         }
@@ -230,16 +245,17 @@ public class Microservice extends Node {
     /**
      * This method returns all classes of the microservice in a new set
      *
-     * @return the set of all JClasses
+     * @return the set of all AbstractClasses
      */
     @JsonIgnore
-    public Set<JClass> getClasses() {
-        Set<JClass> classes = new HashSet<>();
+    public Set<AbstractClass> getClasses() {
+        Set<AbstractClass> classes = new HashSet<>();
         classes.addAll(getControllers());
         classes.addAll(getServices());
         classes.addAll(getRepositories());
         classes.addAll(getEntities());
         classes.addAll(getFeignClients());
+        classes.addAll(getUnknowns());
 
         return classes;
     }
@@ -266,7 +282,7 @@ public class Microservice extends Node {
     @JsonIgnore
     public List<RestCall> getRestCalls() {
         return getClasses().stream()
-                .flatMap(jClass -> jClass.getRestCalls().stream()).collect(Collectors.toList());
+                .flatMap(abstractClass -> abstractClass.getRestCalls().stream()).collect(Collectors.toList());
     }
 
     /**
@@ -287,7 +303,7 @@ public class Microservice extends Node {
      */
     @JsonIgnore
     public Set<MethodCall> getMethodCalls() {
-        return getClasses().stream().flatMap(jClass -> jClass.getMethodCalls().stream()).collect(Collectors.toSet());
+        return getClasses().stream().flatMap(abstractClass -> abstractClass.getMethodCalls().stream()).collect(Collectors.toSet());
     }
 
     /**
@@ -297,7 +313,7 @@ public class Microservice extends Node {
      */
     @JsonIgnore
     public Set<Method> getMethods() {
-        return getClasses().stream().flatMap(jClass -> jClass.getMethods().stream()).collect(Collectors.toSet());
+        return getClasses().stream().flatMap(abstractClass -> abstractClass.getMethods().stream()).collect(Collectors.toSet());
     }
 
     /**
@@ -306,6 +322,19 @@ public class Microservice extends Node {
     @Override
     @JsonIgnore
     public String getID() {
-        return this.path;
+        return this.path.normalize().toString();
     }
+
+    @Override
+    public List<? extends Node> getChildren() {
+        return getClasses().stream().toList();
+    }
+
+    @Override
+    public List<? extends Node> getDescendants() {
+        return new ArrayList<>();
+    }
+
+    @Override
+    public void clearDescendants() {}
 }

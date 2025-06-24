@@ -1,33 +1,49 @@
 package edu.university.ecs.lab.common.models.ir;
 
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
+import edu.university.ecs.lab.common.models.enums.ClassType;
 import edu.university.ecs.lab.common.models.enums.FileType;
 import lombok.*;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@Data
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
+@Getter
+@Setter
 @JsonTypeName("JEnum")
-public class JEnum extends JClass {
+public class JEnum extends AbstractClass {
+    /**
+     * Class implementations
+     */
+    @JsonDeserialize(as = HashSet.class)
+    @NonNull
+    private Set<String> implementedTypes;
+
     /**
      * A list of the constants defined in the Enum
      */
-    private List<String> enumTypes;
+    @JsonDeserialize(as = HashSet.class)
+    @NonNull
+    private Set<String> enumTypes;
 
-    public JEnum(String name, String path, String packageName, ClassRole classRole) {
-        super(name, path, packageName, classRole);
-        this.fileType = FileType.JENUM;
+    public JEnum(Node parent, Path path, String packageName, @NonNull Set<String> implementedTypes, @NonNull Set<String> enumTypes) {
+        super(parent, path, ClassRole.UNKNOWN, ClassType.ENUM, packageName, AccessModifier.PACKAGE_PRIVATE, Boolean.TRUE, Boolean.TRUE, Boolean.FALSE);
+
+        this.implementedTypes = implementedTypes;
+        this.enumTypes = enumTypes;
     }
 
-    public JEnum(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> implementedTypes, AccessModifier protection, List<String> enumTypes) {
-        super(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls, implementedTypes, new HashSet<String>(), protection, true, false, true);
-        this.fileType = FileType.JENUM;
-        this.enumTypes = enumTypes;
+    public JEnum(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, Set<Method> methods, Set<String> implementedTypes, @NonNull Set<String> enumTypes) {
+        super(parent, path, classRole, ClassType.ENUM, packageName, accessModifier, Boolean.TRUE, Boolean.TRUE, Boolean.FALSE, imports, annotations, fields, methods);
+
+        this.implementedTypes = new HashSet<>(implementedTypes);
+        this.enumTypes = new HashSet<>(enumTypes);
     }
 }

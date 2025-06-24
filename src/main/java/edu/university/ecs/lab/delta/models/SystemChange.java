@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  * This class represents the overall change in the IR from oldCommit
- * to newCommit as a list of Deltas see {@link Delta}
+ * to newCommit as a list of Deltas see {@link AbstractDelta}
  */
 @Data
 @AllArgsConstructor
@@ -31,5 +31,5 @@ public class SystemChange {
     /**
      * List of delta changes
      */
-    private List<Delta> changes = new ArrayList<>();
+    private List<AbstractDelta> changes = new ArrayList<>();
 }

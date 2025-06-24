@@ -1,29 +1,39 @@
 package edu.university.ecs.lab.common.models.ir;
 
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
+import edu.university.ecs.lab.common.models.enums.ClassType;
 import edu.university.ecs.lab.common.models.enums.FileType;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
+import jakarta.annotation.Nullable;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-@Data
-@EqualsAndHashCode(callSuper = true)
 @NoArgsConstructor
+@Setter
+@Getter
 @JsonTypeName("JInterface")
-public class JInterface extends JClass {
-    public JInterface(String name, String path, String packageName, ClassRole classRole) {
-        super(name, path, packageName, classRole);
-        this.fileType = FileType.JINTERFACE;
+public class JInterface extends AbstractClass {
+    /**
+     * Other interfaces extended
+     */
+    @JsonDeserialize(as = HashSet.class)
+    @NonNull
+    private Set<String> extendedTypes;
+
+    public JInterface(Node parent, Path path, String packageName, @NonNull Set<String> extendedTypes) {
+        super(parent, path, ClassRole.UNKNOWN, ClassType.INTERFACE, packageName, AccessModifier.PACKAGE_PRIVATE, Boolean.FALSE, Boolean.FALSE, Boolean.FALSE);
+        this.extendedTypes = extendedTypes;
     }
 
-    public JInterface(String name, String path, String packageName, ClassRole classRole, Set<Import> imports, Set<Method> methods, Set<Field> fields, Set<Annotation> classAnnotations, List<MethodCall> methodCalls, Set<String> extendedTypes, AccessModifier protection, Boolean isFinal, Boolean isStatic) {
-        super(name, path, packageName, classRole, imports, methods, fields, classAnnotations, methodCalls, new HashSet<String>(), extendedTypes, protection, isFinal, true, isStatic);
-        this.fileType = FileType.JINTERFACE;
+    public JInterface(Node parent, Path path, ClassRole classRole, String packageName, AccessModifier accessModifier, Boolean isFinal, Set<Import> imports, Set<Annotation> annotations, Set<Field> fields, @NonNull Set<Method> methods, Set<String> extendedTypes) {
+        super(parent, path, classRole, ClassType.INTERFACE, packageName, accessModifier, isFinal, Boolean.FALSE, Boolean.FALSE, imports, annotations, fields, methods);
+        this.extendedTypes = extendedTypes;
     }
 }

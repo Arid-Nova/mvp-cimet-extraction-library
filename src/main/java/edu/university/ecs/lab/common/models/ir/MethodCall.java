@@ -1,18 +1,26 @@
 package edu.university.ecs.lab.common.models.ir;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
+import lombok.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Represents a method call in Java.
  */
-@Data
 @NoArgsConstructor
-@EqualsAndHashCode(callSuper = false)
+@Getter
+@Setter
 @JsonTypeInfo(
         use = JsonTypeInfo.Id.NAME,
         include = JsonTypeInfo.As.PROPERTY,
@@ -20,6 +28,7 @@ import lombok.NoArgsConstructor;
 )
 @JsonSubTypes({@JsonSubTypes.Type(value = RestCall.class, name = "RestCall")})
 @JsonTypeName("MethodCall")
+@EqualsAndHashCode(callSuper = true)
 public class MethodCall extends Component {
 
     /**
@@ -43,40 +52,65 @@ public class MethodCall extends Component {
      */
     protected String parameterContents;
 
-    /**
-     * The name of the microservice this MethodCall is called from
-     */
-    protected String microserviceName;
+    public MethodCall(Node parent, String name, Location location) {
+        super(parent, name, location);
 
-    /**
-     * The class id that this MethodCall is called from
-     */
-    protected String className;
+        this.objectName = "";
+        this.objectType = "";
+        this.calledFrom = "";
+        this.parameterContents = "";
+    }
 
-    public MethodCall(String name, String packageName,String objectType, String objectName, String calledFrom, String parameterContents, String microserviceName,
-                      String className, Location location) {
-        this.name = name;
-        this.packageAndClassName = packageName;
-        this.objectName = objectName;
+    public MethodCall(MethodCall methodCall) {
+        this(methodCall.getParent().orElse(null), methodCall.getName(), methodCall.getLocation());
+        this.objectName = methodCall.getObjectName();
+        this.objectType = methodCall.getObjectType();
+        this.calledFrom = methodCall.getCalledFrom();
+        this.parameterContents = methodCall.getParameterContents();
+    }
+
+    public MethodCall(Node parent, MethodCallExpr methodCallExpr, String objectType) {
+        super(parent, methodCallExpr.getNameAsString(), new Location(methodCallExpr.getRange().get()));
+
+        this.objectName = getCallingObjectName(methodCallExpr);
         this.objectType = objectType;
-        this.calledFrom = calledFrom;
-        this.parameterContents = parameterContents;
-        this.microserviceName = microserviceName;
-        this.className = className;
-        this.location = location;
+        this.calledFrom = getParent().isPresent() ? getParent().get().getName() : "";
+        this.parameterContents = methodCallExpr.getArguments().stream().map(Objects::toString).collect(Collectors.joining(","));
     }
 
-    /**
-     * Checks if a method call matches a given method
-     * 
-     * @param methodCall method call object to match
-     * @param method method object to match
-     * @return true if method call and method match, false otherwise
-     */
-    public static boolean matchMethod(MethodCall methodCall, Method method) {
-        return methodCall.microserviceName.equals(method.microserviceName) && methodCall.objectType.equals(method.className)
-                && methodCall.name.equals(method.name);
+    private static String getCallingObjectName(MethodCallExpr mce) {
+        Expression scope = mce.getScope().orElse(null);
 
+        if (Objects.nonNull(scope) && scope instanceof NameExpr) {
+            NameExpr fae = scope.asNameExpr();
+            return fae.getNameAsString();
+        }
+
+        return "";
     }
 
+    @JsonIgnore
+    public Microservice getParentMicroservice() {
+        if (this.parent.isPresent()) {
+            Node p = this.parent.get();
+            while (!(p instanceof Microservice) && p.parent.isPresent()) {
+                p = p.parent.get();
+            }
+            if (p instanceof Microservice) {
+                return (Microservice) p;
+            } else {
+                return null;
+            }
+        } else {
+            return null;
+        }
+    }
+
+    @Override
+    public List<Component> getChildren() {
+        return new ArrayList<>();
+    }
+
+    @Override
+    public void clearDescendants() {}
 }

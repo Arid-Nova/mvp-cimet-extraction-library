@@ -4,14 +4,18 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.annotation.JsonTypeName;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * Abstract class for all code components that fall under a JClass
  * structure.
  */
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @JsonTypeInfo(
         use = JsonTypeInfo.Id.NAME,
@@ -24,30 +28,68 @@ import lombok.NoArgsConstructor;
         @JsonSubTypes.Type(value = Method.class, name = "Method"),
         @JsonSubTypes.Type(value = MethodCall.class, name = "MethodCall"),
         @JsonSubTypes.Type(value = Parameter.class, name = "Parameter"),
+        @JsonSubTypes.Type(value = Import.class, name = "Import"),
 })
 @JsonTypeName("Component")
+@EqualsAndHashCode(callSuper = true)
 public abstract class Component extends Node {
-    /**
-     * Name of the structure
-     */
-    protected String name;
-
-    /**
-     * Name of the package + class (package path e.g. edu.university.lab.AdminController)
-     */
-    protected String packageAndClassName;
-
     /**
      * The line range of the component
      */
+    @JsonIgnore
+    @EqualsAndHashCode.Exclude
     protected Location location;
-    
+
+    public Component(Node parent, String name, Location location) {
+        super(parent, name);
+
+        if (!(parent instanceof AbstractClass) && !(parent instanceof Component))
+            throw new RuntimeException("Invalid parent provided to Component.");
+
+        this.location = location;
+    }
+
     /**
-     * See {@link Node#getID()}
+     * This method generates a unique ID for datatypes that fall
+     * under a JClass
+     *
+     * @return the string unique ID
      */
     @Override
-    @JsonIgnore
-    public final String getID() {
-        return packageAndClassName + "." + name;
+    public String getID() {
+        if(getParent() == null) {
+            return getOriginalDeserializedID();
+        }
+        if(getParent().isPresent()) {
+            if(getParent().get() instanceof AbstractClass abstractClass) {
+                return abstractClass.getPackageName() + "." + abstractClass.getName() + "&" + getName();
+            } else {
+                return getParent().get().getID() + "&" + getName();
+            }
+        } else {
+            return getName();
+        }
+    }
+
+    @Override
+    public abstract List<Component> getChildren();
+
+    @Override
+    public final List<Component> getDescendants() {
+        List<Component> allDescendants = new ArrayList<>();
+        List<Component> thisChildren = getChildren();
+
+        if (thisChildren != null && !thisChildren.isEmpty()) {
+            allDescendants.addAll(thisChildren);
+
+            for (Component child : thisChildren) {
+                if (child != null) {
+                    allDescendants.addAll(child.getDescendants());
+                }
+            }
+        }
+
+        // Return the populated list (or an empty list if no children were found)
+        return allDescendants;
     }
 }
