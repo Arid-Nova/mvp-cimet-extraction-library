@@ -8,7 +8,7 @@ import edu.university.ecs.lab.common.models.enums.ClassType;
 import edu.university.ecs.lab.common.models.enums.FileType;
 import lombok.*;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;

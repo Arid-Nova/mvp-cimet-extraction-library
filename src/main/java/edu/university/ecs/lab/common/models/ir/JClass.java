@@ -1,19 +1,15 @@
 package edu.university.ecs.lab.common.models.ir;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.models.enums.ClassType;
-import edu.university.ecs.lab.common.models.enums.FileType;
 import lombok.*;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Represents a class in Java. It holds all information regarding that class including all method

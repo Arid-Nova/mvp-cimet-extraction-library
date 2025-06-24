@@ -10,7 +10,7 @@ import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.models.enums.ClassType;
 import lombok.*;
 
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;

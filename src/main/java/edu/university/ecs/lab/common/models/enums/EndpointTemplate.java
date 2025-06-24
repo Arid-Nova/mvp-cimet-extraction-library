@@ -1,7 +1,7 @@
 package edu.university.ecs.lab.common.models.enums;
 
 import com.github.javaparser.ast.expr.*;
-import edu.university.ecs.lab.intermediate.utils.StringParserUtils;
+import edu.university.ecs.lab.common.utils.StringUtils;
 import lombok.Getter;
 
 import java.util.Arrays;
@@ -125,8 +125,8 @@ public class EndpointTemplate {
     public static String getPathFromAnnotation(AnnotationExpr ae, String url) {
         // Annotations of type @Mapping("/endpoint")
         if (ae.isSingleMemberAnnotationExpr()) {
-            url = url + StringParserUtils.simplifyEndpointURL(
-                    StringParserUtils.removeOuterQuotations(
+            url = url + StringUtils.simplifyEndpointURL(
+                    StringUtils.removeOuterQuotations(
                             ae.asSingleMemberAnnotationExpr().getMemberValue().toString()));
         }
 
@@ -134,8 +134,8 @@ public class EndpointTemplate {
         else if (ae.isNormalAnnotationExpr() && !ae.asNormalAnnotationExpr().getPairs().isEmpty()) {
             for (MemberValuePair mvp : ae.asNormalAnnotationExpr().getPairs()) {
                 if (mvp.getName().toString().equals("path") || mvp.getName().toString().equals("value")) {
-                    url = url + StringParserUtils.simplifyEndpointURL(
-                            StringParserUtils.removeOuterQuotations(mvp.getValue().toString()));
+                    url = url + StringUtils.simplifyEndpointURL(
+                            StringUtils.removeOuterQuotations(mvp.getValue().toString()));
                     break;
                 }
             }

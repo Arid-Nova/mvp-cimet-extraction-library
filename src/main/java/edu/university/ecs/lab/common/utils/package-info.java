@@ -7,6 +7,8 @@
  * The main classes include:
  *     - {@link edu.university.ecs.lab.common.utils.FileUtils} - Manages file paths and conversions.
  *     - {@link edu.university.ecs.lab.common.utils.JsonReadWriteUtils} - Handles JSON serialization and deserialization.
+ *     - {@link edu.university.ecs.lab.common.utils.NonJsonReadWriteUtils} - Handles alternative serialization and deserialization methods.
  *     - {@link edu.university.ecs.lab.common.utils.SourceToObjectUtils} - Parses Java source files into data models.
+ *     - {@link edu.university.ecs.lab.common.utils.StringUtils} - Provides various String utilities.
  */
 package edu.university.ecs.lab.common.utils;

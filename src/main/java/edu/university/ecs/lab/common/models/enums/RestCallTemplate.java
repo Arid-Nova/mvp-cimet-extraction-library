@@ -3,11 +3,9 @@ package edu.university.ecs.lab.common.models.enums;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.FieldDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.*;
 import edu.university.ecs.lab.common.models.ir.MethodCall;
-import edu.university.ecs.lab.intermediate.utils.StringParserUtils;
-import javassist.expr.Expr;
+import edu.university.ecs.lab.common.utils.StringUtils;
 import lombok.Getter;
 
 import java.util.Set;
@@ -184,7 +182,7 @@ public class RestCallTemplate {
             if (fd.getVariables().toString().contains(fieldName)) {
                 Expression init = fd.getVariable(0).getInitializer().orElse(null);
                 if (init != null) {
-                    return StringParserUtils.removeOuterQuotations(init.toString());
+                    return StringUtils.removeOuterQuotations(init.toString());
                 }
             }
         }
