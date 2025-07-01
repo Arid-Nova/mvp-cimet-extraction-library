@@ -1,6 +1,6 @@
 # CIMET Extraction Library
 
-This Maven library props up the functionality of CIMET2. 
+This Maven library props up the functionality of CIMET2.
 It is intended to be used as a temporal parser of microservice systems.
 It is capable of extracting intermediate representations (IR) of the system
 and delta representations of the changes to the system.
@@ -8,7 +8,7 @@ and delta representations of the changes to the system.
 ## Prerequisites
 
 * Maven 3.6+
-* Java 16+ (16 Recommended)
+* Java 24+ (24 Recommended)
 
 ## To Compile:
     ``mvn clean install -DskipTests``
