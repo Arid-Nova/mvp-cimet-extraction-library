@@ -44,7 +44,7 @@ public class Config {
      * Check that config file is valid and has all required fields
      */
     private void validateConfig(String systemName, String repositoryURL, String branch) {
-        if (!systemName.isBlank() && !repositoryURL.isBlank() && !branch.isBlank()) {
+        if (systemName.isBlank() || repositoryURL.isBlank() || branch.isBlank()) {
            throw new IllegalStateException("An invalid configuration was found!");
         }
 
@@ -58,7 +58,7 @@ public class Config {
      * The list of repository objects as indicated by config
      */
     private void validateRepositoryURL(String repositoryURL) {
-        if (!(repositoryURL.isBlank() || repositoryURL.startsWith(GIT_SCHEME_DOMAIN) || repositoryURL.endsWith(GIT_PATH_EXTENSION))) {
+        if (repositoryURL.isBlank() || !repositoryURL.startsWith(GIT_SCHEME_DOMAIN) || !repositoryURL.endsWith(GIT_PATH_EXTENSION)) {
             throw new IllegalStateException("An invalid repository URL was provided!");
         }
     }
