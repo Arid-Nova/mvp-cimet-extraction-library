@@ -57,8 +57,16 @@ public class MergeService {
             }
         }
 
-        microserviceSystem.setCommitID(systemChange.getNewCommit());
         MicroserviceSystem.setParentReferencesRecursively(microserviceSystem, null);
+
+        for (Microservice m : microserviceSystem.getMicroservices()) {
+            String commitID = systemChange.getNewCommits().get(m.getRepositoryURL());
+
+            // Change commit IDs only if there is a new commit
+            if (commitID != null) {
+                m.setCommitID(commitID);
+            }
+        }
     }
 
 
@@ -103,7 +111,7 @@ public class MergeService {
             }
         }
 
-        // If we found it's ms
+        // If we found its ms
         if(delta.getFileDelta().getProjectFile() instanceof ConfigFile) {
             ms.removeProjectFile(delta.getFileDelta().getProjectFile().getPath().normalize().toString());
             ms.getFiles().add((ConfigFile) delta.getFileDelta().getProjectFile());
@@ -141,8 +149,9 @@ public class MergeService {
                 // Add descendants to the class
                 recursiveAddDescendants(components, aClass);
 
+                // Remove old class and add new class
+                ms.removeAbstractClass(old.get().getID());
                 ms.addAbstractClass(aClass);
-
             } else {
                 // Prepare to unflatten the class
                 AbstractClass aClass = (AbstractClass) delta.getFileDelta().getProjectFile();
@@ -231,7 +240,13 @@ public class MergeService {
                             microserviceSystem.orphanize(removeMicroservice);
                         }
 
-                        microservice = new Microservice(microserviceSystem, tokens[tokens.length - 2], Path.of(delta.getPath().normalize().toString().replace(File.separator + "pom.xml", "").replace(File.separator + "build.gradle", "")));
+                        String commitID = systemChange.getOldCommits().get(delta.getRepositoryURL());
+
+                        microservice = new Microservice(microserviceSystem, tokens[tokens.length - 2],
+                                delta.getRepositoryURL(), commitID,
+                                Path.of(delta.getPath().normalize().toString()
+                                        .replace(File.separator + "pom.xml", "")
+                                        .replace(File.separator + "build.gradle", "")));
                         // Here we must check if any orphans are waiting on this creation
                         microserviceSystem.adopt(microservice);
                         microserviceSystem.getMicroservices().add(microservice);

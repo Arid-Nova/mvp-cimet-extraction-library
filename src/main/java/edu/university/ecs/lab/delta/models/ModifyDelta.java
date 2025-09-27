@@ -21,8 +21,8 @@ public class ModifyDelta extends AbstractDelta {
     @NonNull
     protected SimpleDelta fileDelta;
 
-    public ModifyDelta(Path path, @NonNull List<ComponentDelta> componentDeltas, @NonNull SimpleDelta fileDelta) {
-        super(path, ChangeType.MODIFY);
+    public ModifyDelta(Path path, @NonNull List<ComponentDelta> componentDeltas, String repositoryURL, @NonNull SimpleDelta fileDelta) {
+        super(path, ChangeType.MODIFY, repositoryURL);
 
         this.componentDeltas = componentDeltas;
         this.fileDelta = fileDelta;

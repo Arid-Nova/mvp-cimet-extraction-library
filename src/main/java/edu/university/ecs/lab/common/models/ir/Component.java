@@ -35,9 +35,12 @@ import java.util.Objects;
 public abstract class Component extends Node {
     /**
      * The line range of the component
+     *
+     * @deprecated Only works for IRs - line numbers are not updated during fine-grain delta/merge. May be removed.
      */
     @JsonIgnore
     @EqualsAndHashCode.Exclude
+    @Deprecated
     protected Location location;
 
     public Component(Node parent, String name, Location location) {

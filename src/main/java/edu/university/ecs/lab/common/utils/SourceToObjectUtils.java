@@ -15,6 +15,7 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import edu.university.ecs.lab.common.config.Config;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.enums.*;
 import edu.university.ecs.lab.common.models.ir.*;
 
@@ -32,12 +33,10 @@ public class SourceToObjectUtils {
     private static String className;
     private static String packageName;
     private static CombinedTypeSolver combinedTypeSolver;
-    private static Config config;
 
 
-    private static void generateStaticValues(File sourceFile, Config config1) {
+    private static void generateStaticValues(File sourceFile, RepositoryConfig config) {
         // Parse the highest level node being compilation unit
-        config = config1;
         try {
             cu = StaticJavaParser.parse(sourceFile);
         } catch (Exception e) {
@@ -66,7 +65,7 @@ public class SourceToObjectUtils {
      * @param sourceFile the file to parse
      * @return the AbstractClass object representing the file
      */
-    public static AbstractClass parseClass(Microservice microservice, File sourceFile, Config config, Boolean filterOutUnknownClassRoles) {
+    public static AbstractClass parseClass(Microservice microservice, File sourceFile, RepositoryConfig config, Boolean filterOutUnknownClassRoles) {
         // Guard condition
         if(Objects.isNull(sourceFile) || FileUtils.isConfigurationFile(sourceFile.getPath())) {
             return null;
@@ -406,7 +405,7 @@ public class SourceToObjectUtils {
         return abstractClass;
     }
 
-    public static ConfigFile parseConfigurationFile(File file, Config config, Microservice microservice) {
+    public static ConfigFile parseConfigurationFile(File file, RepositoryConfig config, Microservice microservice) {
         if(file.getName().endsWith(".yml")) {
             return NonJsonReadWriteUtils.readFromYaml(file.getPath(), config, microservice);
         } else if(file.getName().equals("DockerFile")) {

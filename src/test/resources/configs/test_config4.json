@@ -1,6 +1,12 @@
 {
   "systemName": "pacbot",
-  "repositoryURL": "https://github.com/tmobile/pacbot.git",
-  "baseCommit": "997c240c123d81cf3f55ff5093127c5fda6119c3",
-  "baseBranch": "master"
+  "systemRepositories": [
+    {
+      "repoBranchPair": {
+        "repositoryURL": "https://github.com/tmobile/pacbot.git",
+        "branchName": "master"
+      },
+      "commitID": "997c240c123d81cf3f55ff5093127c5fda6119c3"
+    }
+  ]
 }

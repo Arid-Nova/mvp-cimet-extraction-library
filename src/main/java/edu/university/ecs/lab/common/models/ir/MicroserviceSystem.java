@@ -25,11 +25,6 @@ public class MicroserviceSystem extends Node {
     private String name;
 
     /**
-     * The commit ID of the system
-     */
-    private String commitID;
-
-    /**
      * Set of microservices in the system
      */
     @JsonDeserialize(as = HashSet.class)
@@ -41,9 +36,8 @@ public class MicroserviceSystem extends Node {
     @JsonDeserialize(as = HashSet.class)
     private Set<ProjectFile> orphans;
 
-    public MicroserviceSystem(String name, String commitID, Set<Microservice> microservices, Set<ProjectFile> orphans) {
+    public MicroserviceSystem(String name, Set<Microservice> microservices, Set<ProjectFile> orphans) {
         this.name = name;
-        this.commitID = commitID;
         this.microservices = microservices;
         this.orphans = orphans;
 
@@ -170,7 +164,7 @@ public class MicroserviceSystem extends Node {
     @Override
     @JsonIgnore
     public String getID() {
-        return this.name + " " + this.commitID;
+        return this.name;
     }
 
     @Override

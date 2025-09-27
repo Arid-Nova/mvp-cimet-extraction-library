@@ -6,7 +6,9 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * This class represents the overall change in the IR from oldCommit
@@ -19,14 +21,14 @@ import java.util.List;
 public class SystemChange {
 
     /**
-     * The old commitID
+     * The old commitIDs
      */
-    private String oldCommit;
+    private Map<String, String> oldCommits = new HashMap<>();
 
     /**
-     * The new commitID
+     * The new commitIDs
      */
-    private String newCommit;
+    private Map<String, String> newCommits = new HashMap<>();
 
     /**
      * List of delta changes

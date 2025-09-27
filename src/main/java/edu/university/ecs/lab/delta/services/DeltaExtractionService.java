@@ -2,6 +2,7 @@ package edu.university.ecs.lab.delta.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.university.ecs.lab.common.config.Config;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.FileUtils;
@@ -28,10 +29,6 @@ import java.util.stream.Collectors;
 public class DeltaExtractionService {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private static final String DEV_NULL = "/dev/null";
-    /**
-     * Config object representing the contents of the config file
-     */
-    private final Config config;
 
     /**
      * GitService instance for interacting with the local repository
@@ -39,14 +36,9 @@ public class DeltaExtractionService {
     private final GitService gitService;
 
     /**
-     * The old commit for comparison
+     * The new commit per repository for comparison
      */
-    private final String commitOld;
-
-    /**
-     * The new commit for comparison
-     */
-    private final String commitNew;
+    private final Map<RepositoryConfig, String> newCommits;
 
     /**
      * System change object that will be returned
@@ -63,33 +55,38 @@ public class DeltaExtractionService {
      *
      * @param config The Config to use
      * @param intermediateSystem The base MicroserviceSystem to generate the Delta from
-     * @param commitNew The new commit for comparison
+     * @param newCommits The commit IDs of the new commits for each repository
      */
-    private DeltaExtractionService(Config config, MicroserviceSystem intermediateSystem, String commitNew) throws IOException, InterruptedException {
-        this.config = config;
+    private DeltaExtractionService(Config config, MicroserviceSystem intermediateSystem, Map<RepositoryConfig, String> newCommits) throws IOException, InterruptedException {
         this.gitService = new GitService(config);
-        this.commitOld = intermediateSystem.getCommitID();
-        this.commitNew = commitNew;
+        this.newCommits = newCommits;
         this.microserviceSystem = intermediateSystem;
     }
 
     /**
-     * Generates Delta file representing changes between commitOld and commitNew
+     * Generates Delta for multiple repositories, representing changes between old commits and new commits
      */
-    private void generateDelta() throws GitAPIException, IOException {
-        List<DiffEntry> differences = null;
+    private void generateMultiRepoDelta() throws GitAPIException, IOException {
+        for(Map.Entry<RepositoryConfig, String> entry : newCommits.entrySet()) {
+            generateDelta(entry.getKey());
+        }
+    }
 
+    /**
+     * Generates Delta for a repository representing changes between an old commit and new commit
+     */
+    private void generateDelta(RepositoryConfig rc) throws GitAPIException, IOException {
         // Ensure we start at commitOld
-        gitService.resetLocal(commitOld);
+        gitService.resetLocal(rc, rc.commitID());
 
         // Get the differences between commits
-        differences = gitService.getDifferences(commitOld, commitNew);
+        List<DiffEntry> differences = gitService.getDifferences(rc, rc.commitID(), newCommits.get(rc));
 
         // Advance the local commit for parsing
-        gitService.resetLocal(commitNew);
+        gitService.resetLocal(rc, newCommits.get(rc));
 
         // process/write differences to delta output
-        processDelta(differences);
+        processDelta(rc, differences);
     }
 
     /**
@@ -97,11 +94,11 @@ public class DeltaExtractionService {
      *
      * @param diffEntries list of differences
      */
-    private void processDelta(List<DiffEntry> diffEntries) {
+    private void processDelta(RepositoryConfig rc, List<DiffEntry> diffEntries) {
         // Set up a new SystemChangeObject
         systemChange = new SystemChange();
-        systemChange.setOldCommit(commitOld);
-        systemChange.setNewCommit(commitNew);
+        systemChange.getOldCommits().put(rc.repoBranchPair().repositoryURL(), rc.commitID());
+        systemChange.getNewCommits().put(rc.repoBranchPair().repositoryURL(), newCommits.get(rc));
         AbstractDelta abstractDelta = null;
 
         // process each difference
@@ -143,13 +140,13 @@ public class DeltaExtractionService {
 
             switch(changeType) {
                 case ADD:
-                    abstractDelta = add(Path.of(newPath));
+                    abstractDelta = add(rc, Path.of(newPath));
                     break;
                 case MODIFY:
-                    abstractDelta = modify(Path.of(oldPath), microserviceSystem);
+                    abstractDelta = modify(rc, Path.of(oldPath), microserviceSystem);
                     break;
                 case DELETE:
-                    abstractDelta = delete(Path.of(oldPath));
+                    abstractDelta = delete(rc, Path.of(oldPath));
             }
 
             systemChange.getChanges().add(abstractDelta);
@@ -164,17 +161,17 @@ public class DeltaExtractionService {
      * @param newPath git path of new file
      * @return JsonObject of data of the new file
      */
-    private AbstractDelta add(Path newPath) {
+    private AbstractDelta add(RepositoryConfig rc, Path newPath) {
         ProjectFile projectFile = null;
         if (FileUtils.isConfigurationFile(newPath.toString())) {
             projectFile = SourceToObjectUtils.parseConfigurationFile(
-                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config, null);
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), rc.getRepoName())), rc, null);
         } else {
             projectFile = SourceToObjectUtils.parseClass(null,
-                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config,  false);
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), rc.getRepoName())), rc,  false);
         }
 
-        return new SimpleDelta(newPath, ChangeType.ADD, projectFile);
+        return new SimpleDelta(newPath, ChangeType.ADD, rc.repoBranchPair().repositoryURL(), projectFile);
     }
 
     /**
@@ -184,14 +181,15 @@ public class DeltaExtractionService {
      *
      * @return JsonObject of data of the new file
      */
-    private AbstractDelta modify(Path newPath, MicroserviceSystem microserviceSystem) {
+    private AbstractDelta modify(RepositoryConfig rc, Path newPath, MicroserviceSystem microserviceSystem) {
         if (FileUtils.isConfigurationFile(newPath.toString())) {
             ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(
-                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config, null);
-            return new ModifyDelta(newPath, new ArrayList<>(), new SimpleDelta(newPath, ChangeType.MODIFY, configFile));
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), rc.getRepoName())), rc, null);
+            return new ModifyDelta(newPath, new ArrayList<>(), rc.repoBranchPair().repositoryURL(),
+                    new SimpleDelta(newPath, ChangeType.MODIFY, rc.repoBranchPair().repositoryURL(), configFile));
         } else {
             AbstractClass modifyClass = SourceToObjectUtils.parseClass(null,
-                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), config.getRepoName())), config,  false);
+                    new File(FileUtils.gitPathToLocalPath(newPath.toString(), rc.getRepoName())), rc, false);
 
             AbstractClass oldClass = microserviceSystem.findClass(newPath);
 
@@ -247,7 +245,8 @@ public class DeltaExtractionService {
 
             modifyClass.clearDescendants();
 
-            return new ModifyDelta(newPath, componentDeltas, new SimpleDelta(newPath, ChangeType.MODIFY, modifyClass));
+            return new ModifyDelta(newPath, componentDeltas, rc.repoBranchPair().repositoryURL(),
+                    new SimpleDelta(newPath, ChangeType.MODIFY, rc.repoBranchPair().repositoryURL(), modifyClass));
         }
     }
 
@@ -256,8 +255,8 @@ public class DeltaExtractionService {
      *
      * @return JsonObject that is empty
      */
-    private AbstractDelta delete(Path oldPath) {
-        return new SimpleDelta(oldPath, ChangeType.DELETE, null);
+    private AbstractDelta delete(RepositoryConfig rc, Path oldPath) {
+        return new SimpleDelta(oldPath, ChangeType.DELETE, rc.repoBranchPair().repositoryURL(), null);
     }
 
     private SystemChange getSystemChange() {
@@ -268,12 +267,12 @@ public class DeltaExtractionService {
      * Creates a Delta incrementally comparing the base MicroserviceSystem with a newer commit
      * @param config The configuration to use
      * @param intermediateSystem The base MicroserviceSystem
-     * @param newCommit The commit to compare the base system with
+     * @param newCommits The commits to compare the base system with
      * @return A {@link SystemChange} containing all changes made from the base system to the new commit ID
      */
-    public static SystemChange create(Config config, MicroserviceSystem intermediateSystem, String newCommit) throws IOException, InterruptedException, GitAPIException {
-        DeltaExtractionService extractionService = new DeltaExtractionService(config, intermediateSystem, newCommit);
-        extractionService.generateDelta();
+    public static SystemChange create(Config config, MicroserviceSystem intermediateSystem, Map<RepositoryConfig, String> newCommits) throws IOException, InterruptedException, GitAPIException {
+        DeltaExtractionService extractionService = new DeltaExtractionService(config, intermediateSystem, newCommits);
+        extractionService.generateMultiRepoDelta();
         return extractionService.getSystemChange();
     }
 
@@ -281,11 +280,12 @@ public class DeltaExtractionService {
      * Creates a Delta incrementally comparing the base MicroserviceSystem with a newer commit.
      * @param config The configuration to use
      * @param baseIRPath The path to the base IR to compare with
-     * @param newCommit The commit to compare the base system with
+     * @param newCommits The commits to compare the base system with
      * @return A {@link SystemChange} containing all changes made from the base system to the new commit ID
      */
-    public static SystemChange create(Config config, Path baseIRPath, String newCommit) throws IOException, InterruptedException, GitAPIException {
-        return create(config, IRExtractionService.read(baseIRPath), newCommit);
+    public static SystemChange create(Config config, Path baseIRPath, Map<RepositoryConfig, String> newCommits)
+            throws IOException, InterruptedException, GitAPIException {
+        return create(config, IRExtractionService.read(baseIRPath), newCommits);
     }
 
     /**
@@ -293,12 +293,16 @@ public class DeltaExtractionService {
      * Additionally, it writes the Delta to a file.
      * @param config The configuration to use
      * @param intermediateSystem The base MicroserviceSystem
-     * @param newCommit The commit to compare the base system with
+     * @param newCommits The commits to compare the base system with
      * @param outputPath The path to output the Delta to
      * @return A {@link SystemChange} containing all changes made from the base system to the new commit ID
      */
-    public static SystemChange createAndWrite(Config config, MicroserviceSystem intermediateSystem, String newCommit, Path outputPath) throws GitAPIException, IOException, InterruptedException {
-        SystemChange systemChange = DeltaExtractionService.create(config, intermediateSystem, newCommit);
+    public static SystemChange createAndWrite(Config config,
+                                              MicroserviceSystem intermediateSystem,
+                                              Map<RepositoryConfig, String> newCommits,
+                                              Path outputPath)
+            throws GitAPIException, IOException, InterruptedException {
+        SystemChange systemChange = DeltaExtractionService.create(config, intermediateSystem, newCommits);
         JsonReadWriteUtils.writeToJSON(outputPath, systemChange);
         return systemChange;
     }
@@ -308,12 +312,16 @@ public class DeltaExtractionService {
      * Additionally, it writes the Delta to a file.
      * @param config The configuration to use
      * @param baseIRPath The path to the base IR to compare with
-     * @param newCommit The commit to compare the base system with
+     * @param newCommits The commits to compare the base system with
      * @param outputPath The path to output the Delta to
      * @return A {@link SystemChange} containing all changes made from the base system to the new commit ID
      */
-    public static SystemChange createAndWrite(Config config, Path baseIRPath, String newCommit, Path outputPath) throws GitAPIException, IOException, InterruptedException {
-        SystemChange systemChange = DeltaExtractionService.create(config, baseIRPath, newCommit);
+    public static SystemChange createAndWrite(Config config,
+                                              Path baseIRPath,
+                                              Map<RepositoryConfig, String> newCommits,
+                                              Path outputPath)
+            throws GitAPIException, IOException, InterruptedException {
+        SystemChange systemChange = DeltaExtractionService.create(config, baseIRPath, newCommits);
         JsonReadWriteUtils.writeToJSON(outputPath, systemChange);
         return systemChange;
     }
