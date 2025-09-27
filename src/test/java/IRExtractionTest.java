@@ -1,5 +1,6 @@
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
@@ -17,10 +18,9 @@ import java.util.Optional;
 
 public class IRExtractionTest {
     @Test
-    void testGenerateIR() throws GitAPIException, IOException, InterruptedException {
+    void testGenerateIR() throws IOException, InterruptedException, GitAPIException {
         final Config TEST_CONFIG = ConfigUtil.readConfigFromFile(Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config2.json"));
-        IRExtractionService irServ = new IRExtractionService(TEST_CONFIG, Optional.empty());
-        irServ.generateIR(Path.of("output" + File.separator + "IR.json"));
+        IRExtractionService.createAndWrite(TEST_CONFIG, "IR.json");
         System.out.println("Generated IR at output" + File.separator + "IR.json.");
     }
 
@@ -31,9 +31,11 @@ public class IRExtractionTest {
 
         final Config TEST_CONFIG = ConfigUtil.readConfigFromFile(Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config2.json"));
 
+        RepositoryConfig rc = TEST_CONFIG.getSystemRepositories().getFirst();
+
         if(!(new File("clone" + File.separator + "train-ticket").exists())) {
             GitService gitService = new GitService(TEST_CONFIG);
-            gitService.cloneRemote();
+            gitService.cloneRemote(rc);
         }
 
         Microservice ms1 = new Microservice();
@@ -41,17 +43,17 @@ public class IRExtractionTest {
         Microservice ms2 = new Microservice();
         ms2.setName("ms2");
 
-        AbstractClass abstractClass1 = SourceToObjectUtils.parseClass(ms1, new File(TEST_FILE1), TEST_CONFIG, false);
-        AbstractClass abstractClass2 = SourceToObjectUtils.parseClass(ms2, new File(TEST_FILE2), TEST_CONFIG, false);
+        AbstractClass abstractClass1 = SourceToObjectUtils.parseClass(ms1, new File(TEST_FILE1), rc, false);
+        AbstractClass abstractClass2 = SourceToObjectUtils.parseClass(ms2, new File(TEST_FILE2), rc, false);
 
         assert abstractClass1 != null;
         assert abstractClass2 != null;
 
         int count = 0;
         for(Endpoint e : abstractClass1.getEndpoints()) {
-            for(RestCall rc : abstractClass2.getRestCalls()) {
-                if(RestCall.matchEndpoint(rc, e)) {
-                    System.out.println("Passed " + rc.getUrl() + " " + e.getUrl());
+            for(RestCall call : abstractClass2.getRestCalls()) {
+                if(RestCall.matchEndpoint(call, e)) {
+                    System.out.println("Passed " + call.getUrl() + " " + e.getUrl());
                     count++;
                 }
             }
@@ -62,7 +64,7 @@ public class IRExtractionTest {
     public void testIRToJSON() throws GitAPIException, IOException, InterruptedException {
         Config CONFIG = ConfigUtil.readConfigFromFile(Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config.json"));
 
-        IRExtractionService.createAndWrite(CONFIG, Path.of("." + File.separator + "output" + File.separator + "TestIR.json"));
+        IRExtractionService.createAndWrite(CONFIG, "TestIR.json");
 
         MicroserviceSystem ms1 = IRExtractionService.create(CONFIG);
         MicroserviceSystem ms2 = IRExtractionService.read(Path.of("." + File.separator + "output" + File.separator + "TestIR.json"));
@@ -70,5 +72,12 @@ public class IRExtractionTest {
         ms2.setOrphans(null);
         TestUtilities.deepCompareSystems(ms1, ms2);
         Assertions.assertEquals(ms1, ms2);
+    }
+
+    @Test
+    public void createIRForMultipleRepositories() throws IOException, InterruptedException, GitAPIException {
+        final Config TEST_CONFIG = ConfigUtil.readConfigFromFile(Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config3.json"));
+        IRExtractionService.createAndWrite(TEST_CONFIG, "IR_multiple.json");
+        System.out.println("Generated IR at output" + File.separator + "IR_multiple.json.");
     }
 }

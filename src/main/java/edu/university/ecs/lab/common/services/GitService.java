@@ -1,7 +1,8 @@
 package edu.university.ecs.lab.common.services;
 
 import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.config.ConfigUtil;
+import edu.university.ecs.lab.common.config.RepositoryBranchPair;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import lombok.Getter;
 import org.eclipse.jgit.api.Git;
@@ -19,6 +20,7 @@ import org.eclipse.jgit.treewalk.TreeWalk;
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,8 +34,11 @@ public class GitService {
 
     private final Config config;
 
+    /**
+     * Map of repository branch pairs to JGit repositories
+     */
     @Getter
-    private final Repository repository;
+    private Map<RepositoryBranchPair, Repository> repositories;
 
     /**
      * Create a Git service object from a project configuration file
@@ -43,27 +48,72 @@ public class GitService {
     public GitService(Config config) throws IOException, InterruptedException {
         this.config = config;
         FileUtils.makeDirs();
-        cloneRemote();
-        this.repository = initRepository();
+
+        prepareRepositories();
+    }
+
+    /**
+     * Clones repositories for each Git repo that does not already have an IR generated for it
+     */
+    public void prepareRepositories() throws IOException, InterruptedException {
+        repositories = new HashMap<>();
+
+        // For each repository
+        for (RepositoryConfig rc : config.getSystemRepositories()) {
+            // Check for existing IR part
+            String irName = "PART_" + rc.getRepoName() + "_" + rc.repoBranchPair().branchName() + "_" + rc.commitID() + ".json";
+            File existingIR = new File(FileUtils.getOutputPath() + File.separator + irName);
+
+            // If an IR already exists, just set up a bare mirror of the repository for deltas
+            if (existingIR.exists()) {
+                cloneRemote(rc);
+                repositories.put(rc.repoBranchPair(), initRepository(rc, true));
+            }
+            // Else clone it and prepare to generate an IR
+            else {
+                cloneRemote(rc);
+                repositories.put(rc.repoBranchPair(), initRepository(rc, false));
+            }
+        }
     }
 
     /**
      * Method to clone a repository
      */
-    public void cloneRemote() throws InterruptedException, IOException {
+    public void cloneRemote(RepositoryConfig config) throws InterruptedException, IOException {
         String repositoryPath = FileUtils.getRepositoryPath(config.getRepoName());
 
         // Check if repository was already cloned
         if (new File(repositoryPath).exists()) {
             return;
         }
-
-        // Create and execute operating system process to clone repository
-        ProcessBuilder processBuilder =
-                new ProcessBuilder("git", "clone", config.getRepositoryURL(), repositoryPath);
-        processBuilder.redirectErrorStream(true);
-        Process process = processBuilder.start();
-        process.waitFor();
+//        if (new File(repositoryPath).exists()) {
+//            // Make sure repository is unbare
+//            ProcessBuilder unbare = new ProcessBuilder("git", "config", "--bool", "core.bare", "false");
+//            unbare.directory(new File(repositoryPath));
+//            unbare.inheritIO();
+//            Process unbareProcess = unbare.start();
+//            if(unbareProcess.waitFor() != 0) {
+//                throw new IOException("Failed to set repository non-bare");
+//            }
+//
+//            // Checkout specific commit
+//            ProcessBuilder checkout = new ProcessBuilder("git", "checkout", config.commitID());
+//            checkout.directory(new File(repositoryPath));
+//            checkout.inheritIO();
+//            Process checkoutProcess = checkout.start();
+//            if(checkoutProcess.waitFor() != 0) {
+//                throw new IOException("Failed to checkout repository");
+//            }
+//        }
+//        else {
+            // Create and execute operating system process to clone repository
+            ProcessBuilder processBuilder =
+                    new ProcessBuilder("git", "clone", config.repoBranchPair().repositoryURL(), repositoryPath);
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
+            process.waitFor();
+//        }
     }
 
     /**
@@ -71,15 +121,15 @@ public class GitService {
      * 
      * @param commitID commit id to reset to
      */
-    public void resetLocal(String commitID) throws GitAPIException {
-        validateLocalExists();
+    public void resetLocal(RepositoryConfig rc, String commitID) throws GitAPIException {
+        validateLocalExists(rc);
 
         if (Objects.isNull(commitID) || commitID.isEmpty()) {
             return;
         }
 
         // Reset branch to old commit
-        try (Git git = new Git(repository)) {
+        try (Git git = new Git(repositories.get(rc.repoBranchPair()))) {
             git.reset().setMode(ResetCommand.ResetType.HARD).setRef(commitID).call();
         }
     }
@@ -87,7 +137,7 @@ public class GitService {
     /**
      * Method to check that local directory exists
      */
-    private void validateLocalExists() {
+    private void validateLocalExists(RepositoryConfig config) {
         File file = new File(FileUtils.getRepositoryPath(config.getRepoName()));
         if (!(file.exists() && file.isDirectory())) {
             throw new IllegalStateException("The local directory does not exist");
@@ -95,29 +145,36 @@ public class GitService {
     }
 
     /**
-     * Method to initialize repository from repository name
-     * 
+     * Method to initialize repository from repository configuration
+     *
+     * @param rc The RepositoryConfig
+     * @param bareMirror Whether the checkout should just be a bare mirror
      * @return file repository
      */
-    public Repository initRepository() throws IOException {
-        validateLocalExists();
+    public Repository initRepository(RepositoryConfig rc, boolean bareMirror) throws IOException {
+        validateLocalExists(rc);
 
-        Repository repository = null;
+        File repositoryPath = new File(FileUtils.getRepositoryPath(rc.getRepoName()));
+        FileRepositoryBuilder builder = new FileRepositoryBuilder().setGitDir(new File(repositoryPath, ".git"));
 
-        File repositoryPath = new File(FileUtils.getRepositoryPath(config.getRepoName()));
-        repository = new FileRepositoryBuilder().setGitDir(new File(repositoryPath, ".git")).build();
+        //if (bareMirror) {
+        //    builder.setBare();
+        //}
 
-        return repository;
+        return builder.build();
     }
 
     /**
      * Method to get differences between old and new commits
-     * 
+     *
+     * @param rc The RepositoryConfig
      * @param commitOld old commit id
      * @param commitNew new commit id
      * @return list of changes from old commit to new commit
      */
-    public List<DiffEntry> getDifferences(String commitOld, String commitNew) throws IOException, GitAPIException {
+    public List<DiffEntry> getDifferences(RepositoryConfig rc, String commitOld, String commitNew) throws IOException, GitAPIException {
+        Repository repository = repositories.get(rc.repoBranchPair());
+
         List<DiffEntry> returnList = null;
         RevCommit oldCommit = null, newCommit = null;
         RevWalk revWalk = new RevWalk(repository);
@@ -158,11 +215,16 @@ public class GitService {
      * Method to get differences between old and new commits
      * on a line by line basis
      *
+     * @param rc The RepositoryConfig
      * @param commitOld old commit id
      * @param commitNew new commit id
-     * @return list of changes from old commit to new commit
+     * @return map of changes from old commit to new commit
      */
-    public Map<DiffEntry, EditList> getGranularDifferences(String commitOld, String commitNew) throws IOException, GitAPIException {
+    public Map<DiffEntry, EditList> getGranularDifferences(RepositoryConfig rc,
+                                                           String commitOld,
+                                                           String commitNew) throws IOException, GitAPIException {
+        Repository repository = repositories.get(rc.repoBranchPair());
+
         Map<DiffEntry, EditList> returnMap = null;
         RevCommit oldCommit = null, newCommit = null;
         RevWalk revWalk = new RevWalk(repository);
@@ -290,13 +352,14 @@ public class GitService {
 
     /**
      * Get Git log
-     * 
+     *
+     * @param rc The RepositoryConfig
      * @return Git log as a list
      */
-    public Iterable<RevCommit> getLog() throws GitAPIException {
+    public Iterable<RevCommit> getLog(RepositoryConfig rc) throws GitAPIException {
         Iterable<RevCommit> returnList = null;
 
-        try (Git git = new Git(repository)) {
+        try (Git git = new Git(repositories.get(rc.repoBranchPair()))) {
             returnList = git.log().call();
         }
 
@@ -305,10 +368,12 @@ public class GitService {
 
     /**
      * Get head commit for the repository
-     * 
+     *
+     * @param rc The RepositoryConfig
      * @return commit id of head commit
      */
-    public String getHeadCommit() throws IOException {
+    public String getHeadCommit(RepositoryConfig rc) throws IOException {
+        Repository repository = repositories.get(rc.repoBranchPair());
         String commitID = "";
 
         Ref head = repository.findRef(HEAD_COMMIT);
@@ -317,7 +382,6 @@ public class GitService {
         RevCommit commit = walk.parseCommit(commitId);
         commitID = commit.getName();
         walk.close();
-
 
         return commitID;
     }

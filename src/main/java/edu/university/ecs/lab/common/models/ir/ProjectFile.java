@@ -28,7 +28,7 @@ import java.nio.file.Path;
 )
 @JsonSubTypes({
         @JsonSubTypes.Type(value = ConfigFile.class, name = "ConfigFile"),
-        @JsonSubTypes.Type(value = JClass.class, name = "JClass"),
+        @JsonSubTypes.Type(value = AbstractClass.class, name = "AbstractClass"),
 })
 @JsonTypeName("ProjectFile")
 public abstract class ProjectFile extends Node {

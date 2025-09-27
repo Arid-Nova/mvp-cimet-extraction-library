@@ -7,5 +7,7 @@
  *   to microservices within the repository.
  * - {@link edu.university.ecs.lab.common.config.ConfigUtil}: Utility class for reading and validating
  *   JSON configuration files, converting them into {@code Config} objects.
+ * - {@link edu.university.ecs.lab.common.config.RepositoryConfig}: Record of a repository / branch / commitID
+ *   combination used to pull source code.
  */
 package edu.university.ecs.lab.common.config;
