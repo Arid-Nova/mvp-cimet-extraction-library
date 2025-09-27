@@ -27,6 +27,16 @@ public class Microservice extends Node {
     private String name;
 
     /**
+     * The URL of the repository where this microservice is defined
+     */
+    private String repositoryURL;
+
+    /**
+     * The commit ID of the system
+     */
+    private String commitID;
+
+    /**
      * The path to the folder that represents the microservice
      */
     private Path path;
@@ -78,10 +88,12 @@ public class Microservice extends Node {
     @JsonDeserialize(as = HashSet.class)
     private Set<ConfigFile> files;
 
-    public Microservice(Node parent, String name, Path path) {
+    public Microservice(Node parent, String name, String repositoryURL, String commitID, Path path) {
         super(parent, name);
 
         this.name = name;
+        this.repositoryURL = repositoryURL;
+        this.commitID = commitID;
         this.path = path;
         this.controllers = new HashSet<>();
         this.services = new HashSet<>();

@@ -1,5 +1,6 @@
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.config.ConfigUtil;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.FileUtils;
@@ -22,7 +23,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.*;
 
 class DeltaAndMergeTest {
-    private static IRExtractionService irExtractionService;
     private static List<RevCommit> list;
     private static Config config;
 
@@ -39,11 +39,14 @@ class DeltaAndMergeTest {
     public static void setUp() throws GitAPIException, IOException, InterruptedException {
         FileUtils.makeDirs();
         config = ConfigUtil.readConfigFromFile(TEST_CONFIG_PATH);
+        RepositoryConfig repositoryConfig = config.getSystemRepositories().getFirst();
         GitService gitService = new GitService(config);
 
-        list = TestUtilities.iterableToList(gitService.getLog());
-        irExtractionService = new IRExtractionService(config, Optional.of(list.get(0).toString().split(" ")[1]));
-        irExtractionService.generateIR(OLD_IR_PATH);
+        list = TestUtilities.iterableToList(gitService.getLog(repositoryConfig));
+        config.getSystemRepositories().set(0, new RepositoryConfig(repositoryConfig.repoBranchPair(),
+                list.getFirst().toString().split(" ")[1]));
+
+        IRExtractionService.createAndWrite(config, "OldIR.json");
     }
 
     @Test
@@ -55,7 +58,10 @@ class DeltaAndMergeTest {
             String commitIdNew = list.get(i + 1).toString().split(" ")[1];
 
             // Extract changes from one commit to the other
-            DeltaExtractionService.createAndWrite(config, OLD_IR_PATH, commitIdNew, DELTA_PATH);
+            Map<RepositoryConfig, String> commits = new HashMap<>();
+            RepositoryConfig last = config.getSystemRepositories().getFirst();
+            commits.put(new RepositoryConfig(last.repoBranchPair(), commitIdOld), commitIdNew);
+            DeltaExtractionService.createAndWrite(config, OLD_IR_PATH, commits, DELTA_PATH);
 
             // Merge Delta changes to old IR to create new IR representing new commit changes
             MergeService.createAndWrite(OLD_IR_PATH, DELTA_PATH, NEW_IR_PATH);
@@ -66,8 +72,11 @@ class DeltaAndMergeTest {
         }
 
         // Create IR of last commit
-        irExtractionService = new IRExtractionService(config, Optional.of(list.get(list.size() - 1).toString().split(" ")[1]));
-        irExtractionService.generateIR(TEST_IR_PATH);
+        RepositoryConfig current = config.getSystemRepositories().getFirst();
+        RepositoryConfig next = new RepositoryConfig(current.repoBranchPair(),
+                list.get(list.size() - 1).toString().split(" ")[1]);
+        config.getSystemRepositories().set(0, next);
+        IRExtractionService.createAndWrite(config, "TestIR.json");
 
         // Compare two IRs for equivalence
         MicroserviceSystem microserviceSystem1 = JsonReadWriteUtils.readFromJSON(NEW_IR_PATH, MicroserviceSystem.class);
@@ -81,14 +90,21 @@ class DeltaAndMergeTest {
     }
 
     @Test
-    void testDelta() throws GitAPIException, IOException, InterruptedException {
+    void testDelta() throws IOException, InterruptedException, GitAPIException {
         // Commit hashes to compare
         String oldCommitHash = "9bdd9a28f0033e91dec4595d257da81cc7016e47";
         String newCommitHash = "313886e99befb94be6cd45f085c98e0019f59829";
 
-        MicroserviceSystem msSystem = IRExtractionService.create(ConfigUtil.readConfigFromFile(CONFIG2_PATH), oldCommitHash);
-        JsonReadWriteUtils.writeToJSON(TEST2_IR_PATH, msSystem);
+        Config config = ConfigUtil.readConfigFromFile(CONFIG2_PATH);
 
-        DeltaExtractionService.createAndWrite(ConfigUtil.readConfigFromFile(CONFIG2_PATH), TEST2_IR_PATH, newCommitHash, DELTA2_PATH);
+        RepositoryConfig repositoryConfig = config.getSystemRepositories().getFirst();
+        config.getSystemRepositories().set(0, new RepositoryConfig(repositoryConfig.repoBranchPair(), oldCommitHash));
+        repositoryConfig = config.getSystemRepositories().getFirst();
+
+        Map<RepositoryConfig, String> commitHashes = new HashMap<>();
+        commitHashes.put(repositoryConfig, newCommitHash);
+
+        IRExtractionService.createAndWrite(config, "Test2IR.json");
+        DeltaExtractionService.createAndWrite(config, TEST2_IR_PATH, commitHashes, DELTA2_PATH);
     }
 }

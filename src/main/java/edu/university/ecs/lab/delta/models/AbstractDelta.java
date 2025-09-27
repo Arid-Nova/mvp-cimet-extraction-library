@@ -46,11 +46,17 @@ public abstract class AbstractDelta {
      */
     protected ChangeType changeType;
 
+    /**
+     * The URL of the repository in which the change was made
+     */
+    protected String repositoryURL;
+
     protected AbstractDelta() {}
 
-    protected AbstractDelta(Path path, ChangeType changeType) {
+    protected AbstractDelta(Path path, ChangeType changeType, String repositoryURL) {
         this.path = path;
         this.changeType = changeType;
+        this.repositoryURL = repositoryURL;
     }
 
     private static class PathSerializer extends JsonSerializer<Path> {

@@ -57,8 +57,11 @@ public class MergeService {
             }
         }
 
-        microserviceSystem.setCommitID(systemChange.getNewCommit());
         MicroserviceSystem.setParentReferencesRecursively(microserviceSystem, null);
+
+        for (Microservice m : microserviceSystem.getMicroservices()) {
+            m.setCommitID(systemChange.getNewCommits().get(m.getRepositoryURL()));
+        }
     }
 
 
@@ -231,7 +234,13 @@ public class MergeService {
                             microserviceSystem.orphanize(removeMicroservice);
                         }
 
-                        microservice = new Microservice(microserviceSystem, tokens[tokens.length - 2], Path.of(delta.getPath().normalize().toString().replace(File.separator + "pom.xml", "").replace(File.separator + "build.gradle", "")));
+                        String commitID = systemChange.getOldCommits().get(delta.getRepositoryURL());
+
+                        microservice = new Microservice(microserviceSystem, tokens[tokens.length - 2],
+                                delta.getRepositoryURL(), commitID,
+                                Path.of(delta.getPath().normalize().toString()
+                                        .replace(File.separator + "pom.xml", "")
+                                        .replace(File.separator + "build.gradle", "")));
                         // Here we must check if any orphans are waiting on this creation
                         microserviceSystem.adopt(microservice);
                         microserviceSystem.getMicroservices().add(microservice);

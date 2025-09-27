@@ -1,7 +1,11 @@
 package edu.university.ecs.lab.common.utils;
 
+import edu.university.ecs.lab.common.config.RepositoryConfig;
+
 import java.io.File;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -91,13 +95,18 @@ public class FileUtils {
      * @param path The path to the microservice
      * @return Raw microservice name based on the path
      */
-    public static String getMicroserviceNameFromPath(String path) {
+    public static Optional<String> getMicroserviceNameFromPath(String path) {
         if (!path.startsWith(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR)) {
             throw new IllegalArgumentException("A malformed path was provided");
         }
 
         String[] split = path.replace(DOT + SYS_SEPARATOR + DEFAULT_CLONE_PATH + SYS_SEPARATOR, "").split(SPECIAL_SEPARATOR);
-        return split[split.length-1];
+
+        if (split.length == 0) {
+            return Optional.empty();
+        }
+
+        return Optional.of(split[split.length-1]);
     }
 
     /**
@@ -157,4 +166,14 @@ public class FileUtils {
         return isValidFile(path) && !path.endsWith(".java");
     }
 
+    /**
+     * This method returns a path for a partial IR file based on a RepositoryConfig.
+     *
+     * @param rc The RepositoryConfig
+     * @return a Path including the file name where the partial IR should be written
+     */
+    public static Path getPartialIRPath(RepositoryConfig rc) {
+        String fileName = "PART_" + rc.getRepoName() + "_" + rc.repoBranchPair().branchName() + "_" + rc.commitID() + ".json";
+        return Path.of(getOutputPath() + File.separator + fileName);
+    }
 }

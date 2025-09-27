@@ -16,12 +16,10 @@ import java.nio.file.Path;
 @NoArgsConstructor
 @JsonTypeName("SimpleDelta")
 public class SimpleDelta extends AbstractDelta {
-
-    @NonNull
     protected ProjectFile projectFile;
 
-    public SimpleDelta(Path path, ChangeType changeType, @NonNull ProjectFile projectFile) {
-        super(path, changeType);
+    public SimpleDelta(Path path, ChangeType changeType, String repositoryURL, ProjectFile projectFile) {
+        super(path, changeType, repositoryURL);
 
         this.projectFile = projectFile;
     }
