@@ -6,12 +6,12 @@
     <artifactId>cimet-extract-lib</artifactId>
     <!-- Version for tagging the library -->
     <version>1.1.1</version>
-    <url>https://github.com/cloudhubs/cimet-extract-lib</url>
+    <url>https://github.com/UACloudVision/mvp-cimet-extract-lib</url>
 
     <scm>
-        <connection>scm:git:https://github.com/cloudhubs/cimet-extract-lib.git</connection>
-        <developerConnection>scm:git:https://github.com/cloudhubs/cimet-extract-lib.git</developerConnection>
-        <url>https://github.com/cloudhubs/cimet-extract-lib</url>
+        <connection>scm:git:https://github.com/UACloudVision/mvp-cimet-extract-lib.git</connection>
+        <developerConnection>scm:git:https://github.com/UACloudVision/mvp-cimet-extract-lib.git</developerConnection>
+        <url>https://github.com/UACloudVision/mvp-cimet-extract-lib</url>
         <tag>v1.1.1</tag>
     </scm>
 
@@ -20,7 +20,7 @@
         <repository>
             <id>github</id>
             <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/cloudhubs/cimet-extract-lib</url>
+            <url>https://maven.pkg.github.com/UACloudVision/mvp-cimet-extract-lib</url>
         </repository>
     </distributionManagement>
 
