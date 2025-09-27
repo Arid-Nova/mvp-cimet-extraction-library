@@ -24,6 +24,7 @@ import java.util.*;
 
 class DeltaAndMergeTest {
     private static List<RevCommit> list;
+    private static List<RevCommit> list2;
     private static Config config;
 
     final static Path TEST_CONFIG_PATH = Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config3.json");
@@ -40,11 +41,19 @@ class DeltaAndMergeTest {
         FileUtils.makeDirs();
         config = ConfigUtil.readConfigFromFile(TEST_CONFIG_PATH);
         RepositoryConfig repositoryConfig = config.getSystemRepositories().getFirst();
+        RepositoryConfig repositoryConfig1 = config.getSystemRepositories().get(1);
         GitService gitService = new GitService(config);
 
+        // Reset local to make sure getLog is accurate
+        gitService.resetLocal(repositoryConfig, repositoryConfig.commitID());
+        gitService.resetLocal(repositoryConfig1, repositoryConfig1.commitID());
+
         list = TestUtilities.iterableToList(gitService.getLog(repositoryConfig));
+        list2 = TestUtilities.iterableToList(gitService.getLog(repositoryConfig1));
         config.getSystemRepositories().set(0, new RepositoryConfig(repositoryConfig.repoBranchPair(),
                 list.getFirst().toString().split(" ")[1]));
+        config.getSystemRepositories().set(1, new RepositoryConfig(repositoryConfig1.repoBranchPair(),
+                list2.getFirst().toString().split(" ")[1]));
 
         IRExtractionService.createAndWrite(config, "OldIR.json");
     }
@@ -52,30 +61,23 @@ class DeltaAndMergeTest {
     @Test
     void testComparison() throws IOException, InterruptedException, GitAPIException {
         // Loop through commit history and create delta, merge, etc...
-        System.out.printf("Testing over %d commits...", list.size());
-        for (int i = 0; i < list.size() - 1; i++) {
-            String commitIdOld = list.get(i).toString().split(" ")[1];
-            String commitIdNew = list.get(i + 1).toString().split(" ")[1];
+        System.out.printf("Testing over %d commits...\n", list.size());
+        System.out.printf("Testing over %d commits...\n", list2.size());
 
-            // Extract changes from one commit to the other
-            Map<RepositoryConfig, String> commits = new HashMap<>();
-            RepositoryConfig last = config.getSystemRepositories().getFirst();
-            commits.put(new RepositoryConfig(last.repoBranchPair(), commitIdOld), commitIdNew);
-            DeltaExtractionService.createAndWrite(config, OLD_IR_PATH, commits, DELTA_PATH);
-
-            // Merge Delta changes to old IR to create new IR representing new commit changes
-            MergeService.createAndWrite(OLD_IR_PATH, DELTA_PATH, NEW_IR_PATH);
-
-            if(i < list.size() - 2) {
-                Files.move(Paths.get("./output/NewIR.json"), Paths.get("./output/OldIR.json"), StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
+        testComparisonLoop(list, false, 0);
+        testComparisonLoop(list2, true, 1);
 
         // Create IR of last commit
         RepositoryConfig current = config.getSystemRepositories().getFirst();
         RepositoryConfig next = new RepositoryConfig(current.repoBranchPair(),
                 list.get(list.size() - 1).toString().split(" ")[1]);
         config.getSystemRepositories().set(0, next);
+
+        RepositoryConfig current1 = config.getSystemRepositories().get(1);
+        RepositoryConfig next1 = new RepositoryConfig(current1.repoBranchPair(),
+                list2.get(list2.size() - 1).toString().split(" ")[1]);
+        config.getSystemRepositories().set(1, next1);
+
         IRExtractionService.createAndWrite(config, "TestIR.json");
 
         // Compare two IRs for equivalence
@@ -87,6 +89,26 @@ class DeltaAndMergeTest {
 
         TestUtilities.deepCompareSystems(microserviceSystem1, microserviceSystem2);
         Assertions.assertTrue(Objects.deepEquals(microserviceSystem1, microserviceSystem2));
+    }
+
+    void testComparisonLoop(List<RevCommit> list, boolean finalRun, int rcId) throws GitAPIException, IOException, InterruptedException {
+        for (int i = 0; i < list.size() - 1; i++) {
+            String commitIdOld = list.get(i).toString().split(" ")[1];
+            String commitIdNew = list.get(i + 1).toString().split(" ")[1];
+
+            // Extract changes from one commit to the other
+            Map<RepositoryConfig, String> commits = new HashMap<>();
+            RepositoryConfig last = config.getSystemRepositories().get(rcId);
+            commits.put(new RepositoryConfig(last.repoBranchPair(), commitIdOld), commitIdNew);
+            DeltaExtractionService.createAndWrite(config, OLD_IR_PATH, commits, DELTA_PATH);
+
+            // Merge Delta changes to old IR to create new IR representing new commit changes
+            MergeService.createAndWrite(OLD_IR_PATH, DELTA_PATH, NEW_IR_PATH);
+
+            if((i < list.size() - 2) || !finalRun) {
+                Files.move(Paths.get("./output/NewIR.json"), Paths.get("./output/OldIR.json"), StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
     }
 
     @Test

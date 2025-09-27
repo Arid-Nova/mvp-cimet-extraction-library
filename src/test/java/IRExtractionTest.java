@@ -76,7 +76,7 @@ public class IRExtractionTest {
 
     @Test
     public void createIRForMultipleRepositories() throws IOException, InterruptedException, GitAPIException {
-        final Config TEST_CONFIG = ConfigUtil.readConfigFromFile(Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config5.json"));
+        final Config TEST_CONFIG = ConfigUtil.readConfigFromFile(Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config3.json"));
         IRExtractionService.createAndWrite(TEST_CONFIG, "IR_multiple.json");
         System.out.println("Generated IR at output" + File.separator + "IR_multiple.json.");
     }

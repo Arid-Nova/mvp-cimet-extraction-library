@@ -139,16 +139,15 @@ public class Microservice extends Node {
 
     /**
      * This method removes an AbstractClass from the microservice
-     * by looking up it's path
      *
-     * @param path the path to search for removal
+     * @param id The ID of the abstract class
      */
-    public void removeAbstractClass(String path) {
+    public void removeAbstractClass(String id) {
         Set<AbstractClass> classes = getClasses();
         AbstractClass removeClass = null;
 
         for (AbstractClass abstractClass : classes) {
-            if (abstractClass.getPath().equals(path)) {
+            if (abstractClass.getID().equals(id)) {
                 removeClass = abstractClass;
                 break;
             }

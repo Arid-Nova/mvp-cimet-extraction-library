@@ -60,7 +60,12 @@ public class MergeService {
         MicroserviceSystem.setParentReferencesRecursively(microserviceSystem, null);
 
         for (Microservice m : microserviceSystem.getMicroservices()) {
-            m.setCommitID(systemChange.getNewCommits().get(m.getRepositoryURL()));
+            String commitID = systemChange.getNewCommits().get(m.getRepositoryURL());
+
+            // Change commit IDs only if there is a new commit
+            if (commitID != null) {
+                m.setCommitID(commitID);
+            }
         }
     }
 
@@ -106,7 +111,7 @@ public class MergeService {
             }
         }
 
-        // If we found it's ms
+        // If we found its ms
         if(delta.getFileDelta().getProjectFile() instanceof ConfigFile) {
             ms.removeProjectFile(delta.getFileDelta().getProjectFile().getPath().normalize().toString());
             ms.getFiles().add((ConfigFile) delta.getFileDelta().getProjectFile());
@@ -144,8 +149,9 @@ public class MergeService {
                 // Add descendants to the class
                 recursiveAddDescendants(components, aClass);
 
+                // Remove old class and add new class
+                ms.removeAbstractClass(old.get().getID());
                 ms.addAbstractClass(aClass);
-
             } else {
                 // Prepare to unflatten the class
                 AbstractClass aClass = (AbstractClass) delta.getFileDelta().getProjectFile();
