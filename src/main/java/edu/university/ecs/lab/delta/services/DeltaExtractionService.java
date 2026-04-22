@@ -2,6 +2,7 @@ package edu.university.ecs.lab.delta.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.university.ecs.lab.common.config.Config;
+import edu.university.ecs.lab.common.config.RepositoryBranchPair;
 import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.services.GitService;
@@ -36,6 +37,11 @@ public class DeltaExtractionService {
     private final GitService gitService;
 
     /**
+     * The old commit per repository for comparison
+     */
+    private List<RepositoryConfig> oldCommits;
+
+    /**
      * The new commit per repository for comparison
      */
     private final Map<RepositoryConfig, String> newCommits;
@@ -61,14 +67,15 @@ public class DeltaExtractionService {
         this.gitService = new GitService(config);
         this.newCommits = newCommits;
         this.microserviceSystem = intermediateSystem;
+        this.oldCommits = config.getSystemRepositories();
     }
 
     /**
      * Generates Delta for multiple repositories, representing changes between old commits and new commits
      */
     private void generateMultiRepoDelta() throws GitAPIException, IOException {
-        for(Map.Entry<RepositoryConfig, String> entry : newCommits.entrySet()) {
-            generateDelta(entry.getKey());
+        for(RepositoryConfig entry : oldCommits) {
+            generateDelta(entry);
         }
     }
 
@@ -76,17 +83,31 @@ public class DeltaExtractionService {
      * Generates Delta for a repository representing changes between an old commit and new commit
      */
     private void generateDelta(RepositoryConfig rc) throws GitAPIException, IOException {
+
+        // Old repository in concern
+        RepositoryBranchPair genericRepoBranch = rc.repoBranchPair();
+        String oldCommit = rc.commitID();
+
         // Ensure we start at commitOld
-        gitService.resetLocal(rc, rc.commitID());
+        gitService.resetLocal(rc, oldCommit);
 
-        // Get the differences between commits
-        List<DiffEntry> differences = gitService.getDifferences(rc, rc.commitID(), newCommits.get(rc));
+        // Checking if there are multiple versions of the same repository in comparison?
+        List<String> commitIDs = newCommits.entrySet()
+                .stream()
+                .filter(entry -> entry.getKey().repoBranchPair().equals(genericRepoBranch))
+                .map(Map.Entry::getValue)
+                .toList();
 
-        // Advance the local commit for parsing
-        gitService.resetLocal(rc, newCommits.get(rc));
+        for (String newCommit: commitIDs) {
+            // Get the differences between commits
+            List<DiffEntry> differences = gitService.getDifferences(genericRepoBranch, oldCommit, newCommit);
 
-        // process/write differences to delta output
-        processDelta(rc, differences);
+            // Advance the local commit for parsing
+            gitService.resetLocal(rc, newCommit);
+
+            // process/write differences to delta output
+            processDelta(rc, newCommit, differences);
+        }
     }
 
     /**
@@ -94,11 +115,11 @@ public class DeltaExtractionService {
      *
      * @param diffEntries list of differences
      */
-    private void processDelta(RepositoryConfig rc, List<DiffEntry> diffEntries) {
+    private void processDelta(RepositoryConfig rc, String newCommit, List<DiffEntry> diffEntries) {
         // Set up a new SystemChangeObject
         systemChange = new SystemChange();
         systemChange.getOldCommits().put(rc.repoBranchPair().repositoryURL(), rc.commitID());
-        systemChange.getNewCommits().put(rc.repoBranchPair().repositoryURL(), newCommits.get(rc));
+        systemChange.getNewCommits().put(rc.repoBranchPair().repositoryURL(), newCommit);
         AbstractDelta abstractDelta = null;
 
         // process each difference

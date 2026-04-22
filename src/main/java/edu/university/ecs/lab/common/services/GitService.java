@@ -167,13 +167,13 @@ public class GitService {
     /**
      * Method to get differences between old and new commits
      *
-     * @param rc The RepositoryConfig
+     * @param rbp The RepositoryBranchPair
      * @param commitOld old commit id
      * @param commitNew new commit id
      * @return list of changes from old commit to new commit
      */
-    public List<DiffEntry> getDifferences(RepositoryConfig rc, String commitOld, String commitNew) throws IOException, GitAPIException {
-        Repository repository = repositories.get(rc.repoBranchPair());
+    public List<DiffEntry> getDifferences(RepositoryBranchPair rbp, String commitOld, String commitNew) throws IOException, GitAPIException {
+        Repository repository = repositories.get(rbp);
 
         List<DiffEntry> returnList = null;
         RevCommit oldCommit = null, newCommit = null;
