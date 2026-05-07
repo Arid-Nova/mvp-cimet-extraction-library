@@ -5,19 +5,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
-import java.time.Duration;
-import java.time.temporal.TemporalAmount;
-
-import com.macasaet.fernet.Key;
-import com.macasaet.fernet.Token;
-import com.macasaet.fernet.StringValidator;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class GitHubTokenClient {
 
-    private static final String CONFIG_SERVER_URL = "http://localhost:8020/settings/github-token";
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
 
@@ -26,39 +18,32 @@ public class GitHubTokenClient {
         this.objectMapper = new ObjectMapper();
     }
 
-    public String fetchAndDecryptToken() {
+    public String fetchToken() {
         try {
-            // Retrieving any GitHub Token
+            String configServerUrl = System.getenv().getOrDefault("CONFIG_SERVER_URL",
+                    "http://cloudhub_repohandler:8020/settings/github-token");
+            String internalKey = System.getenv().getOrDefault("INTERNAL_SERVICE_KEY", "");
+
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(CONFIG_SERVER_URL))
+                    .uri(URI.create(configServerUrl))
+                    .header("X-Internal-Service-Auth", internalKey)
                     .GET()
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
-                // System.out.println("Token not found or server unavailable.");
                 return null;
             }
 
             JsonNode rootNode = objectMapper.readTree(response.body());
-            String encryptedToken = rootNode.get("token").asText();
-
-            String envKey = System.getenv("ENCRYPTION_KEY");
-            Key key = new Key(envKey);
-
-            StringValidator validator = new StringValidator() {
-                @Override
-                public TemporalAmount getTimeToLive() {
-                    return Duration.ofDays(36500);
-                }
-            };
-
-            Token fernetToken = Token.fromString(encryptedToken);
-            return fernetToken.validateAndDecrypt(key, validator);
+            if (rootNode.has("token") && !rootNode.get("token").isNull()) {
+                return rootNode.get("token").asText();
+            }
+            return null;
 
         } catch (Exception e) {
-            // System.err.println("Failed to fetch and decrypt token: " + e.getMessage());
+            // System.err.println("Failed to fetch token: " + e.getMessage());
             return null;
         }
     }

@@ -20,6 +20,7 @@ import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.treewalk.TreeWalk;
 
 import java.io.File;
+import java.util.Base64;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -58,20 +59,10 @@ public class GitService {
     }
 
     /**
-     * Injects the GitHub token into the HTTPS URL if available.
-     */
-    private String getAuthenticatedUrl(String repoUrl) {
-        if (this.rawToken != null && !this.rawToken.trim().isEmpty() && repoUrl.startsWith("https://")) {
-            return repoUrl.replace("https://", "https://" + this.rawToken + "@");
-        }
-        return repoUrl;
-    }
-
-    /**
      * Clones repositories for each Git repo that does not already have an IR generated for it
      */
     public void prepareRepositories() throws IOException, InterruptedException {
-        this.rawToken = tokenClient.fetchAndDecryptToken();
+        this.rawToken = tokenClient.fetchToken();
 
         repositories = new HashMap<>();
 
@@ -124,12 +115,25 @@ public class GitService {
 //            }
 //        }
 //        else {
-            String authUrl = getAuthenticatedUrl(config.repoBranchPair().repositoryURL());
+            String cleanUrl = config.repoBranchPair().repositoryURL();
 
             // Create and execute operating system process to clone repository
             ProcessBuilder processBuilder =
-                    new ProcessBuilder("git", "clone", authUrl, repositoryPath);
+                    new ProcessBuilder("git", "clone", cleanUrl, repositoryPath);
             processBuilder.redirectErrorStream(true);
+
+            Map<String, String> env = processBuilder.environment();
+            env.put("GIT_TERMINAL_PROMPT", "0");
+
+            if (this.rawToken != null && !this.rawToken.trim().isEmpty()) {
+                String authStr = "x-access-token:" + this.rawToken;
+                String b64Auth = Base64.getEncoder().encodeToString(authStr.getBytes(StandardCharsets.UTF_8));
+
+                env.put("GIT_CONFIG_COUNT", "1");
+                env.put("GIT_CONFIG_KEY_0", "http.https://github.com/.extraHeader");
+                env.put("GIT_CONFIG_VALUE_0", "AUTHORIZATION: basic " + b64Auth);
+            }
+            
             Process process = processBuilder.start();
             int exitCode = process.waitFor();
             if (exitCode != 0) {
