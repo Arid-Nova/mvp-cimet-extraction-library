@@ -1,9 +1,11 @@
 package edu.university.ecs.lab.common.services;
 
 import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.config.RepositoryBranchPair;
-import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.utils.FileUtils;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
+import edu.university.ecs.lab.common.utils.GitHubTokenClient;
+import edu.university.ecs.lab.common.config.RepositoryBranchPair;
+
 import lombok.Getter;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ResetCommand;
@@ -31,8 +33,10 @@ import java.util.stream.Collectors;
  */
 public class GitService {
     private static final String HEAD_COMMIT = "HEAD";
+    private String rawToken;
 
     private final Config config;
+    private final GitHubTokenClient tokenClient;
 
     /**
      * Map of repository branch pairs to JGit repositories
@@ -47,15 +51,28 @@ public class GitService {
      */
     public GitService(Config config) throws IOException, InterruptedException {
         this.config = config;
-        FileUtils.makeDirs();
+        this.tokenClient = new GitHubTokenClient();
 
+        FileUtils.makeDirs();
         prepareRepositories();
+    }
+
+    /**
+     * Injects the GitHub token into the HTTPS URL if available.
+     */
+    private String getAuthenticatedUrl(String repoUrl) {
+        if (this.rawToken != null && !this.rawToken.trim().isEmpty() && repoUrl.startsWith("https://")) {
+            return repoUrl.replace("https://", "https://" + this.rawToken + "@");
+        }
+        return repoUrl;
     }
 
     /**
      * Clones repositories for each Git repo that does not already have an IR generated for it
      */
     public void prepareRepositories() throws IOException, InterruptedException {
+        this.rawToken = tokenClient.fetchAndDecryptToken();
+
         repositories = new HashMap<>();
 
         // For each repository
@@ -107,14 +124,53 @@ public class GitService {
 //            }
 //        }
 //        else {
+            String authUrl = getAuthenticatedUrl(config.repoBranchPair().repositoryURL());
+
             // Create and execute operating system process to clone repository
             ProcessBuilder processBuilder =
-                    new ProcessBuilder("git", "clone", config.repoBranchPair().repositoryURL(), repositoryPath);
+                    new ProcessBuilder("git", "clone", authUrl, repositoryPath);
             processBuilder.redirectErrorStream(true);
             Process process = processBuilder.start();
-            process.waitFor();
+            int exitCode = process.waitFor();
+            if (exitCode != 0) {
+                throw new IOException("Failed to clone repository (Exit Code: " + exitCode + "): " + config.getRepoName());
+            } else {
+                System.out.println("Cloned " + config.getRepoName());
+            }
 //        }
     }
+
+//    /**
+//     * Method to clone a repository using JGit to securely apply credentials.
+//     * Deprecated above version because it was running low local OS commands
+//     * which is not easy to deal with credential providers.
+//     */
+//    public void cloneRemote(RepositoryConfig config) throws IOException {
+//        String repositoryPath = FileUtils.getRepositoryPath(config.getRepoName());
+//
+//        // Check if repository was already cloned
+//        if (new File(repositoryPath).exists()) {
+//            return;
+//        }
+//
+//        try {
+//            CloneCommand cloneCommand = Git.cloneRepository()
+//                    .setURI(config.repoBranchPair().repositoryURL())
+//                    .setDirectory(new File(repositoryPath));
+//
+//            // Injecting the decrypted GitHub token
+//            if (this.credentialsProvider != null) {
+//                cloneCommand.setCredentialsProvider(this.credentialsProvider);
+//            }
+//
+//            // Executing the repository clone
+//            try (Git _ = cloneCommand.call()) {
+//                System.out.println("Successfully cloned " + config.getRepoName());
+//            }
+//        } catch (GitAPIException e) {
+//            throw new IOException("Failed to clone repository: " + config.getRepoName(), e);
+//        }
+//    }
 
     /**
      * Method to reset repository to a given commit
