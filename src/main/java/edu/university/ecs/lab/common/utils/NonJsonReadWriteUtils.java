@@ -126,4 +126,20 @@ public class NonJsonReadWriteUtils {
         }
         return new ConfigFile(microservice, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
     }
+
+    public static ConfigFile readFromProperties(Path path, RepositoryConfig config, Microservice microservice) {
+        ObjectNode jsonObject = mapper.createObjectNode();
+        Properties properties = new Properties();
+
+        try (Reader reader = Files.newBufferedReader(path)) {
+            properties.load(reader);
+            for (String propertyName : properties.stringPropertyNames()) {
+                jsonObject.put(propertyName, properties.getProperty(propertyName));
+            }
+        } catch (IOException e) {
+            return null;
+        }
+
+        return new ConfigFile(microservice, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);
+    }
 }

@@ -406,14 +406,20 @@ public class SourceToObjectUtils {
     }
 
     public static ConfigFile parseConfigurationFile(File file, RepositoryConfig config, Microservice microservice) {
-        if(file.getName().endsWith(".yml")) {
+        String fileName = file.getName();
+        if(fileName.endsWith(".yml") || fileName.endsWith(".yaml")) {
             return NonJsonReadWriteUtils.readFromYaml(file.getPath(), config, microservice);
-        } else if(file.getName().equals("DockerFile")) {
+        } else if(fileName.equals("Dockerfile") || fileName.equals("DockerFile")) {
             return NonJsonReadWriteUtils.readFromDocker(file.toPath(), config, microservice);
-        } else if(file.getName().equals("pom.xml")) {
+        } else if(fileName.equals("pom.xml")) {
             return NonJsonReadWriteUtils.readFromPom(file.toPath(), config, microservice);
-        } else if (file.getName().equals("build.gradle")){
+        } else if (fileName.equals("build.gradle")
+                || fileName.equals("build.gradle.kts")
+                || fileName.equals("settings.gradle")
+                || fileName.equals("settings.gradle.kts")){
             return NonJsonReadWriteUtils.readFromGradle(file.toPath(), config, microservice);
+        } else if (fileName.endsWith(".properties")) {
+            return NonJsonReadWriteUtils.readFromProperties(file.toPath(), config, microservice);
         } else {
             return null;
         }

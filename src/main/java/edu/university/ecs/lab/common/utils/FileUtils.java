@@ -12,7 +12,21 @@ import java.util.Set;
  * Manages all file paths and file path conversion functions.
  */
 public class FileUtils {
-    public static final Set<String> VALID_FILES = Set.of("pom.xml", ".java", ".yml", "build.gradle");
+    public static final Set<String> VALID_FILES = Set.of(
+            "pom.xml",
+            ".java",
+            ".yml",
+            ".yaml",
+            ".properties",
+            "build.gradle",
+            "build.gradle.kts",
+            "settings.gradle",
+            "settings.gradle.kts",
+            "Dockerfile",
+            "DockerFile",
+            "docker-compose.yml",
+            "docker-compose.yaml"
+    );
     public static final String SYS_SEPARATOR = System.getProperty("file.separator");
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
     private static final String DEFAULT_OUTPUT_PATH = "output";

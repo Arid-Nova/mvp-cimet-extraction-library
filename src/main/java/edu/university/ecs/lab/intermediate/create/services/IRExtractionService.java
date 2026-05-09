@@ -10,11 +10,7 @@ import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import org.eclipse.jgit.api.errors.GitAPIException;
-import org.w3c.dom.Document;
-import org.w3c.dom.NodeList;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.*;
 import java.nio.file.Path;
 import java.util.*;
@@ -87,87 +83,23 @@ public class IRExtractionService {
         gitService.cloneRemote(rc);
         gitService.resetLocal(rc, rc.commitID());
 
-        // Start scanning from the root directory
-        List<String> rootDirectories = findRootDirectories(FileUtils.getRepositoryPath(rc.getRepoName()));
-        List<String> rootDirectoriesCopy = List.copyOf(rootDirectories);
-
-        // Filter more/less specific
-        for(String s1 : rootDirectoriesCopy) {
-            for(String s2 : rootDirectoriesCopy) {
-                if(s1.equals(s2)) {
-                    continue;
-                } else if(s1.matches(s2.replace(FileUtils.SYS_SEPARATOR, FileUtils.SPECIAL_SEPARATOR) + FileUtils.SPECIAL_SEPARATOR + ".*")) {
-                    rootDirectories.remove(s2);
-                } else if(s2.matches(s1.replace(FileUtils.SYS_SEPARATOR, FileUtils.SPECIAL_SEPARATOR) + FileUtils.SPECIAL_SEPARATOR + ".*")) {
-                    rootDirectories.remove(s1);
-                }
-            }
-        }
+        ServiceBoundaryDetector detector = new ServiceBoundaryDetector();
+        List<ServiceBoundaryCandidate> candidates = detector.detect(FileUtils.getRepositoryPath(rc.getRepoName()), rc);
 
         // Scan each root directory for microservices
-        for (String rootDirectory : rootDirectories) {
-            Microservice microservice = recursivelyScanFiles(microserviceSystem, rootDirectory, rc);
+        for (ServiceBoundaryCandidate candidate : candidates) {
+            Microservice microservice = recursivelyScanFiles(
+                    microserviceSystem,
+                    candidate.rootPath().toString(),
+                    rc,
+                    candidate.serviceName()
+            );
             if (microservice != null) {
                 microservices.add(microservice);
             }
         }
 
         return microservices;
-    }
-
-    /**
-     * Recursively search for directories containing a microservice (pom.xml file)
-     *
-     * @param directory the directory to start the search from
-     * @return a list of directory paths containing pom.xml
-     */
-    private List<String> findRootDirectories(String directory) {
-        List<String> rootDirectories = new ArrayList<>();
-        File root = new File(directory);
-        if (root.exists() && root.isDirectory()) {
-            // Check if the current directory contains a Dockerfile
-            File[] files = root.listFiles();
-            boolean containsPom = false;
-            boolean containsGradle = false;
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isFile() && file.getName().equals("pom.xml")) {
-                        try {
-
-                            // Create a DocumentBuilder
-                            DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-
-                            // Parse the XML file
-                            Document document = builder.parse(file);
-
-                            // Normalize the XML Structure
-                            document.getDocumentElement().normalize();
-
-                            // Get all elements with the specific tag name
-                            NodeList nodeList = document.getElementsByTagName("modules");
-                            // Check if the tag is present
-                            if (nodeList.getLength() == 0) {
-                                containsPom = true;
-                            }
-                        } catch (Exception e) {
-                            throw new RuntimeException("Error parsing pom.xml");
-                        }
-                    } else if(file.isFile() && file.getName().equals("build.gradle")) {
-                        containsGradle = true;
-                    } else if (file.isDirectory()) {
-                        rootDirectories.addAll(findRootDirectories(file.getPath()));
-                    }
-                }
-            }
-            if (containsPom) {
-                rootDirectories.add(root.getPath());
-                return rootDirectories;
-            } else if (containsGradle){
-                rootDirectories.add(root.getPath());
-                return rootDirectories;
-            }
-        }
-        return rootDirectories;
     }
 
     /**
@@ -179,19 +111,27 @@ public class IRExtractionService {
     public Microservice recursivelyScanFiles(MicroserviceSystem microserviceSystem,
                                              String rootMicroservicePath,
                                              RepositoryConfig rc) throws IOException {
+        return recursivelyScanFiles(microserviceSystem, rootMicroservicePath, rc, null);
+    }
+
+    private Microservice recursivelyScanFiles(MicroserviceSystem microserviceSystem,
+                                             String rootMicroservicePath,
+                                             RepositoryConfig rc,
+                                             String inferredServiceName) throws IOException {
         // Validate path exists and is a directory
         File localDir = new File(rootMicroservicePath);
         if (!localDir.exists() || !localDir.isDirectory()) {
             throw new IOException("Microservice path must exist and be directory");
         }
 
-        Optional<String> microserviceName = FileUtils.getMicroserviceNameFromPath(rootMicroservicePath);
-        if (microserviceName.isEmpty()) {
-            microserviceName = Optional.of(rc.getRepoName());
+        String microserviceName = inferredServiceName;
+        if (microserviceName == null || microserviceName.isBlank()) {
+            microserviceName = FileUtils.getMicroserviceNameFromPath(rootMicroservicePath)
+                    .orElse(rc.getRepoName());
         }
 
         Microservice model = new Microservice(microserviceSystem,
-                microserviceName.get(),
+                microserviceName,
                 rc.repoBranchPair().repositoryURL(),
                 rc.commitID(),
                 Path.of(FileUtils.localPathToGitPath(rootMicroservicePath, rc.getRepoName())));
