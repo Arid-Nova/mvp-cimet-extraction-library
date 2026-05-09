@@ -127,6 +127,29 @@
                 <artifactId>maven-deploy-plugin</artifactId>
                 <version>3.1.4</version>
             </plugin>
+            <!--
+                Failsafe runs end-to-end / integration tests (*IT.java) during the
+                `verify` phase. Surefire (test phase) keeps running the existing
+                *Test.java suites. Run E2E with: mvn verify
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.2.5</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <includes>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
