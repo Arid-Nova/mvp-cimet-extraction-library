@@ -23,6 +23,11 @@ import java.io.File;
 import java.util.Base64;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -90,9 +95,19 @@ public class GitService {
      */
     public void cloneRemote(RepositoryConfig config) throws InterruptedException, IOException {
         String repositoryPath = FileUtils.getRepositoryPath(config.getRepoName());
+        File repoDir = new File(repositoryPath);
+
+        // A prior run may have left a directory whose .git is incomplete (e.g. OneDrive
+        // sync wiped HEAD/config, or a clone was interrupted). In that case JGit walks
+        // up the parent tree and resolves SHAs against the wrong repo, producing
+        // MissingObjectException at resetLocal(). Wipe and re-clone instead.
+        if (repoDir.exists() && !isValidGitRepo(repoDir)) {
+            System.out.println("Detected invalid clone at " + repositoryPath + ", wiping and re-cloning");
+            deleteRecursively(repoDir.toPath());
+        }
 
         // Check if repository was already cloned
-        if (new File(repositoryPath).exists()) {
+        if (repoDir.exists()) {
             return;
         }
 //        if (new File(repositoryPath).exists()) {
@@ -202,6 +217,46 @@ public class GitService {
         if (!(file.exists() && file.isDirectory())) {
             throw new IllegalStateException("The local directory does not exist");
         }
+    }
+
+    /**
+     * Decide whether a working tree's .git is a usable Git repository. A bare
+     * directory whose .git is missing HEAD/config will cause JGit to walk up
+     * to a parent repository, so we treat that as invalid.
+     */
+    private static boolean isValidGitRepo(File workTree) {
+        File gitDir = new File(workTree, ".git");
+        if (!gitDir.exists()) {
+            return false;
+        }
+        // .git can also be a file (gitlink/worktree pointer); accept it.
+        if (gitDir.isFile()) {
+            return true;
+        }
+        return new File(gitDir, "HEAD").isFile() && new File(gitDir, "config").isFile();
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return;
+        }
+        Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                // Read-only files (common under .git on Windows) need their write bit set
+                // before delete, otherwise Files.delete throws AccessDeniedException.
+                file.toFile().setWritable(true);
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                if (exc != null) throw exc;
+                Files.delete(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     /**

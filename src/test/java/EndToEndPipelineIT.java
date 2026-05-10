@@ -91,11 +91,48 @@ class EndToEndPipelineIT {
         Assertions.assertTrue(Objects.deepEquals(inMemoryIRA, readBackIRA),
                 "IR written to disk must round-trip via JSON without losing structure");
 
-        // 3. Sanity: the extraction produced something usable.
+        // 3. Sanity: the extraction produced something usable, and every microservice
+        //    that contains a controller class produces at least one endpoint. (Gateways
+        //    and MQ-only services legitimately have no controllers and are exempted —
+        //    the failure mode this guards against is "controller in source, but the
+        //    parser extracted zero endpoints from it.")
         Assertions.assertFalse(inMemoryIRA.getMicroservices().isEmpty(),
                 "IR at commit A should contain at least one microservice");
-        Assertions.assertTrue(totalEndpoints(inMemoryIRA) > 0,
-                "IR at commit A should expose at least one endpoint across its microservices");
+
+        List<Microservice> microservicesWithControllers = inMemoryIRA.getMicroservices().stream()
+                .filter(microservice -> microservice.getControllers() != null
+                        && !microservice.getControllers().isEmpty())
+                .toList();
+        Assertions.assertFalse(microservicesWithControllers.isEmpty(),
+                "IR at commit A should contain at least one microservice with controllers");
+
+        List<String> controllerBearingServicesWithNoEndpoints = microservicesWithControllers.stream()
+                .filter(microservice -> microservice.getEndpoints().isEmpty())
+                .map(Microservice::getName)
+                .toList();
+        Assertions.assertTrue(controllerBearingServicesWithNoEndpoints.isEmpty(),
+                "Every microservice in IR(A) that contains a controller class must expose "
+                        + "at least one endpoint; controller-bearing services with zero "
+                        + "endpoints (likely a parser regression): "
+                        + controllerBearingServicesWithNoEndpoints);
+
+        // Pinned-commit invariant: train-ticket@313886e9 exposes exactly 262 REST endpoints
+        // across 39 controller-bearing microservices. Any drift from this number signals
+        // a parser regression (drop) or a legitimate parser improvement (gain) — either
+        // way, the test should fail loudly so the change is reviewed and the expected
+        // count is updated deliberately. Update this constant when bumping the pinned
+        // commit in test_config2.json.
+        final int EXPECTED_TOTAL_ENDPOINTS_AT_COMMIT_A = 262;
+        int actualTotalEndpoints = inMemoryIRA.getMicroservices().stream()
+                .mapToInt(microservice -> microservice.getEndpoints().size())
+                .sum();
+        Assertions.assertEquals(
+                EXPECTED_TOTAL_ENDPOINTS_AT_COMMIT_A,
+                actualTotalEndpoints,
+                "Endpoint count drift at train-ticket@" + commitA + ": expected "
+                        + EXPECTED_TOTAL_ENDPOINTS_AT_COMMIT_A + ", got " + actualTotalEndpoints
+                        + ". If train-ticket's pinned commit changed, update the constant; "
+                        + "otherwise investigate the IR extractor for endpoint loss/duplication.");
 
         // 4. Compute delta A -> B and merge onto IR(A) to produce a derived IR at B.
         Map<RepositoryConfig, String> commits = new HashMap<>();
@@ -139,11 +176,5 @@ class EndToEndPipelineIT {
         for (MicroserviceSystem system : systems) {
             system.setOrphans(new HashSet<>());
         }
-    }
-
-    private static int totalEndpoints(MicroserviceSystem system) {
-        return system.getMicroservices().stream()
-                .mapToInt(microservice -> microservice.getEndpoints().size())
-                .sum();
     }
 }
