@@ -7,30 +7,32 @@ import edu.university.ecs.lab.common.utils.GitHubTokenClient;
 import edu.university.ecs.lab.common.config.RepositoryBranchPair;
 
 import lombok.Getter;
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.ResetCommand;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.diff.DiffEntry;
-import org.eclipse.jgit.diff.EditList;
 import org.eclipse.jgit.lib.*;
-import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.diff.EditList;
+import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
-import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.eclipse.jgit.api.ResetCommand;
+import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
 import java.io.File;
-import java.util.Base64;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.FileVisitResult;
-import java.nio.file.Files;
+
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.FileVisitResult;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.HashMap;
-import java.util.List;
+
 import java.util.Map;
+import java.util.List;
+import java.util.Base64;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -110,86 +112,36 @@ public class GitService {
         if (repoDir.exists()) {
             return;
         }
-//        if (new File(repositoryPath).exists()) {
-//            // Make sure repository is unbare
-//            ProcessBuilder unbare = new ProcessBuilder("git", "config", "--bool", "core.bare", "false");
-//            unbare.directory(new File(repositoryPath));
-//            unbare.inheritIO();
-//            Process unbareProcess = unbare.start();
-//            if(unbareProcess.waitFor() != 0) {
-//                throw new IOException("Failed to set repository non-bare");
-//            }
-//
-//            // Checkout specific commit
-//            ProcessBuilder checkout = new ProcessBuilder("git", "checkout", config.commitID());
-//            checkout.directory(new File(repositoryPath));
-//            checkout.inheritIO();
-//            Process checkoutProcess = checkout.start();
-//            if(checkoutProcess.waitFor() != 0) {
-//                throw new IOException("Failed to checkout repository");
-//            }
-//        }
-//        else {
-            String cleanUrl = config.repoBranchPair().repositoryURL();
 
-            // Create and execute operating system process to clone repository
-            ProcessBuilder processBuilder =
-                    new ProcessBuilder("git", "clone", cleanUrl, repositoryPath);
-            processBuilder.redirectErrorStream(true);
+        String cleanUrl = config.repoBranchPair().repositoryURL();
 
-            Map<String, String> env = processBuilder.environment();
-            env.put("GIT_TERMINAL_PROMPT", "0");
+        // Create and execute operating system process to clone repository
+        // This is because native, OS level retrievals are faster, an advantage nessecary to handle large
+        // microservices repositories.
+        ProcessBuilder processBuilder =
+                new ProcessBuilder("git", "clone", cleanUrl, repositoryPath);
+        processBuilder.redirectErrorStream(true);
 
-            if (this.rawToken != null && !this.rawToken.trim().isEmpty()) {
-                String authStr = "x-access-token:" + this.rawToken;
-                String b64Auth = Base64.getEncoder().encodeToString(authStr.getBytes(StandardCharsets.UTF_8));
+        Map<String, String> env = processBuilder.environment();
+        env.put("GIT_TERMINAL_PROMPT", "0");
 
-                env.put("GIT_CONFIG_COUNT", "1");
-                env.put("GIT_CONFIG_KEY_0", "http.https://github.com/.extraHeader");
-                env.put("GIT_CONFIG_VALUE_0", "AUTHORIZATION: basic " + b64Auth);
-            }
-            
-            Process process = processBuilder.start();
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                throw new IOException("Failed to clone repository (Exit Code: " + exitCode + "): " + config.getRepoName());
-            } else {
-                System.out.println("Cloned " + config.getRepoName());
-            }
-//        }
+        if (this.rawToken != null && !this.rawToken.trim().isEmpty()) {
+            String authStr = "x-access-token:" + this.rawToken;
+            String b64Auth = Base64.getEncoder().encodeToString(authStr.getBytes(StandardCharsets.UTF_8));
+
+            env.put("GIT_CONFIG_COUNT", "1");
+            env.put("GIT_CONFIG_KEY_0", "http.https://github.com/.extraHeader");
+            env.put("GIT_CONFIG_VALUE_0", "AUTHORIZATION: basic " + b64Auth);
+        }
+
+        Process process = processBuilder.start();
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("Failed to clone repository (Exit Code: " + exitCode + "): " + config.getRepoName());
+        } else {
+            System.out.println("Cloned " + config.getRepoName());
+        }
     }
-
-//    /**
-//     * Method to clone a repository using JGit to securely apply credentials.
-//     * Deprecated above version because it was running low local OS commands
-//     * which is not easy to deal with credential providers.
-//     */
-//    public void cloneRemote(RepositoryConfig config) throws IOException {
-//        String repositoryPath = FileUtils.getRepositoryPath(config.getRepoName());
-//
-//        // Check if repository was already cloned
-//        if (new File(repositoryPath).exists()) {
-//            return;
-//        }
-//
-//        try {
-//            CloneCommand cloneCommand = Git.cloneRepository()
-//                    .setURI(config.repoBranchPair().repositoryURL())
-//                    .setDirectory(new File(repositoryPath));
-//
-//            // Injecting the decrypted GitHub token
-//            if (this.credentialsProvider != null) {
-//                cloneCommand.setCredentialsProvider(this.credentialsProvider);
-//            }
-//
-//            // Executing the repository clone
-//            try (Git _ = cloneCommand.call()) {
-//                System.out.println("Successfully cloned " + config.getRepoName());
-//            }
-//        } catch (GitAPIException e) {
-//            throw new IOException("Failed to clone repository: " + config.getRepoName(), e);
-//        }
-//    }
 
     /**
      * Method to reset repository to a given commit
@@ -272,10 +224,6 @@ public class GitService {
         File repositoryPath = new File(FileUtils.getRepositoryPath(rc.getRepoName()));
         FileRepositoryBuilder builder = new FileRepositoryBuilder().setGitDir(new File(repositoryPath, ".git"));
 
-        //if (bareMirror) {
-        //    builder.setBare();
-        //}
-
         return builder.build();
     }
 
@@ -348,7 +296,6 @@ public class GitService {
         oldCommit = revWalk.parseCommit(repository.resolve(commitOld));
         newCommit = revWalk.parseCommit(repository.resolve(commitNew));
 
-
         // Prepare tree parsers for both commits
         ObjectReader reader = repository.newObjectReader();
         CanonicalTreeParser oldTreeParser = new CanonicalTreeParser();
@@ -368,10 +315,6 @@ public class GitService {
         // Filter out diffs that only contain whitespace or comment changes
         RevCommit finalOldCommit = oldCommit;
         RevCommit finalNewCommit = newCommit;
-
-//                returnMap = rawDiffs.stream()
-//                        .filter(diff -> isCodeChange(diff, repository, finalOldCommit, finalNewCommit))
-//                        .collect(Collectors.toList());
 
         for(DiffEntry diffEntry : diffEntryList) {
             switch (diffEntry.getChangeType()) {

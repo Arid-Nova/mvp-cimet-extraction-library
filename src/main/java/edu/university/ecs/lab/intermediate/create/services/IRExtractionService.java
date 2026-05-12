@@ -1,20 +1,19 @@
 package edu.university.ecs.lab.intermediate.create.services;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import edu.university.ecs.lab.common.config.Config;
-import edu.university.ecs.lab.common.config.RepositoryConfig;
-import edu.university.ecs.lab.common.models.dto.PartialMicroserviceSystemDto;
 import edu.university.ecs.lab.common.models.ir.*;
-import edu.university.ecs.lab.common.services.GitService;
+import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.utils.FileUtils;
+import edu.university.ecs.lab.common.services.GitService;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
+import edu.university.ecs.lab.common.models.dto.PartialMicroserviceSystemDto;
+
 import org.eclipse.jgit.api.errors.GitAPIException;
 
 import java.io.*;
-import java.nio.file.Path;
 import java.util.*;
-
+import java.nio.file.Path;
 
 /**
  * Top-level service for extracting intermediate representation from remote repositories. Methods
