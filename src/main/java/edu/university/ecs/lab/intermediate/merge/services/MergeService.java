@@ -134,10 +134,10 @@ public class MergeService {
                             components.add(cd.getComponent());
                             break;
                         case DELETE:
-                            components.remove(components.stream().filter(c -> c.getID().equals(cd.getComponent().getID())).findFirst().get());
+                            removeComponentById(components, cd.getComponent().getID());
                             break;
                         case MODIFY:
-                            components.remove(components.stream().filter(c -> c.getID().equals(cd.getComponent().getID())).findFirst().get());
+                            removeComponentById(components, cd.getComponent().getID());
                             components.add(cd.getComponent());
                             break;
                     }
@@ -345,6 +345,18 @@ public class MergeService {
         recursiveAddDescendants(components, aClass);
 
         microserviceSystem.getOrphans().add(aClass);
+    }
+
+    private void removeComponentById(List<Component> components, String componentID) {
+        ListIterator<Component> iterator = components.listIterator();
+        while (iterator.hasNext()) {
+            if (iterator.next().getID().equals(componentID)) {
+                iterator.remove();
+                return;
+            }
+        }
+
+        throw new NoSuchElementException("Missing component " + componentID);
     }
 
     private void recursiveAddDescendants(List<Component> componentList, Node root) {

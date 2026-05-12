@@ -5,14 +5,14 @@
     <groupId>edu.university.ecs.lab</groupId>
     <artifactId>cimet-extract-lib</artifactId>
     <!-- Version for tagging the library -->
-    <version>1.1.1</version>
+    <version>1.2.0</version>
     <url>https://github.com/UACloudVision/mvp-cimet-extract-lib</url>
 
     <scm>
         <connection>scm:git:https://github.com/UACloudVision/mvp-cimet-extract-lib.git</connection>
         <developerConnection>scm:git:https://github.com/UACloudVision/mvp-cimet-extract-lib.git</developerConnection>
         <url>https://github.com/UACloudVision/mvp-cimet-extract-lib</url>
-        <tag>v1.1.1</tag>
+        <tag>v1.2.0</tag>
     </scm>
 
     <!-- Github distribution management for posting maven library -->
@@ -25,8 +25,8 @@
     </distributionManagement>
 
     <properties>
-        <maven.compiler.target>24</maven.compiler.target>
-        <maven.compiler.source>24</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.parameters>true</maven.compiler.parameters>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
     </properties>
@@ -111,8 +111,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.0</version>
                 <configuration>
-                    <source>24</source>
-                    <target>24</target>
+                    <source>21</source>
+                    <target>21</target>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -126,6 +126,55 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>
                 <version>3.1.4</version>
+            </plugin>
+            <!--
+                Failsafe runs end-to-end / integration tests (*IT.java) during the
+                `verify` phase. Surefire (test phase) keeps running the existing
+                *Test.java suites. Run E2E with: mvn verify
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.2.5</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <includes>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>prepare-agent-integration</id>
+                        <goals>
+                            <goal>prepare-agent-integration</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

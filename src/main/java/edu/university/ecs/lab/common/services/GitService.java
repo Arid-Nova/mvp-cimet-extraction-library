@@ -7,25 +7,35 @@ import edu.university.ecs.lab.common.utils.GitHubTokenClient;
 import edu.university.ecs.lab.common.config.RepositoryBranchPair;
 
 import lombok.Getter;
-import org.eclipse.jgit.api.Git;
-import org.eclipse.jgit.api.ResetCommand;
-import org.eclipse.jgit.api.errors.GitAPIException;
-import org.eclipse.jgit.diff.DiffEntry;
-import org.eclipse.jgit.diff.EditList;
 import org.eclipse.jgit.lib.*;
-import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.diff.EditList;
+import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.revwalk.RevWalk;
-import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
-import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.eclipse.jgit.api.ResetCommand;
+import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.treewalk.TreeWalk;
+import org.eclipse.jgit.api.errors.GitAPIException;
+import org.eclipse.jgit.treewalk.CanonicalTreeParser;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
+import java.io.BufferedReader;
 import java.io.File;
-import java.util.Base64;
 import java.io.IOException;
+import java.io.InputStreamReader;
+
+import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.FileVisitResult;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.List;
+import java.nio.file.attribute.BasicFileAttributes;
+
 import java.util.Map;
+import java.util.List;
+import java.util.Base64;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -63,6 +73,7 @@ public class GitService {
      */
     public void prepareRepositories() throws IOException, InterruptedException {
         this.rawToken = tokenClient.fetchToken();
+        validateConfiguredRepositoryAccess();
 
         repositories = new HashMap<>();
 
@@ -90,91 +101,152 @@ public class GitService {
      */
     public void cloneRemote(RepositoryConfig config) throws InterruptedException, IOException {
         String repositoryPath = FileUtils.getRepositoryPath(config.getRepoName());
+        File repoDir = new File(repositoryPath);
+
+        // A prior run may have left a directory whose .git is incomplete (e.g. OneDrive
+        // sync wiped HEAD/config, or a clone was interrupted). In that case JGit walks
+        // up the parent tree and resolves SHAs against the wrong repo, producing
+        // MissingObjectException at resetLocal(). Wipe and re-clone instead.
+        if (repoDir.exists() && !isValidGitRepo(repoDir)) {
+            System.out.println("Detected invalid clone at " + repositoryPath + ", wiping and re-cloning");
+            deleteRecursively(repoDir.toPath());
+        }
 
         // Check if repository was already cloned
-        if (new File(repositoryPath).exists()) {
+        if (repoDir.exists()) {
             return;
         }
-//        if (new File(repositoryPath).exists()) {
-//            // Make sure repository is unbare
-//            ProcessBuilder unbare = new ProcessBuilder("git", "config", "--bool", "core.bare", "false");
-//            unbare.directory(new File(repositoryPath));
-//            unbare.inheritIO();
-//            Process unbareProcess = unbare.start();
-//            if(unbareProcess.waitFor() != 0) {
-//                throw new IOException("Failed to set repository non-bare");
-//            }
-//
-//            // Checkout specific commit
-//            ProcessBuilder checkout = new ProcessBuilder("git", "checkout", config.commitID());
-//            checkout.directory(new File(repositoryPath));
-//            checkout.inheritIO();
-//            Process checkoutProcess = checkout.start();
-//            if(checkoutProcess.waitFor() != 0) {
-//                throw new IOException("Failed to checkout repository");
-//            }
-//        }
-//        else {
-            String cleanUrl = config.repoBranchPair().repositoryURL();
 
-            // Create and execute operating system process to clone repository
-            ProcessBuilder processBuilder =
-                    new ProcessBuilder("git", "clone", cleanUrl, repositoryPath);
-            processBuilder.redirectErrorStream(true);
+        String cleanUrl = config.repoBranchPair().repositoryURL();
 
-            Map<String, String> env = processBuilder.environment();
-            env.put("GIT_TERMINAL_PROMPT", "0");
+        // Create and execute operating system process to clone repository
+        // This is because native, OS level retrievals are faster, an advantage nessecary to handle large
+        // microservices repositories.
+        ProcessBuilder processBuilder =
+                new ProcessBuilder("git", "clone", cleanUrl, repositoryPath);
+        processBuilder.redirectErrorStream(true);
 
-            if (this.rawToken != null && !this.rawToken.trim().isEmpty()) {
-                String authStr = "x-access-token:" + this.rawToken;
-                String b64Auth = Base64.getEncoder().encodeToString(authStr.getBytes(StandardCharsets.UTF_8));
+        applyGitProcessEnvironment(processBuilder);
 
-                env.put("GIT_CONFIG_COUNT", "1");
-                env.put("GIT_CONFIG_KEY_0", "http.https://github.com/.extraHeader");
-                env.put("GIT_CONFIG_VALUE_0", "AUTHORIZATION: basic " + b64Auth);
-            }
-            
-            Process process = processBuilder.start();
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                throw new IOException("Failed to clone repository (Exit Code: " + exitCode + "): " + config.getRepoName());
-            } else {
-                System.out.println("Cloned " + config.getRepoName());
-            }
-//        }
+        Process process = processBuilder.start();
+        String output = readProcessOutput(process);
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("Failed to clone repository (Exit Code: " + exitCode + "): "
+                    + config.getRepoName() + summarizeGitOutput(output));
+        } else {
+            System.out.println("Cloned " + config.getRepoName());
+        }
     }
 
-//    /**
-//     * Method to clone a repository using JGit to securely apply credentials.
-//     * Deprecated above version because it was running low local OS commands
-//     * which is not easy to deal with credential providers.
-//     */
-//    public void cloneRemote(RepositoryConfig config) throws IOException {
-//        String repositoryPath = FileUtils.getRepositoryPath(config.getRepoName());
-//
-//        // Check if repository was already cloned
-//        if (new File(repositoryPath).exists()) {
-//            return;
-//        }
-//
-//        try {
-//            CloneCommand cloneCommand = Git.cloneRepository()
-//                    .setURI(config.repoBranchPair().repositoryURL())
-//                    .setDirectory(new File(repositoryPath));
-//
-//            // Injecting the decrypted GitHub token
-//            if (this.credentialsProvider != null) {
-//                cloneCommand.setCredentialsProvider(this.credentialsProvider);
-//            }
-//
-//            // Executing the repository clone
-//            try (Git _ = cloneCommand.call()) {
-//                System.out.println("Successfully cloned " + config.getRepoName());
-//            }
-//        } catch (GitAPIException e) {
-//            throw new IOException("Failed to clone repository: " + config.getRepoName(), e);
-//        }
-//    }
+    private void validateConfiguredRepositoryAccess() throws IOException, InterruptedException {
+        List<RepositoryAccessFailure> failures = new ArrayList<>();
+
+        for (RepositoryConfig rc : config.getSystemRepositories()) {
+            RepositoryAccessCheck accessCheck = checkRemoteAccess(rc);
+            if (!accessCheck.accessible()) {
+                failures.add(new RepositoryAccessFailure(rc, accessCheck.output()));
+            }
+        }
+
+        if (failures.isEmpty()) {
+            return;
+        }
+
+        IOException accessDenied = new IOException(formatAccessDeniedMessage(failures));
+        try {
+            cleanConfiguredRepositoryDirectories();
+        } catch (IOException cleanupException) {
+            accessDenied.addSuppressed(cleanupException);
+        }
+        throw accessDenied;
+    }
+
+    private RepositoryAccessCheck checkRemoteAccess(RepositoryConfig rc) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "git",
+                "ls-remote",
+                "--exit-code",
+                rc.repoBranchPair().repositoryURL(),
+                "HEAD"
+        );
+        processBuilder.redirectErrorStream(true);
+        applyGitProcessEnvironment(processBuilder);
+
+        Process process = processBuilder.start();
+        String output = readProcessOutput(process);
+        int exitCode = process.waitFor();
+        return new RepositoryAccessCheck(exitCode == 0, output);
+    }
+
+    private void applyGitProcessEnvironment(ProcessBuilder processBuilder) {
+        Map<String, String> env = processBuilder.environment();
+        env.put("GIT_TERMINAL_PROMPT", "0");
+
+        if (this.rawToken != null && !this.rawToken.trim().isEmpty()) {
+            String authStr = "x-access-token:" + this.rawToken;
+            String b64Auth = Base64.getEncoder().encodeToString(authStr.getBytes(StandardCharsets.UTF_8));
+
+            env.put("GIT_CONFIG_COUNT", "1");
+            env.put("GIT_CONFIG_KEY_0", "http.https://github.com/.extraHeader");
+            env.put("GIT_CONFIG_VALUE_0", "AUTHORIZATION: basic " + b64Auth);
+        }
+    }
+
+    private String readProcessOutput(Process process) throws IOException {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            return reader.lines().collect(Collectors.joining(System.lineSeparator()));
+        }
+    }
+
+    private String formatAccessDeniedMessage(List<RepositoryAccessFailure> failures) {
+        String inaccessibleRepositories = failures.stream()
+                .map(failure -> failure.repositoryConfig().getRepoName()
+                        + " (" + failure.repositoryConfig().repoBranchPair().repositoryURL() + ")"
+                        + summarizeGitOutput(failure.output()))
+                .collect(Collectors.joining("; "));
+
+        return "Access denied while checking repository clone permissions. "
+                + "Cleaned configured local clone directories. "
+                + "Inaccessible repositories: " + inaccessibleRepositories;
+    }
+
+    private String summarizeGitOutput(String output) {
+        if (output == null || output.isBlank()) {
+            return "";
+        }
+
+        String summary = output.lines()
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .limit(3)
+                .collect(Collectors.joining(" "));
+        if (this.rawToken != null && !this.rawToken.isBlank()) {
+            summary = summary.replace(this.rawToken, "[redacted]");
+        }
+
+        return summary.isBlank() ? "" : " - " + summary;
+    }
+
+    private void cleanConfiguredRepositoryDirectories() throws IOException {
+        IOException cleanupFailure = null;
+        for (RepositoryConfig rc : config.getSystemRepositories()) {
+            try {
+                deleteRecursively(Path.of(FileUtils.getRepositoryPath(rc.getRepoName())));
+            } catch (IOException e) {
+                if (cleanupFailure == null) {
+                    cleanupFailure = e;
+                } else {
+                    cleanupFailure.addSuppressed(e);
+                }
+            }
+        }
+
+        if (cleanupFailure != null) {
+            throw cleanupFailure;
+        }
+    }
 
     /**
      * Method to reset repository to a given commit
@@ -205,6 +277,46 @@ public class GitService {
     }
 
     /**
+     * Decide whether a working tree's .git is a usable Git repository. A bare
+     * directory whose .git is missing HEAD/config will cause JGit to walk up
+     * to a parent repository, so we treat that as invalid.
+     */
+    private static boolean isValidGitRepo(File workTree) {
+        File gitDir = new File(workTree, ".git");
+        if (!gitDir.exists()) {
+            return false;
+        }
+        // .git can also be a file (gitlink/worktree pointer); accept it.
+        if (gitDir.isFile()) {
+            return true;
+        }
+        return new File(gitDir, "HEAD").isFile() && new File(gitDir, "config").isFile();
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) {
+            return;
+        }
+        Files.walkFileTree(root, new SimpleFileVisitor<Path>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                // Read-only files (common under .git on Windows) need their write bit set
+                // before delete, otherwise Files.delete throws AccessDeniedException.
+                file.toFile().setWritable(true);
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+                if (exc != null) throw exc;
+                Files.delete(dir);
+                return FileVisitResult.CONTINUE;
+            }
+        });
+    }
+
+    /**
      * Method to initialize repository from repository configuration
      *
      * @param rc The RepositoryConfig
@@ -216,10 +328,6 @@ public class GitService {
 
         File repositoryPath = new File(FileUtils.getRepositoryPath(rc.getRepoName()));
         FileRepositoryBuilder builder = new FileRepositoryBuilder().setGitDir(new File(repositoryPath, ".git"));
-
-        //if (bareMirror) {
-        //    builder.setBare();
-        //}
 
         return builder.build();
     }
@@ -293,7 +401,6 @@ public class GitService {
         oldCommit = revWalk.parseCommit(repository.resolve(commitOld));
         newCommit = revWalk.parseCommit(repository.resolve(commitNew));
 
-
         // Prepare tree parsers for both commits
         ObjectReader reader = repository.newObjectReader();
         CanonicalTreeParser oldTreeParser = new CanonicalTreeParser();
@@ -313,10 +420,6 @@ public class GitService {
         // Filter out diffs that only contain whitespace or comment changes
         RevCommit finalOldCommit = oldCommit;
         RevCommit finalNewCommit = newCommit;
-
-//                returnMap = rawDiffs.stream()
-//                        .filter(diff -> isCodeChange(diff, repository, finalOldCommit, finalNewCommit))
-//                        .collect(Collectors.toList());
 
         for(DiffEntry diffEntry : diffEntryList) {
             switch (diffEntry.getChangeType()) {
@@ -444,5 +547,11 @@ public class GitService {
         walk.close();
 
         return commitID;
+    }
+
+    private record RepositoryAccessCheck(boolean accessible, String output) {
+    }
+
+    private record RepositoryAccessFailure(RepositoryConfig repositoryConfig, String output) {
     }
 }
