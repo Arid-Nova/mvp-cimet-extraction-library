@@ -19,6 +19,8 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -86,9 +88,10 @@ public class ServiceBoundaryDetector {
             throw new IOException("Repository path must exist and be directory");
         }
 
+        RepositoryScanIndex scanIndex = scanRepository(repositoryRoot);
         List<ScoredServiceRoot> scoredRoots = new ArrayList<>();
-        for (Path possibleRoot : findPossibleServiceRoots(repositoryRoot)) {
-            ScoredServiceRoot scoredRoot = score(possibleRoot, rc);
+        for (Path possibleRoot : scanIndex.possibleServiceRoots()) {
+            ScoredServiceRoot scoredRoot = score(possibleRoot, rc, scanIndex);
             if (scoredRoot.score() >= MINIMUM_SERVICE_SCORE) {
                 scoredRoots.add(scoredRoot);
             }
@@ -99,9 +102,8 @@ public class ServiceBoundaryDetector {
                 .toList();
     }
 
-    private List<Path> findPossibleServiceRoots(Path repositoryRoot) throws IOException {
-        List<Path> serviceRoots = new ArrayList<>();
-
+    private RepositoryScanIndex scanRepository(Path repositoryRoot) throws IOException {
+        RepositoryScanIndex scanIndex = new RepositoryScanIndex();
         Files.walkFileTree(repositoryRoot, new SimpleFileVisitor<>() {
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -109,72 +111,67 @@ public class ServiceBoundaryDetector {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
 
-                if (hasBoundaryMarker(dir)) {
-                    serviceRoots.add(dir);
-                }
+                scanIndex.recordDirectory(dir);
+                return FileVisitResult.CONTINUE;
+            }
 
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                if (attrs.isRegularFile()) {
+                    scanIndex.recordFile(file);
+                }
                 return FileVisitResult.CONTINUE;
             }
         });
-
-        return serviceRoots;
+        scanIndex.sortEvidence();
+        return scanIndex;
     }
 
-    private boolean hasBoundaryMarker(Path dir) {
-        return hasAnyFile(dir, BUILD_FILES)
-                || hasAnyFile(dir, DOCKER_FILES)
-                || hasAnyFile(dir, DOCKER_COMPOSE_FILES)
-                || hasAnyApplicationConfig(dir)
-                || Files.isDirectory(dir.resolve("src").resolve("main").resolve("java"))
-                || Files.exists(dir.resolve("Chart.yaml"))
-                || containsDeploymentDirectory(dir);
-    }
-
-    private ScoredServiceRoot score(Path possibleRoot, RepositoryConfig rc) throws IOException {
+    private ScoredServiceRoot score(Path possibleRoot, RepositoryConfig rc, RepositoryScanIndex scanIndex) {
         int score = 0;
         Set<String> evidence = new LinkedHashSet<>();
 
-        Optional<String> buildFile = firstExistingFileName(possibleRoot, BUILD_FILES);
+        Optional<String> buildFile = scanIndex.firstExistingFileName(possibleRoot, BUILD_FILES);
         if (buildFile.isPresent()) {
             score += BUILD_FILE_SCORE;
             evidence.add("build file: " + buildFile.get());
         }
 
-        if (Files.isDirectory(possibleRoot.resolve("src").resolve("main").resolve("java"))) {
+        if (scanIndex.hasDirectory(possibleRoot.resolve("src").resolve("main").resolve("java"))) {
             evidence.add("source tree: src/main/java");
         }
 
-        Optional<Path> applicationConfig = firstApplicationConfig(possibleRoot);
+        Optional<Path> applicationConfig = scanIndex.firstApplicationConfig(possibleRoot);
         if (applicationConfig.isPresent()) {
             score += APPLICATION_CONFIG_SCORE;
             evidence.add("application config: " + displayPath(possibleRoot, applicationConfig.get()));
         }
 
-        Optional<String> dockerfile = firstExistingFileName(possibleRoot, DOCKER_FILES);
+        Optional<String> dockerfile = scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES);
         if (dockerfile.isPresent()) {
             score += DOCKERFILE_SCORE;
             evidence.add("dockerfile: " + dockerfile.get());
         }
 
-        Optional<Path> dockerCompose = dockerComposeWithServices(possibleRoot);
+        Optional<Path> dockerCompose = scanIndex.dockerComposeWithServices(possibleRoot);
         if (dockerCompose.isPresent()) {
             score += DOCKER_COMPOSE_SERVICE_SCORE;
             evidence.add("docker-compose services: " + displayPath(possibleRoot, dockerCompose.get()));
         }
 
-        Optional<Path> deploymentManifest = findKubernetesDeployment(possibleRoot);
+        Optional<Path> deploymentManifest = scanIndex.findKubernetesDeployment(possibleRoot);
         if (deploymentManifest.isPresent()) {
             score += KUBERNETES_DEPLOYMENT_SCORE;
             evidence.add("kubernetes deployment: " + displayPath(possibleRoot, deploymentManifest.get()));
         }
 
-        Optional<Path> helmChart = findHelmChart(possibleRoot);
+        Optional<Path> helmChart = scanIndex.findHelmChart(possibleRoot);
         if (helmChart.isPresent()) {
             score += KUBERNETES_DEPLOYMENT_SCORE;
             evidence.add("helm chart: " + displayPath(possibleRoot, helmChart.get()));
         }
 
-        JavaEvidence javaEvidence = findJavaEvidence(possibleRoot);
+        JavaEvidence javaEvidence = scanIndex.javaEvidence(possibleRoot);
         if (javaEvidence.hasSpringBootApplication()) {
             score += SPRING_BOOT_APPLICATION_SCORE;
             evidence.add("SpringBootApplication: " + displayPath(possibleRoot, javaEvidence.springBootApplicationPath()));
@@ -192,53 +189,29 @@ public class ServiceBoundaryDetector {
     }
 
     private List<ServiceBoundaryCandidate> removeParentCandidates(List<ScoredServiceRoot> scoredRoots) {
-        List<ServiceBoundaryCandidate> candidates = scoredRoots.stream()
+        List<ServiceBoundaryCandidate> candidatesByDepth = scoredRoots.stream()
                 .map(ScoredServiceRoot::candidate)
+                .sorted(Comparator.comparingInt(candidate -> -normalized(candidate.rootPath()).getNameCount()))
                 .toList();
+        Set<Path> rootsWithAcceptedChildren = new HashSet<>();
         List<ServiceBoundaryCandidate> filtered = new ArrayList<>();
 
-        for (ServiceBoundaryCandidate candidate : candidates) {
-            boolean hasAcceptedChild = candidates.stream()
-                    .anyMatch(other -> !other.rootPath().equals(candidate.rootPath())
-                            && normalized(other.rootPath()).startsWith(normalized(candidate.rootPath())));
-            if (!hasAcceptedChild) {
-                filtered.add(candidate);
+        for (ServiceBoundaryCandidate candidate : candidatesByDepth) {
+            Path normalizedRoot = normalized(candidate.rootPath());
+            if (rootsWithAcceptedChildren.contains(normalizedRoot)) {
+                continue;
+            }
+
+            filtered.add(candidate);
+
+            Path parent = normalizedRoot.getParent();
+            while (parent != null) {
+                rootsWithAcceptedChildren.add(parent);
+                parent = parent.getParent();
             }
         }
 
         return filtered;
-    }
-
-    private JavaEvidence findJavaEvidence(Path possibleRoot) throws IOException {
-        Path sourceRoot = possibleRoot.resolve("src").resolve("main").resolve("java");
-        if (!Files.isDirectory(sourceRoot)) {
-            return JavaEvidence.empty();
-        }
-
-        JavaEvidence evidence = JavaEvidence.empty();
-        try (var paths = Files.walk(sourceRoot)) {
-            for (Path path : paths.filter(path -> path.toString().endsWith(".java")).toList()) {
-                String contents = Files.readString(path);
-                if (!evidence.hasSpringBootApplication() && contents.contains("@SpringBootApplication")) {
-                    evidence = evidence.withSpringBootApplication(path);
-                }
-                if (!evidence.hasController()
-                        && (contents.contains("@RestController") || contents.contains("@Controller"))) {
-                    evidence = evidence.withController(path);
-                }
-                if (!evidence.hasRequestMapping() && contents.contains("@RequestMapping")) {
-                    evidence = evidence.withRequestMapping(path);
-                }
-
-                if (evidence.hasSpringBootApplication()
-                        && evidence.hasController()
-                        && evidence.hasRequestMapping()) {
-                    break;
-                }
-            }
-        }
-
-        return evidence;
     }
 
     private String inferServiceName(Path possibleRoot, RepositoryConfig rc) {
@@ -344,10 +317,13 @@ public class ServiceBoundaryDetector {
                 continue;
             }
 
-            try {
-                Matcher matcher = GRADLE_ROOT_PROJECT_NAME.matcher(Files.readString(gradleFile));
-                if (matcher.find()) {
-                    return asNonBlankString(matcher.group(1));
+            try (var reader = Files.newBufferedReader(gradleFile)) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    Matcher matcher = GRADLE_ROOT_PROJECT_NAME.matcher(line);
+                    if (matcher.find()) {
+                        return asNonBlankString(matcher.group(1));
+                    }
                 }
             } catch (IOException e) {
                 return Optional.empty();
@@ -355,12 +331,6 @@ public class ServiceBoundaryDetector {
         }
 
         return Optional.empty();
-    }
-
-    private Optional<Path> firstApplicationConfig(Path possibleRoot) {
-        return orderedApplicationConfigPaths(possibleRoot).stream()
-                .filter(Files::isRegularFile)
-                .findFirst();
     }
 
     private List<Path> orderedApplicationConfigPaths(Path possibleRoot) {
@@ -375,25 +345,6 @@ public class ServiceBoundaryDetector {
         }
 
         return configPaths;
-    }
-
-    private boolean hasAnyApplicationConfig(Path dir) {
-        return firstApplicationConfig(dir).isPresent();
-    }
-
-    private Optional<Path> dockerComposeWithServices(Path possibleRoot) {
-        for (String composeFileName : DOCKER_COMPOSE_FILES) {
-            Path composeFile = possibleRoot.resolve(composeFileName);
-            if (!Files.isRegularFile(composeFile)) {
-                continue;
-            }
-
-            if (yamlHasTopLevelServices(composeFile)) {
-                return Optional.of(composeFile);
-            }
-        }
-
-        return Optional.empty();
     }
 
     private boolean yamlHasTopLevelServices(Path composeFile) {
@@ -412,124 +363,18 @@ public class ServiceBoundaryDetector {
         return false;
     }
 
-    private Optional<Path> findKubernetesDeployment(Path possibleRoot) throws IOException {
-        for (Path root : deploymentSearchRoots(possibleRoot)) {
-            Optional<Path> deployment = findDeploymentManifestUnder(root);
-            if (deployment.isPresent()) {
-                return deployment;
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    private Optional<Path> findDeploymentManifestUnder(Path root) throws IOException {
-        if (!Files.exists(root)) {
-            return Optional.empty();
-        }
-
-        if (Files.isRegularFile(root) && isYamlFile(root) && containsKubernetesDeploymentKind(root)) {
-            return Optional.of(root);
-        }
-
-        if (!Files.isDirectory(root)) {
-            return Optional.empty();
-        }
-
-        try (var paths = Files.walk(root)) {
-            return paths.filter(Files::isRegularFile)
-                    .filter(this::isYamlFile)
-                    .filter(this::containsKubernetesDeploymentKind)
-                    .findFirst();
-        }
-    }
-
-    private List<Path> deploymentSearchRoots(Path possibleRoot) {
-        List<Path> roots = new ArrayList<>();
-        roots.add(possibleRoot.resolve("deployment.yml"));
-        roots.add(possibleRoot.resolve("deployment.yaml"));
-
-        for (String deploymentDirectory : DEPLOYMENT_DIRECTORIES) {
-            roots.add(possibleRoot.resolve(deploymentDirectory));
-        }
-
-        return roots;
-    }
-
-    private Optional<Path> findHelmChart(Path possibleRoot) throws IOException {
-        Path directChart = possibleRoot.resolve("Chart.yaml");
-        if (Files.isRegularFile(directChart)) {
-            return Optional.of(directChart);
-        }
-
-        for (String deploymentDirectory : DEPLOYMENT_DIRECTORIES) {
-            Path root = possibleRoot.resolve(deploymentDirectory);
-            if (!Files.isDirectory(root)) {
-                continue;
-            }
-
-            try (var paths = Files.walk(root)) {
-                Optional<Path> chart = paths.filter(path -> path.getFileName().toString().equals("Chart.yaml"))
-                        .findFirst();
-                if (chart.isPresent()) {
-                    return chart;
+    private boolean containsKubernetesDeploymentKind(Path path) {
+        try (var reader = Files.newBufferedReader(path)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (KUBERNETES_DEPLOYMENT_KIND.matcher(line).find()) {
+                    return true;
                 }
             }
-        }
-
-        return Optional.empty();
-    }
-
-    private boolean containsKubernetesDeploymentKind(Path path) {
-        try {
-            return KUBERNETES_DEPLOYMENT_KIND.matcher(Files.readString(path)).find();
         } catch (IOException e) {
             return false;
         }
-    }
-
-    private boolean containsDeploymentDirectory(Path dir) {
-        return DEPLOYMENT_DIRECTORIES.stream()
-                .map(dir::resolve)
-                .anyMatch(Files::exists);
-    }
-
-    private Optional<String> firstExistingFileName(Path dir, List<String> fileNames) {
-        if (!Files.isDirectory(dir)) {
-            return Optional.empty();
-        }
-
-        try (var paths = Files.list(dir)) {
-            List<String> existingFileNames = paths.filter(Files::isRegularFile)
-                    .map(path -> path.getFileName().toString())
-                    .toList();
-
-            for (String fileName : fileNames) {
-                Optional<String> exactMatch = existingFileNames.stream()
-                        .filter(existingFileName -> existingFileName.equals(fileName))
-                        .findFirst();
-                if (exactMatch.isPresent()) {
-                    return exactMatch;
-                }
-            }
-
-            for (String fileName : fileNames) {
-                Optional<String> caseInsensitiveMatch = existingFileNames.stream()
-                        .filter(existingFileName -> existingFileName.equalsIgnoreCase(fileName))
-                        .findFirst();
-                if (caseInsensitiveMatch.isPresent()) {
-                    return caseInsensitiveMatch;
-                }
-            }
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-
-        return Optional.empty();
-    }
-
-    private boolean hasAnyFile(Path dir, List<String> fileNames) {
-        return firstExistingFileName(dir, fileNames).isPresent();
+        return false;
     }
 
     private boolean isYamlFile(Path path) {
@@ -569,6 +414,300 @@ public class ServiceBoundaryDetector {
         return Optional.of(stringValue);
     }
 
+    private Optional<Path> serviceRootFromJavaSourceDirectory(Path dir) {
+        if (!pathEndsWith(dir, "src", "main", "java")) {
+            return Optional.empty();
+        }
+
+        Path src = dir.getParent() == null ? null : dir.getParent().getParent();
+        if (src == null) {
+            return Optional.empty();
+        }
+
+        return Optional.ofNullable(src.getParent());
+    }
+
+    private Optional<Path> serviceRootFromJavaFile(Path file) {
+        Path dir = file.getParent();
+        while (dir != null) {
+            Optional<Path> serviceRoot = serviceRootFromJavaSourceDirectory(dir);
+            if (serviceRoot.isPresent()) {
+                return serviceRoot;
+            }
+            dir = dir.getParent();
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<Path> serviceRootFromApplicationConfig(Path file) {
+        String fileName = file.getFileName().toString();
+        if (!APPLICATION_CONFIG_FILES.contains(fileName)) {
+            return Optional.empty();
+        }
+
+        Path parent = file.getParent();
+        if (parent == null) {
+            return Optional.empty();
+        }
+
+        if (pathEndsWith(parent, "src", "main", "resources")) {
+            Path src = parent.getParent() == null ? null : parent.getParent().getParent();
+            if (src != null && src.getParent() != null) {
+                return Optional.of(src.getParent());
+            }
+        }
+
+        return Optional.of(parent);
+    }
+
+    private boolean isCandidateMarkerFileName(String fileName) {
+        return matchesAnyFileName(fileName, BUILD_FILES)
+                || matchesAnyFileName(fileName, DOCKER_FILES)
+                || matchesAnyFileName(fileName, DOCKER_COMPOSE_FILES)
+                || fileName.equals("Chart.yaml");
+    }
+
+    private boolean matchesAnyFileName(String fileName, List<String> expectedFileNames) {
+        return expectedFileNames.stream().anyMatch(expectedFileName -> expectedFileName.equalsIgnoreCase(fileName));
+    }
+
+    private boolean isDeploymentFileName(String fileName) {
+        return fileName.equals("deployment.yml") || fileName.equals("deployment.yaml");
+    }
+
+    private boolean hasDeploymentDirectoryAncestor(Path path) {
+        for (Path segment : path) {
+            if (DEPLOYMENT_DIRECTORIES.contains(segment.toString())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isDirectDeploymentFile(Path root, Path path) {
+        Path parent = path.getParent();
+        return parent != null
+                && key(parent).equals(key(root))
+                && isDeploymentFileName(path.getFileName().toString());
+    }
+
+    private boolean isUnderDeploymentDirectory(Path root, Path path) {
+        Optional<Path> relativePath = relativePath(root, path);
+        if (relativePath.isEmpty() || relativePath.get().getNameCount() < 2) {
+            return false;
+        }
+
+        return DEPLOYMENT_DIRECTORIES.contains(relativePath.get().getName(0).toString());
+    }
+
+    private Optional<Path> relativePath(Path root, Path path) {
+        Path normalizedRoot = key(root);
+        Path normalizedPath = key(path);
+        if (!normalizedPath.startsWith(normalizedRoot)) {
+            return Optional.empty();
+        }
+
+        return Optional.of(normalizedRoot.relativize(normalizedPath));
+    }
+
+    private boolean pathEndsWith(Path path, String... names) {
+        if (path.getNameCount() < names.length) {
+            return false;
+        }
+
+        for (int i = 0; i < names.length; i++) {
+            String pathSegment = path.getName(path.getNameCount() - names.length + i).toString();
+            if (!pathSegment.equals(names[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private Path key(Path path) {
+        return path.normalize();
+    }
+
+    private final class RepositoryScanIndex {
+        private final Set<Path> possibleServiceRoots = new LinkedHashSet<>();
+        private final Set<Path> directories = new HashSet<>();
+        private final Set<Path> regularFiles = new HashSet<>();
+        private final Map<Path, List<String>> fileNamesByDirectory = new HashMap<>();
+        private final Set<Path> dockerComposeFilesWithServices = new HashSet<>();
+        private final List<Path> deploymentManifests = new ArrayList<>();
+        private final List<Path> helmCharts = new ArrayList<>();
+        private final Map<Path, JavaEvidence> javaEvidenceByRoot = new HashMap<>();
+
+        private void recordDirectory(Path dir) {
+            directories.add(key(dir));
+            serviceRootFromJavaSourceDirectory(dir).ifPresent(this::addPossibleServiceRoot);
+
+            Path parent = dir.getParent();
+            if (parent != null && DEPLOYMENT_DIRECTORIES.contains(dir.getFileName().toString())) {
+                addPossibleServiceRoot(parent);
+            }
+        }
+
+        private void recordFile(Path file) throws IOException {
+            Path parent = file.getParent();
+            String fileName = file.getFileName().toString();
+
+            regularFiles.add(key(file));
+            if (parent != null) {
+                fileNamesByDirectory.computeIfAbsent(key(parent), ignored -> new ArrayList<>()).add(fileName);
+
+                if (isCandidateMarkerFileName(fileName)) {
+                    addPossibleServiceRoot(parent);
+                }
+            }
+
+            serviceRootFromApplicationConfig(file).ifPresent(this::addPossibleServiceRoot);
+
+            if (DOCKER_COMPOSE_FILES.contains(fileName) && yamlHasTopLevelServices(file)) {
+                dockerComposeFilesWithServices.add(key(file));
+            }
+            if (isYamlFile(file)
+                    && (isDeploymentFileName(fileName) || hasDeploymentDirectoryAncestor(file))
+                    && containsKubernetesDeploymentKind(file)) {
+                deploymentManifests.add(file);
+            }
+            if (fileName.equals("Chart.yaml")) {
+                helmCharts.add(file);
+            }
+            if (fileName.endsWith(".java")) {
+                recordJavaEvidence(file);
+            }
+        }
+
+        private void recordJavaEvidence(Path file) {
+            Optional<Path> serviceRoot = serviceRootFromJavaFile(file);
+            if (serviceRoot.isEmpty()) {
+                return;
+            }
+
+            addPossibleServiceRoot(serviceRoot.get());
+            Path serviceRootKey = key(serviceRoot.get());
+            JavaEvidence evidence = javaEvidenceByRoot.getOrDefault(serviceRootKey, JavaEvidence.empty());
+            if (evidence.isComplete()) {
+                return;
+            }
+
+            javaEvidenceByRoot.put(serviceRootKey, scanJavaFile(file, evidence));
+        }
+
+        private JavaEvidence scanJavaFile(Path file, JavaEvidence evidence) {
+            JavaEvidence currentEvidence = evidence;
+            try (var reader = Files.newBufferedReader(file)) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!currentEvidence.hasSpringBootApplication() && line.contains("@SpringBootApplication")) {
+                        currentEvidence = currentEvidence.withSpringBootApplication(file);
+                    }
+                    if (!currentEvidence.hasController()
+                            && (line.contains("@RestController") || line.contains("@Controller"))) {
+                        currentEvidence = currentEvidence.withController(file);
+                    }
+                    if (!currentEvidence.hasRequestMapping() && line.contains("@RequestMapping")) {
+                        currentEvidence = currentEvidence.withRequestMapping(file);
+                    }
+
+                    if (currentEvidence.isComplete()) {
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                return evidence;
+            }
+
+            return currentEvidence;
+        }
+
+        private void sortEvidence() {
+            deploymentManifests.sort(Comparator.comparing(Path::toString));
+            helmCharts.sort(Comparator.comparing(Path::toString));
+        }
+
+        private List<Path> possibleServiceRoots() {
+            return new ArrayList<>(possibleServiceRoots);
+        }
+
+        private boolean hasDirectory(Path dir) {
+            return directories.contains(key(dir));
+        }
+
+        private Optional<Path> firstApplicationConfig(Path possibleRoot) {
+            return orderedApplicationConfigPaths(possibleRoot).stream()
+                    .filter(this::isRegularFile)
+                    .findFirst();
+        }
+
+        private Optional<Path> dockerComposeWithServices(Path possibleRoot) {
+            for (String composeFileName : DOCKER_COMPOSE_FILES) {
+                Path composeFile = possibleRoot.resolve(composeFileName);
+                if (dockerComposeFilesWithServices.contains(key(composeFile))) {
+                    return Optional.of(composeFile);
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        private Optional<Path> findKubernetesDeployment(Path possibleRoot) {
+            return deploymentManifests.stream()
+                    .filter(path -> isDirectDeploymentFile(possibleRoot, path) || isUnderDeploymentDirectory(possibleRoot, path))
+                    .findFirst();
+        }
+
+        private Optional<Path> findHelmChart(Path possibleRoot) {
+            return helmCharts.stream()
+                    .filter(path -> {
+                        Path parent = path.getParent();
+                        return (parent != null && key(parent).equals(key(possibleRoot)))
+                                || isUnderDeploymentDirectory(possibleRoot, path);
+                    })
+                    .findFirst();
+        }
+
+        private JavaEvidence javaEvidence(Path possibleRoot) {
+            return javaEvidenceByRoot.getOrDefault(key(possibleRoot), JavaEvidence.empty());
+        }
+
+        private Optional<String> firstExistingFileName(Path dir, List<String> fileNames) {
+            List<String> existingFileNames = fileNamesByDirectory.getOrDefault(key(dir), List.of());
+
+            for (String fileName : fileNames) {
+                Optional<String> exactMatch = existingFileNames.stream()
+                        .filter(existingFileName -> existingFileName.equals(fileName))
+                        .findFirst();
+                if (exactMatch.isPresent()) {
+                    return exactMatch;
+                }
+            }
+
+            for (String fileName : fileNames) {
+                Optional<String> caseInsensitiveMatch = existingFileNames.stream()
+                        .filter(existingFileName -> existingFileName.equalsIgnoreCase(fileName))
+                        .findFirst();
+                if (caseInsensitiveMatch.isPresent()) {
+                    return caseInsensitiveMatch;
+                }
+            }
+
+            return Optional.empty();
+        }
+
+        private boolean isRegularFile(Path path) {
+            return regularFiles.contains(key(path));
+        }
+
+        private void addPossibleServiceRoot(Path path) {
+            possibleServiceRoots.add(path.normalize());
+        }
+    }
+
     private record ScoredServiceRoot(ServiceBoundaryCandidate candidate, int score) {
     }
 
@@ -603,6 +742,10 @@ public class ServiceBoundaryDetector {
 
         private boolean hasRequestMapping() {
             return requestMappingPath != null;
+        }
+
+        private boolean isComplete() {
+            return hasSpringBootApplication() && hasController() && hasRequestMapping();
         }
     }
 }

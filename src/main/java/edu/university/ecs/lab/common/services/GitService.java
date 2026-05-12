@@ -19,8 +19,10 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.treewalk.CanonicalTreeParser;
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 
 import java.nio.file.Path;
 import java.nio.file.Files;
@@ -32,6 +34,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Map;
 import java.util.List;
 import java.util.Base64;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -70,6 +73,7 @@ public class GitService {
      */
     public void prepareRepositories() throws IOException, InterruptedException {
         this.rawToken = tokenClient.fetchToken();
+        validateConfiguredRepositoryAccess();
 
         repositories = new HashMap<>();
 
@@ -122,6 +126,60 @@ public class GitService {
                 new ProcessBuilder("git", "clone", cleanUrl, repositoryPath);
         processBuilder.redirectErrorStream(true);
 
+        applyGitProcessEnvironment(processBuilder);
+
+        Process process = processBuilder.start();
+        String output = readProcessOutput(process);
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("Failed to clone repository (Exit Code: " + exitCode + "): "
+                    + config.getRepoName() + summarizeGitOutput(output));
+        } else {
+            System.out.println("Cloned " + config.getRepoName());
+        }
+    }
+
+    private void validateConfiguredRepositoryAccess() throws IOException, InterruptedException {
+        List<RepositoryAccessFailure> failures = new ArrayList<>();
+
+        for (RepositoryConfig rc : config.getSystemRepositories()) {
+            RepositoryAccessCheck accessCheck = checkRemoteAccess(rc);
+            if (!accessCheck.accessible()) {
+                failures.add(new RepositoryAccessFailure(rc, accessCheck.output()));
+            }
+        }
+
+        if (failures.isEmpty()) {
+            return;
+        }
+
+        IOException accessDenied = new IOException(formatAccessDeniedMessage(failures));
+        try {
+            cleanConfiguredRepositoryDirectories();
+        } catch (IOException cleanupException) {
+            accessDenied.addSuppressed(cleanupException);
+        }
+        throw accessDenied;
+    }
+
+    private RepositoryAccessCheck checkRemoteAccess(RepositoryConfig rc) throws IOException, InterruptedException {
+        ProcessBuilder processBuilder = new ProcessBuilder(
+                "git",
+                "ls-remote",
+                "--exit-code",
+                rc.repoBranchPair().repositoryURL(),
+                "HEAD"
+        );
+        processBuilder.redirectErrorStream(true);
+        applyGitProcessEnvironment(processBuilder);
+
+        Process process = processBuilder.start();
+        String output = readProcessOutput(process);
+        int exitCode = process.waitFor();
+        return new RepositoryAccessCheck(exitCode == 0, output);
+    }
+
+    private void applyGitProcessEnvironment(ProcessBuilder processBuilder) {
         Map<String, String> env = processBuilder.environment();
         env.put("GIT_TERMINAL_PROMPT", "0");
 
@@ -133,13 +191,60 @@ public class GitService {
             env.put("GIT_CONFIG_KEY_0", "http.https://github.com/.extraHeader");
             env.put("GIT_CONFIG_VALUE_0", "AUTHORIZATION: basic " + b64Auth);
         }
+    }
 
-        Process process = processBuilder.start();
-        int exitCode = process.waitFor();
-        if (exitCode != 0) {
-            throw new IOException("Failed to clone repository (Exit Code: " + exitCode + "): " + config.getRepoName());
-        } else {
-            System.out.println("Cloned " + config.getRepoName());
+    private String readProcessOutput(Process process) throws IOException {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            return reader.lines().collect(Collectors.joining(System.lineSeparator()));
+        }
+    }
+
+    private String formatAccessDeniedMessage(List<RepositoryAccessFailure> failures) {
+        String inaccessibleRepositories = failures.stream()
+                .map(failure -> failure.repositoryConfig().getRepoName()
+                        + " (" + failure.repositoryConfig().repoBranchPair().repositoryURL() + ")"
+                        + summarizeGitOutput(failure.output()))
+                .collect(Collectors.joining("; "));
+
+        return "Access denied while checking repository clone permissions. "
+                + "Cleaned configured local clone directories. "
+                + "Inaccessible repositories: " + inaccessibleRepositories;
+    }
+
+    private String summarizeGitOutput(String output) {
+        if (output == null || output.isBlank()) {
+            return "";
+        }
+
+        String summary = output.lines()
+                .map(String::trim)
+                .filter(line -> !line.isBlank())
+                .limit(3)
+                .collect(Collectors.joining(" "));
+        if (this.rawToken != null && !this.rawToken.isBlank()) {
+            summary = summary.replace(this.rawToken, "[redacted]");
+        }
+
+        return summary.isBlank() ? "" : " - " + summary;
+    }
+
+    private void cleanConfiguredRepositoryDirectories() throws IOException {
+        IOException cleanupFailure = null;
+        for (RepositoryConfig rc : config.getSystemRepositories()) {
+            try {
+                deleteRecursively(Path.of(FileUtils.getRepositoryPath(rc.getRepoName())));
+            } catch (IOException e) {
+                if (cleanupFailure == null) {
+                    cleanupFailure = e;
+                } else {
+                    cleanupFailure.addSuppressed(e);
+                }
+            }
+        }
+
+        if (cleanupFailure != null) {
+            throw cleanupFailure;
         }
     }
 
@@ -442,5 +547,11 @@ public class GitService {
         walk.close();
 
         return commitID;
+    }
+
+    private record RepositoryAccessCheck(boolean accessible, String output) {
+    }
+
+    private record RepositoryAccessFailure(RepositoryConfig repositoryConfig, String output) {
     }
 }
