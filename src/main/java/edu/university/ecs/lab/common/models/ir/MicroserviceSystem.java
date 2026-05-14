@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.FileType;
+import edu.university.ecs.lab.common.utils.FileUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -53,7 +54,11 @@ public class MicroserviceSystem extends Node {
      * @return microservice instance of matching path or null
      */
     public Microservice findMicroserviceByPath(Path path) {
-        return getMicroservices().stream().filter(microservice -> path.startsWith(microservice.getPath())).findFirst().orElse(null);
+        return getMicroservices().stream()
+                .filter(microservice -> FileUtils.pathStartsWith(path, microservice.getPath()))
+                .max(Comparator.comparingInt(microservice ->
+                        FileUtils.normalizePathString(microservice.getPath().toString()).length()))
+                .orElse(null);
     }
 
     /**
@@ -80,7 +85,7 @@ public class MicroserviceSystem extends Node {
         Set<ProjectFile> updatedOrphans = new HashSet<>(getOrphans());
         for (ProjectFile file : getOrphans()) {
             // If the microservice is in the same folder as the path to the microservice
-            if (file.getPath().normalize().toString().contains(microservice.getPath().normalize().toString())) {
+            if (FileUtils.pathStartsWith(file.getPath(), microservice.getPath())) {
                 if(file instanceof AbstractClass) {
                     AbstractClass abstractClass = (AbstractClass) file;
                     abstractClass.setParent(Optional.of(microservice));
@@ -105,9 +110,18 @@ public class MicroserviceSystem extends Node {
     @JsonIgnore
     public AbstractClass findClass(Path path){
         AbstractClass returnClass = null;
-        returnClass = getMicroservices().stream().flatMap(m -> m.getClasses().stream()).filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
+        returnClass = getMicroservices().stream()
+                .flatMap(m -> m.getClasses().stream())
+                .filter(c -> FileUtils.pathsMatch(c.getPath(), path))
+                .findFirst()
+                .orElse(null);
         if(returnClass == null){
-            returnClass = getOrphans().stream().filter(c -> c instanceof AbstractClass).filter(c -> c.getPath().equals(path)).map(c -> (JClass) c).findFirst().orElse(null);
+            returnClass = getOrphans().stream()
+                    .filter(c -> c instanceof AbstractClass)
+                    .filter(c -> FileUtils.pathsMatch(c.getPath(), path))
+                    .map(c -> (AbstractClass) c)
+                    .findFirst()
+                    .orElse(null);
         }
 
         return returnClass;
@@ -122,9 +136,16 @@ public class MicroserviceSystem extends Node {
     @JsonIgnore
     public ProjectFile findFile(Path path){
         ProjectFile returnFile = null;
-        returnFile = getMicroservices().stream().flatMap(m -> m.getAllFiles().stream()).filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
+        returnFile = getMicroservices().stream()
+                .flatMap(m -> m.getAllFiles().stream())
+                .filter(c -> FileUtils.pathsMatch(c.getPath(), path))
+                .findFirst()
+                .orElse(null);
         if(returnFile == null){
-            returnFile = getOrphans().stream().filter(c -> c.getPath().equals(path)).findFirst().orElse(null);
+            returnFile = getOrphans().stream()
+                    .filter(c -> FileUtils.pathsMatch(c.getPath(), path))
+                    .findFirst()
+                    .orElse(null);
         }
 
         return returnFile;
