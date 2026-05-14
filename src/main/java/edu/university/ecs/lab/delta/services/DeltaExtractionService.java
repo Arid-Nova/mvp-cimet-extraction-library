@@ -170,7 +170,9 @@ public class DeltaExtractionService {
                     abstractDelta = delete(rc, Path.of(oldPath));
             }
 
-            systemChange.getChanges().add(abstractDelta);
+            if (abstractDelta != null) {
+                systemChange.getChanges().add(abstractDelta);
+            }
         }
     }
 
@@ -214,9 +216,8 @@ public class DeltaExtractionService {
 
             AbstractClass oldClass = microserviceSystem.findClass(newPath);
 
-            if(oldClass == null && modifyClass != null) {
-                throw new RuntimeException("Failed to find old class");
-            } else if(oldClass == null) {
+            if(oldClass == null) {
+                // Modified files outside the base IR cannot produce a component-level delta.
                 return null;
             } else if(modifyClass == null) {
                 return null;

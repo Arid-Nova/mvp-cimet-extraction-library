@@ -56,9 +56,14 @@ public class IRExtractionService {
             File partialIR = new File(FileUtils.getPartialIRPath(rc).toString());
             if (partialIR.exists() && !partialIR.isDirectory()) {
                 microservices = readPartial(FileUtils.getPartialIRPath(rc)).getMicroservices();
+                normalizeRepositoryPaths(microservices, rc);
+                if (writePartialIRs) {
+                    JsonReadWriteUtils.writeToJSON(FileUtils.getPartialIRPath(rc), new PartialMicroserviceSystemDto(microservices));
+                }
             }
             else {
                 microservices = cloneAndScanServices(microserviceSystem, rc);
+                normalizeRepositoryPaths(microservices, rc);
                 if (writePartialIRs) {
                     JsonReadWriteUtils.writeToJSON(FileUtils.getPartialIRPath(rc), new PartialMicroserviceSystemDto(microservices));
                 }
@@ -99,6 +104,22 @@ public class IRExtractionService {
         }
 
         return microservices;
+    }
+
+    private void normalizeRepositoryPaths(Set<Microservice> microservices, RepositoryConfig rc) {
+        for (Microservice microservice : microservices) {
+            microservice.setPath(Path.of(FileUtils.normalizeRepositoryPath(
+                    microservice.getPath().toString(),
+                    rc.getRepoName()
+            )));
+
+            for (ProjectFile file : microservice.getAllFiles()) {
+                file.setPath(Path.of(FileUtils.normalizeRepositoryPath(
+                        file.getPath().toString(),
+                        rc.getRepoName()
+                )));
+            }
+        }
     }
 
     /**
