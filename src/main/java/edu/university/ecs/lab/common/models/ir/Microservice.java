@@ -3,7 +3,9 @@ package edu.university.ecs.lab.common.models.ir;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import edu.university.ecs.lab.common.utils.FileUtils;
+import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
@@ -39,6 +41,7 @@ public class Microservice extends Node {
     /**
      * The path to the folder that represents the microservice
      */
+    @JsonSerialize(using = JsonReadWriteUtils.PathSerializer.class)
     private Path path;
 
     /**

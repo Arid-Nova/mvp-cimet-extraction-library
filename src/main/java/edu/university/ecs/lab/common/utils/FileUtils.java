@@ -12,7 +12,21 @@ import java.util.Set;
  * Manages all file paths and file path conversion functions.
  */
 public class FileUtils {
-    public static final Set<String> VALID_FILES = Set.of("pom.xml", ".java", ".yml", "build.gradle");
+    public static final Set<String> VALID_FILES = Set.of(
+            "pom.xml",
+            ".java",
+            ".yml",
+            ".yaml",
+            ".properties",
+            "build.gradle",
+            "build.gradle.kts",
+            "settings.gradle",
+            "settings.gradle.kts",
+            "Dockerfile",
+            "DockerFile",
+            "docker-compose.yml",
+            "docker-compose.yaml"
+    );
     public static final String SYS_SEPARATOR = System.getProperty("file.separator");
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
     private static final String DEFAULT_OUTPUT_PATH = "output";
@@ -76,18 +90,190 @@ public class FileUtils {
      * @return the relative repo path
      */
     public static String localPathToGitPath(String localPath, String repoName) {
-        return localPath.replace(FileUtils.getRepositoryPath(repoName), "").replaceAll(SPECIAL_SEPARATOR, GIT_SEPARATOR);
+        return normalizeRepositoryPath(localPath, repoName);
     }
+
     /**
-     * This method converts a path of the form .\clone\repoName\pathToFile to the form
-     * /pathToFile
+     * This method converts a git path of the form /pathToFile to the local
+     * path under .\clone\repoName\pathToFile.
      *
-     * @param localPath the local path to be converted
+     * @param localPath the git path to be converted
      * @param repoName the name of the repo cloned locally
-     * @return the relative repo path
+     * @return the local file path
      */
     public static String gitPathToLocalPath(String localPath, String repoName) {
-        return getRepositoryPath(repoName) + localPath.replace(GIT_SEPARATOR, SYS_SEPARATOR);
+        String gitPath = normalizeRepositoryPath(localPath, repoName);
+        if (GIT_SEPARATOR.equals(gitPath)) {
+            return getRepositoryPath(repoName);
+        }
+
+        return getRepositoryPath(repoName) + gitPath.replace(GIT_SEPARATOR, SYS_SEPARATOR);
+    }
+
+    /**
+     * Normalizes any path pointing into a cloned repository to the canonical
+     * repo-relative git path used in the IR. This accepts the historical
+     * /pathToFile form, local clone paths, absolute container paths, Windows
+     * paths, and file:// URIs.
+     *
+     * @param path the path to normalize
+     * @param repoName the repository folder name under clone/
+     * @return a normalized repo-relative path beginning with /
+     */
+    public static String normalizeRepositoryPath(String path, String repoName) {
+        String normalizedPath = normalizePathString(path);
+
+        if (normalizedPath == null || normalizedPath.isBlank()) {
+            return normalizedPath;
+        }
+
+        String cloneRepoMarker = GIT_SEPARATOR + DEFAULT_CLONE_PATH + GIT_SEPARATOR + repoName;
+        int cloneRepoIndex = normalizedPath.indexOf(cloneRepoMarker);
+        if (cloneRepoIndex >= 0) {
+            return ensureLeadingGitSeparator(normalizedPath.substring(cloneRepoIndex + cloneRepoMarker.length()));
+        }
+
+        String relativeCloneRepoMarker = DEFAULT_CLONE_PATH + GIT_SEPARATOR + repoName;
+        if (normalizedPath.equals(relativeCloneRepoMarker)) {
+            return GIT_SEPARATOR;
+        }
+        if (normalizedPath.startsWith(relativeCloneRepoMarker + GIT_SEPARATOR)) {
+            return ensureLeadingGitSeparator(normalizedPath.substring(relativeCloneRepoMarker.length()));
+        }
+
+        return ensureLeadingGitSeparator(normalizedPath);
+    }
+
+    /**
+     * Normalizes a path string for comparison while preserving whatever root it
+     * already has. Use {@link #normalizeRepositoryPath(String, String)} when a
+     * repository name is available and clone-root prefixes should be stripped.
+     *
+     * @param path the path to normalize
+     * @return a slash-normalized path with file:// stripped and trailing / removed
+     */
+    public static String normalizePathString(String path) {
+        if (path == null) {
+            return null;
+        }
+
+        String normalizedPath = path.trim().replace('\\', '/');
+        if (normalizedPath.startsWith("file://")) {
+            normalizedPath = normalizedPath.substring("file://".length());
+        } else if (normalizedPath.startsWith("file:")) {
+            normalizedPath = normalizedPath.substring("file:".length());
+        }
+
+        while (normalizedPath.startsWith("./")) {
+            normalizedPath = normalizedPath.substring(2);
+        }
+
+        normalizedPath = normalizedPath.replaceAll("/+", GIT_SEPARATOR);
+        return stripTrailingGitSeparators(normalizedPath);
+    }
+
+    /**
+     * Compares two paths using normalized separators and a suffix fallback. The
+     * fallback is intentionally useful for pre-existing IRs that stored paths
+     * with an absolute clone root such as /app/clone/repo/service/File.java.
+     *
+     * @param storedPath a path already stored in the IR
+     * @param queryPath a path being looked up
+     * @return true when both paths point to the same file
+     */
+    public static boolean pathsMatch(Path storedPath, Path queryPath) {
+        String stored = normalizePathString(storedPath == null ? null : storedPath.toString());
+        String query = normalizePathString(queryPath == null ? null : queryPath.toString());
+
+        if (stored == null || query == null) {
+            return false;
+        }
+        if (stored.equals(query)) {
+            return true;
+        }
+
+        return endsWithPathSegment(stored, query) || endsWithPathSegment(query, stored);
+    }
+
+    /**
+     * Checks if a path belongs under a possible parent path. This handles both
+     * canonical repo-relative paths and old clone-root-prefixed IR paths.
+     *
+     * @param childPath the file or directory path to check
+     * @param parentPath the containing directory path
+     * @return true when childPath is equal to or under parentPath
+     */
+    public static boolean pathStartsWith(Path childPath, Path parentPath) {
+        String child = normalizePathString(childPath == null ? null : childPath.toString());
+        String parent = normalizePathString(parentPath == null ? null : parentPath.toString());
+
+        if (child == null || parent == null) {
+            return false;
+        }
+        if (startsWithPathSegment(child, parent)) {
+            return true;
+        }
+
+        for (String parentSuffix : pathSuffixes(parent)) {
+            if (startsWithPathSegment(child, parentSuffix)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static String ensureLeadingGitSeparator(String path) {
+        String normalizedPath = stripTrailingGitSeparators(path);
+        if (normalizedPath == null || normalizedPath.isBlank() || DOT.equals(normalizedPath)) {
+            return GIT_SEPARATOR;
+        }
+        if (normalizedPath.startsWith(GIT_SEPARATOR)) {
+            return normalizedPath;
+        }
+
+        return GIT_SEPARATOR + normalizedPath;
+    }
+
+    private static String stripTrailingGitSeparators(String path) {
+        if (path == null) {
+            return null;
+        }
+
+        String stripped = path;
+        while (stripped.length() > 1 && stripped.endsWith(GIT_SEPARATOR)) {
+            stripped = stripped.substring(0, stripped.length() - 1);
+        }
+
+        return stripped;
+    }
+
+    private static boolean startsWithPathSegment(String path, String prefix) {
+        if (path.equals(prefix)) {
+            return true;
+        }
+
+        return path.startsWith(prefix.endsWith(GIT_SEPARATOR) ? prefix : prefix + GIT_SEPARATOR);
+    }
+
+    private static boolean endsWithPathSegment(String path, String suffix) {
+        if (path.equals(suffix)) {
+            return true;
+        }
+
+        return path.endsWith(suffix.startsWith(GIT_SEPARATOR) ? suffix : GIT_SEPARATOR + suffix);
+    }
+
+    private static Set<String> pathSuffixes(String path) {
+        Set<String> suffixes = new java.util.LinkedHashSet<>();
+        String normalizedPath = path.startsWith(GIT_SEPARATOR) ? path.substring(1) : path;
+        String[] segments = normalizedPath.split(GIT_SEPARATOR);
+
+        for (int i = 0; i < segments.length; i++) {
+            suffixes.add(GIT_SEPARATOR + String.join(GIT_SEPARATOR, Arrays.copyOfRange(segments, i, segments.length)));
+        }
+
+        return suffixes;
     }
 
     /**
