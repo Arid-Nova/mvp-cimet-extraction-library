@@ -2,7 +2,7 @@
 * @Arid-Nova/Admins
 
 # Specific team for infrastructure/deployment files
-/.github/workflows/   @Arid-Nova/Admins
+/.github/workflows/   @Arid-Nova/Developers
 
 # Specific person for security-sensitive files
 /auth/                @ShakthiYasas
