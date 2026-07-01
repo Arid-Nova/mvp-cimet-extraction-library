@@ -5,9 +5,7 @@ import com.fasterxml.jackson.annotation.JsonTypeName;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import edu.university.ecs.lab.common.models.enums.FileType;
 import edu.university.ecs.lab.common.utils.FileUtils;
-import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.nio.file.Path;
 import java.util.*;
@@ -26,6 +24,13 @@ public class MicroserviceSystem extends Node {
     private String name;
 
     /**
+     * Declared version of the system
+     */
+    @Getter
+    @Setter
+    private String version;
+
+    /**
      * Set of microservices in the system
      */
     @JsonDeserialize(as = HashSet.class)
@@ -41,6 +46,7 @@ public class MicroserviceSystem extends Node {
         this.name = name;
         this.microservices = microservices;
         this.orphans = orphans;
+        this.version = null;
 
         // Fill back references
         this.microservices.forEach(mis -> mis.setParent(Optional.of(this)));
