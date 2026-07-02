@@ -10,6 +10,7 @@ import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import edu.university.ecs.lab.common.models.dto.PartialMicroserviceSystemDto;
 
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.json.JSONObject;
 
 import java.io.*;
 import java.util.*;
@@ -155,6 +156,11 @@ public class IRExtractionService {
                 rc.repoBranchPair().repositoryURL(),
                 rc.commitID(),
                 Path.of(FileUtils.localPathToGitPath(rootMicroservicePath, rc.getRepoName())));
+
+        JSONObject metadata = new JSONObject();
+        metadata.put("branch", rc.repoBranchPair().branchName());
+        model.setMetadata(metadata);
+
         scanDirectory(localDir, model, rc);
 
         return model;
