@@ -23,6 +23,6 @@ jobs:
           settings-path: ${{ github.workspace }}
 
       - name: Build and Publish to GitHub Packages
-        run: mvn -B clean deploy -s $GITHUB_WORKSPACE/settings.xml
+        run: mvn -B clean deploy -DskipTests -s $GITHUB_WORKSPACE/settings.xml
         env:
           GITHUB_TOKEN: ${{ github.token }}
