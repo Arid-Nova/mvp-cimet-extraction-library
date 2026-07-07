@@ -20,7 +20,7 @@
         <repository>
             <id>github</id>
             <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/Arid-Nova/mvp-cimet-extraction-library</url>
+            <url>https://maven.pkg.github.com/arid-nova/mvp-cimet-extraction-library</url>
         </repository>
     </distributionManagement>
 
