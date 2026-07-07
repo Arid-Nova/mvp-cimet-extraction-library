@@ -7,3 +7,4 @@ target/
 # Test output
 output/
 clone/
+settings.xml
