@@ -3,10 +3,10 @@ package edu.university.ecs.lab.common.utils;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.*;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
+import com.fasterxml.jackson.datatype.jsonorg.JsonOrgModule;
 
 import java.io.*;
 import java.nio.file.Path;
@@ -62,6 +62,7 @@ public class JsonReadWriteUtils {
 
         module.addSerializer(new PathSerializer());
         objectMapper.registerModule(module);
+        objectMapper.registerModule(new JsonOrgModule());
 
         return objectMapper.writerWithDefaultPrettyPrinter();
     }
