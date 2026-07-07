@@ -70,6 +70,7 @@ public class JsonReadWriteUtils {
     public static ObjectReader setupObjectReader() {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.setVisibility(PropertyAccessor.FIELD, JsonAutoDetect.Visibility.ANY);
+        objectMapper.registerModule(new JsonOrgModule());
         return objectMapper.reader();
     }
 
