@@ -71,6 +71,10 @@ public class IRExtractionService {
             }
 
             microserviceSystem.getMicroservices().addAll(microservices);
+            System.out.println("After scanning repository " + rc.getRepoName() + ", microservices in system:");
+            for (Microservice m : microserviceSystem.getMicroservices()) {
+                System.out.println("  - name: " + m.getName() + " path: " + m.getPath() + " hash: " + m.hashCode());
+            }
         }
         return microserviceSystem.getMicroservices();
     }
@@ -90,6 +94,11 @@ public class IRExtractionService {
 
         ServiceBoundaryDetector detector = new ServiceBoundaryDetector();
         List<ServiceBoundaryCandidate> candidates = detector.detect(FileUtils.getRepositoryPath(rc.getRepoName()), rc);
+
+        System.out.println("Candidates inside cloneAndScanServices for " + rc.getRepoName() + " (commit " + rc.commitID() + "):");
+        for (ServiceBoundaryCandidate c : candidates) {
+            System.out.println("  - " + c.rootPath() + " (" + c.serviceName() + ")");
+        }
 
         // Scan each root directory for microservices
         for (ServiceBoundaryCandidate candidate : candidates) {
@@ -139,6 +148,8 @@ public class IRExtractionService {
                                              String rootMicroservicePath,
                                              RepositoryConfig rc,
                                              String inferredServiceName) throws IOException {
+        System.out.println("Scanning candidate " + rootMicroservicePath + " with name " + inferredServiceName);
+        
         // Validate path exists and is a directory
         File localDir = new File(rootMicroservicePath);
         if (!localDir.exists() || !localDir.isDirectory()) {
@@ -163,6 +174,7 @@ public class IRExtractionService {
 
         scanDirectory(localDir, model, rc);
 
+        System.out.println("Finished scanning candidate " + rootMicroservicePath + " - got microservice: " + (model == null ? "null" : model.getName()) + " with " + model.getUnknowns().size() + " unknowns and " + model.getFiles().size() + " files");
         return model;
     }
 

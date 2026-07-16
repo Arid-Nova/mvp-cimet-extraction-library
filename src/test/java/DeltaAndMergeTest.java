@@ -7,6 +7,8 @@ import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.delta.services.DeltaExtractionService;
 import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
+import edu.university.ecs.lab.intermediate.create.services.ServiceBoundaryDetector;
+import edu.university.ecs.lab.intermediate.create.services.ServiceBoundaryCandidate;
 import edu.university.ecs.lab.intermediate.merge.services.MergeService;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
@@ -54,6 +56,12 @@ class DeltaAndMergeTest {
                 list.getFirst().toString().split(" ")[1]));
         config.getSystemRepositories().set(1, new RepositoryConfig(repositoryConfig1.repoBranchPair(),
                 list2.getFirst().toString().split(" ")[1]));
+
+        System.out.println("Candidates for workshop repo:");
+        ServiceBoundaryDetector detector = new ServiceBoundaryDetector();
+        for (ServiceBoundaryCandidate c : detector.detect(FileUtils.getRepositoryPath(repositoryConfig.getRepoName()), repositoryConfig)) {
+            System.out.println("  candidate path: " + c.rootPath() + " name: " + c.serviceName());
+        }
 
         IRExtractionService.createAndWrite(config, "OldIR.json");
     }

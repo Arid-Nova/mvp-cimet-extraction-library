@@ -396,6 +396,8 @@ public class MergeService {
                 recursiveAddDescendants(componentList, c);
         } else if (root instanceof Parameter) {
             ((Parameter) root).getAnnotations().addAll(children.stream().filter(c -> c instanceof Annotation).map(c -> (Annotation) c).toList());
+        } else if (root instanceof Field) {
+            ((Field) root).getAnnotations().addAll(children.stream().filter(c -> c instanceof Annotation).map(c -> (Annotation) c).toList());
         }
     }
 
