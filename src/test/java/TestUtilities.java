@@ -17,6 +17,49 @@ public class TestUtilities {
                 for (Microservice microservice2 : microserviceSystem2.getMicroservices()) {
                     if (microservice1.getName().equals(microservice2.getName())) {
                         System.out.println("Microservice equivalence of " + microservice1.getPath() + " is: " + Objects.deepEquals(microservice1, microservice2));
+                        if (!Objects.deepEquals(microservice1, microservice2)) {
+                            System.out.println("Differences in Microservice " + microservice1.getName() + ":");
+                            if (!Objects.equals(microservice1.getName(), microservice2.getName())) {
+                                System.out.println("  name: " + microservice1.getName() + " vs " + microservice2.getName());
+                            }
+                            if (!Objects.equals(microservice1.getRepositoryURL(), microservice2.getRepositoryURL())) {
+                                System.out.println("  repositoryURL: " + microservice1.getRepositoryURL() + " vs " + microservice2.getRepositoryURL());
+                            }
+                            if (!Objects.equals(microservice1.getCommitID(), microservice2.getCommitID())) {
+                                System.out.println("  commitID: " + microservice1.getCommitID() + " vs " + microservice2.getCommitID());
+                            }
+                            if (!Objects.equals(microservice1.getPath(), microservice2.getPath())) {
+                                System.out.println("  path: " + microservice1.getPath() + " vs " + microservice2.getPath());
+                            }
+                            if (!Objects.equals(microservice1.getControllers(), microservice2.getControllers())) {
+                                System.out.println("  controllers: unequal");
+                            }
+                            if (!Objects.equals(microservice1.getServices(), microservice2.getServices())) {
+                                System.out.println("  services: unequal");
+                            }
+                            if (!Objects.equals(microservice1.getRepositories(), microservice2.getRepositories())) {
+                                System.out.println("  repositories: unequal");
+                            }
+                            if (!Objects.equals(microservice1.getEntities(), microservice2.getEntities())) {
+                                System.out.println("  entities: unequal");
+                            }
+                            if (!Objects.equals(microservice1.getUnknowns(), microservice2.getUnknowns())) {
+                                System.out.println("  unknowns: unequal");
+                                System.out.println("    1: " + microservice1.getUnknowns());
+                                System.out.println("    2: " + microservice2.getUnknowns());
+                            }
+                            if (!Objects.equals(microservice1.getFeignClients(), microservice2.getFeignClients())) {
+                                System.out.println("  feignClients: unequal");
+                            }
+                            if (!Objects.equals(microservice1.getFiles(), microservice2.getFiles())) {
+                                System.out.println("  files: unequal");
+                                System.out.println("    1: " + microservice1.getFiles());
+                                System.out.println("    2: " + microservice2.getFiles());
+                            }
+                            if (!Objects.equals(microservice1.getMetadata(), microservice2.getMetadata())) {
+                                System.out.println("  metadata: unequal (1: " + microservice1.getMetadata() + ", 2: " + microservice2.getMetadata() + ")");
+                            }
+                        }
                         for (ProjectFile projectFile1 : microservice1.getAllFiles()) {
                             outer1: {
                                 for (ProjectFile projectFile2 : microservice2.getAllFiles()) {

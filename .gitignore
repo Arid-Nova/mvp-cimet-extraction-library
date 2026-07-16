@@ -4,6 +4,10 @@
 # Maven
 target/
 
+# Gradle
+.gradle/
+build/
+
 # Test output
 output/
 clone/

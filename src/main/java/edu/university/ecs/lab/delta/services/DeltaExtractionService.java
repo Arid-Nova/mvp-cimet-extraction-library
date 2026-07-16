@@ -67,7 +67,7 @@ public class DeltaExtractionService {
         this.gitService = new GitService(config);
         this.newCommits = newCommits;
         this.microserviceSystem = intermediateSystem;
-        this.oldCommits = config.getSystemRepositories();
+        this.oldCommits = new ArrayList<>(newCommits.keySet());
     }
 
     /**

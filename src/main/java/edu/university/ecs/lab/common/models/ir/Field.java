@@ -1,6 +1,6 @@
 package edu.university.ecs.lab.common.models.ir;
-
 import com.fasterxml.jackson.annotation.JsonTypeName;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.github.javaparser.ast.body.FieldDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.Expression;
@@ -8,8 +8,10 @@ import edu.university.ecs.lab.common.models.enums.AccessModifier;
 import lombok.*;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Represents a field attribute in a Java class or in our case a JClass.
@@ -45,6 +47,19 @@ public class Field extends Component {
      */
     private String initializer;
 
+    /**
+     * Annotations on this field
+     */
+    @JsonDeserialize(as = HashSet.class)
+    protected Set<Annotation> annotations;
+
+    public Set<Annotation> getAnnotations() {
+        if (this.annotations == null) {
+            this.annotations = new HashSet<>();
+        }
+        return this.annotations;
+    }
+
     public Field(Node parent, FieldDeclaration fd, VariableDeclarator vd) {
         super(parent, vd.getNameAsString(), new Location(vd.getRange().get()));
 
@@ -58,13 +73,17 @@ public class Field extends Component {
         if (optInitExpr.isPresent()) {
             this.initializer = optInitExpr.get().toString();
         }
+
+        this.annotations = edu.university.ecs.lab.common.utils.SourceToObjectUtils.parseAnnotations(this, fd.getAnnotations());
     }
 
     @Override
     public List<Component> getChildren() {
-        return new ArrayList<>();
+        return new ArrayList<>(getAnnotations());
     }
 
     @Override
-    public void clearDescendants() {}
+    public void clearDescendants() {
+        setAnnotations(new HashSet<>());
+    }
 }

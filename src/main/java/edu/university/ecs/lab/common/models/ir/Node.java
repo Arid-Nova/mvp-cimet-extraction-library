@@ -42,6 +42,7 @@ public abstract class Node {
      * Various optional metadata that can be attached to Nodes.
      */
     @Getter
+    @EqualsAndHashCode.Exclude
     protected JSONObject metadata;
 
     /**

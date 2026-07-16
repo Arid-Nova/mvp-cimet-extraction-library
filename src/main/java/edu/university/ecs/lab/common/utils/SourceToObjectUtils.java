@@ -105,7 +105,7 @@ public class SourceToObjectUtils {
 
             abstractClass.setClassRole(classRole);
             abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
-            abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
+            abstractClass.setAnnotations(parseAnnotations(abstractClass, classAnnotations));
             abstractClass.setMethods(parseMethods(abstractClass, cu.findAll(MethodDeclaration.class), requestMapping));
             abstractClass.setImports(parseImports(abstractClass, cu.findAll(ImportDeclaration.class)));
         }
@@ -399,7 +399,7 @@ public class SourceToObjectUtils {
 
         abstractClass.setClassRole(ClassRole.FEIGN_CLIENT);
         abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
-        abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
+        abstractClass.setAnnotations(parseAnnotations(abstractClass, classAnnotations));
         abstractClass.setMethods(newMethods);
 
         return abstractClass;
@@ -429,8 +429,8 @@ public class SourceToObjectUtils {
         Set<AnnotationExpr> classAnnotations = new HashSet<>();
         for (AnnotationExpr ae : cu.findAll(AnnotationExpr.class)) {
             if (ae.getParentNode().isPresent()) {
-                Node n = ae.getParentNode().get();
-                if (n instanceof ClassOrInterfaceDeclaration) {
+                com.github.javaparser.ast.Node n = ae.getParentNode().get();
+                if (n instanceof ClassOrInterfaceDeclaration || n instanceof EnumDeclaration || n instanceof RecordDeclaration) {
                     classAnnotations.add(ae);
                 }
             }
@@ -520,7 +520,7 @@ public class SourceToObjectUtils {
         // Build the JClass
         abstractClass.setClassRole(ClassRole.REP_REST_RSC);
         abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
-        abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
+        abstractClass.setAnnotations(parseAnnotations(abstractClass, classAnnotations));
         abstractClass.setMethods(newEndpoints);
 
         return abstractClass;

@@ -231,6 +231,9 @@ public class FileUtils {
         if (normalizedPath.startsWith(GIT_SEPARATOR)) {
             return normalizedPath;
         }
+        if (normalizedPath.length() >= 2 && Character.isLetter(normalizedPath.charAt(0)) && normalizedPath.charAt(1) == ':') {
+            return normalizedPath;
+        }
 
         return GIT_SEPARATOR + normalizedPath;
     }
