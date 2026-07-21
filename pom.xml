@@ -3,8 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <name>CIMET Extraction Library</name>
     <groupId>edu.university.ecs.lab</groupId>
-    <artifactId>cimet-extract-lib</artifactId>
-    <!-- Version for tagging the library -->
+    <artifactId>cimet-extract-lib-parent</artifactId>
     <version>1.2.1</version>
     <url>https://github.com/Arid-Nova/mvp-cimet-extraction-library</url>
 
@@ -15,15 +14,6 @@
         <tag>v1.2.1</tag>
     </scm>
 
-    <!-- Github distribution management for posting maven library -->
-    <distributionManagement>
-        <repository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/arid-nova/mvp-cimet-extraction-library</url>
-        </repository>
-    </distributionManagement>
-
     <properties>
         <maven.compiler.target>21</maven.compiler.target>
         <maven.compiler.source>21</maven.compiler.source>
@@ -31,7 +21,13 @@
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
     </properties>
 
-    <packaging>jar</packaging>
+    <packaging>pom</packaging>
+
+    <modules>
+        <module>.release/core</module>
+        <module>.release/distribution/jitpack</module>
+        <module>.release/distribution/github-packages</module>
+    </modules>
 
     <dependencies>
         <!-- new dependencies -->
