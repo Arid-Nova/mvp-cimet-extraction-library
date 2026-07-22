@@ -135,6 +135,11 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.0</version>
                 <configuration>
+                    <!-- Force the compiler to fork and use the JAVA_HOME javac executable to avoid
+                         ambiguity about which JDK Maven uses at runtime. This ensures compilation
+                         uses the same javac you see on the PATH in the container. -->
+                    <fork>true</fork>
+                    <executable>${env.JAVA_HOME}/bin/javac</executable>
                     <source>21</source>
                     <target>21</target>
                     <annotationProcessorPaths>
