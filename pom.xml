@@ -129,10 +129,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.14.0</version>
                 <configuration>
-                    <!-- Use Java release (flag '-release') to ensure the compiler uses the correct system
-                         modules for the target JDK and produces compatible class files. This
-                         avoids warnings when compiling newer JDKs against an older source/target. -->
-                    <release>21</release>
+                    <source>21</source>
+                    <target>21</target>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
