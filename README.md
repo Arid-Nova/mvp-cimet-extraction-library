@@ -34,6 +34,39 @@ Overview
 --------
 The library extracts an intermediate JSON representation of a microservice system (MicroserviceSystem) and can compute SystemChange (deltas) between commits. Outputs are JSON files intended to be consumed by downstream analysis tooling.
 
+Sample Outputs (brief)
+----------------------
+Example IR (intermediate representation) and a delta (SystemChange) are produced as JSON under `./output/`.
+
+IR example (truncated):
+
+```json
+{
+  "name": "Train-ticket",
+  "commitID": "1.0",
+  "microservices": [
+    {
+      "name": "ts-rebook-service",
+      "path": "./clone/train-ticket-microservices-test/ts-rebook-service",
+      "controllers": [ { "name": "WaitListOrderController.java", "classRole": "CONTROLLER" } ],
+      "entities": [],
+      "files": []
+    }
+  ],
+  "orphans": []
+}
+```
+
+SystemChange (delta) example (truncated):
+
+```json
+{
+  "oldCommit": "06f3e1e...",
+  "newCommit": "82949fa...",
+  "changes": [ { "oldPath": "...PriceController.java","newPath":"...PriceController.java","changeType":"MODIFY","classChange":{} } ]
+}
+```
+
 Quickstart — Regular Development
 --------------------------------
 Prerequisites
