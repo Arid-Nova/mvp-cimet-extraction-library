@@ -27,8 +27,7 @@
     </distributionManagement>
 
     <properties>
-        <maven.compiler.target>21</maven.compiler.target>
-        <maven.compiler.source>21</maven.compiler.source>
+        <!-- Compiler target/source removed in favor of explicit <release> in plugin configuration -->
         <maven.compiler.parameters>true</maven.compiler.parameters>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
     </properties>
