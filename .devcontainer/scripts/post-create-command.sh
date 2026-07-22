@@ -5,49 +5,39 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$ROOT_DIR/post-create-command"
 
-# Source shared lib if present
+# load helpers
 LIB="$ROOT_DIR/lib.sh"
-if [ -f "$LIB" ]; then
+if [[ -f "$LIB" ]]; then
   # shellcheck source=/dev/null
   . "$LIB"
 else
   echo "[devcontainer] warning: helper library not found at $LIB"
 fi
 
-echo "[devcontainer] post-create: launching modular post-create scripts from $SCRIPTS_DIR"
+info "post-create: launching modular post-create scripts from $SCRIPTS_DIR"
 
-if [ ! -d "$SCRIPTS_DIR" ]; then
-  echo "[devcontainer] no modular scripts directory found at $SCRIPTS_DIR — nothing to run"
+if [[ ! -d "$SCRIPTS_DIR" ]]; then
+  warn "no modular scripts directory found at $SCRIPTS_DIR — nothing to run"
   exit 0
 fi
 
-# Portable iteration over files; avoid bash-only shopt/arrays to work with /bin/sh
-found=0
+# control behavior: continue on subscript failure by default for devcontainers
+CONTINUE_ON_ERROR=${CONTINUE_ON_ERROR:-1}
+
+# iterate and execute
+shopt -s nullglob
 for script in "$SCRIPTS_DIR"/*; do
-  if [ ! -e "$script" ]; then
-    # no matches - break
-    break
-  fi
-  found=1
   base=$(basename "$script")
-  if [ -f "$script" ] && [ -x "$script" ]; then
-    echo "[devcontainer] running $base"
-    "$script"
+  if [[ -f "$script" ]]; then
+    info "found script: $base"
+    if [[ $CONTINUE_ON_ERROR -eq 1 ]]; then
+      run_script --continue-on-error "$script" || warn "script $base failed but continuing"
+    else
+      run_script "$script"
+    fi
   else
-    case "$base" in
-      *.sh)
-        echo "[devcontainer] running (shell) $base"
-        sh "$script"
-        ;;
-      *)
-        echo "[devcontainer] skipping non-shell or non-executable file: $base"
-        ;;
-    esac
+    warn "skipping non-regular file: $base"
   fi
 done
 
-if [ "$found" -eq 0 ]; then
-  echo "[devcontainer] no scripts found in $SCRIPTS_DIR"
-fi
-
-echo "[devcontainer] post-create: completed all modular scripts"
+info "post-create: completed all modular scripts"
