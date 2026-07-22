@@ -1,146 +1,101 @@
 # CIMET Extraction Library
 
-This Maven library props up the functionality of CIMET2.
-It is intended to be used as a temporal parser of microservice systems.
-It is capable of extracting intermediate representations (IR) of the system
-and delta representations of the changes to the system.
+Reliable tooling to extract an intermediate representation (IR) and change deltas from microservice codebases.
 
-## Prerequisites
+This repository provides:
+- Java libraries and services to clone repositories, scan code, and produce a machine-readable IR describing microservices, endpoints, and relationships.
+- A delta extraction pipeline that computes SystemChange objects between commits.
+- Utilities to merge deltas into IRs and to generate JSON Schema documentation for produced artifacts.
 
-* Maven 3.6+
-* Java 24+ (24 Recommended)
+Project status
+--------------
+Active development. The repository includes a reproducible devcontainer for local development and CI parity.
 
-## To Compile:
-    ``mvn clean install -DskipTests``
+License
+-------
+This project is open source. See LICENSE in the repository root for the exact terms.
 
-## Extracting an Intermediate Representation:
-- Create a configuration file (see below)
-- Import `edu.university.ecs.lab.intermediate.create.services.IRExtractionService` in your code.
-- Use `IRExtractionService.create(configPath)` where configPath is a path to your configuration file to
-create an IR.
-- Use `IRExtractionService.createAndWrite(configPath, outputPath)` to create and write an IR to outputPath.
-- Use `IRExtractionService.read(fPath)` to read an IR from a JSON file.
+Quick Links
+-----------
+- Docs index: [/.docs/README.md](./.docs/README.md)
+- Schema docs: [/.docs/schema/README.md](./.docs/schema/README.md)
+- Devcontainer docs: [/.docs/devcontainer/README.md](./.docs/devcontainer/README.md)
 
-Sample input config file:
+Table of Contents
+-----------------
+1.  Overview
+2.  Quickstart (regular development)
+3.  Quickstart (devcontainer)
+4.  Testing
+5.  Contributing
+6.  Docs directory (detailed topics)
 
-```json
-{
-  "systemName": "Train-ticket",
-  "repositoryURL": "https://github.com/g-goulis/train-ticket-microservices-test.git",
-  "endCommit": "06f3e1efe2e2539d05d91b0699cc8d9fe7be29d7",
-  "baseBranch": "main"
-}
+Overview
+--------
+The library extracts an intermediate JSON representation of a microservice system (MicroserviceSystem) and can compute SystemChange (deltas) between commits. Outputs are JSON files intended to be consumed by downstream analysis tooling.
+
+Quickstart — Regular Development
+--------------------------------
+Prerequisites
+- Java 21+ (a compatible JDK installed)
+- Maven 3.6+
+- Git
+
+Get the code
+```
+git clone https://github.com/Arid-Nova/mvp-cimet-extraction-library.git
+cd mvp-cimet-extraction-library
 ```
 
-Sample output produced (See `/.docs/schema` or Generating a JSON Schema for a full output schema):
-```json
-{
-  "name": "Train-ticket",
-  "commitID": "1.0",
-  "microservices": [
-    {
-      "name": "ts-rebook-service",
-      "path": ".\\clone\\train-ticket-microservices-test\\ts-rebook-service",
-      "controllers": [
-        {
-          "packageName": "com.cloudhubs.trainticket.rebook.controller",
-          "name": "WaitListOrderController.java",
-          "path": ".\\clone\\train-ticket-microservices-test\\ts-rebook-service\\src\\main\\java\\com\\cloudhubs\\trainticket\\rebook\\controller\\WaitListOrderController.java",
-          "classRole": "CONTROLLER",
-          "annotations": [
-            {
-              "name": "RequestMapping",
-              "contents": "\"/api/v1/waitorderservice\""
-            },
-            ...
-          ],
-          "fields": [
-            {
-              "name": "waitListOrderService",
-              "type": "WaitListOrderService"
-            },
-            ...
-          ],
-          "methods": [
-            {
-              "name": "getAllOrders",
-              "annotations": [
-                {
-                  "name": "GetMapping",
-                  "contents": "[path \u003d \"/orders\"]"
-                }
-              ],
-              "parameters": [
-                {
-                  "name": "HttpHeaders",
-                  "type": "headers"
-                }
-              ],
-              "returnType": "HttpEntity",
-              "url": "/api/v1/waitorderservice/orders",
-              "httpMethod": "GET",
-              "microserviceName": "ts-rebook-service"
-            },
-            ...
-          ],
-          "methodCalls": [
-            {
-              "name": "info",
-              "objectName": "LOGGER",
-              "calledFrom": "getWaitListOrders",
-              "parameterContents": "\"[getWaitListOrders][Get All Wait List Orders]\""
-            },
-            ...
-          ]
-        },
-        ...
-      ],
-      "Services": [...],
-      "Repositories": [...],
-      "Entities": [...],
-    ],
-    "orphans": [...]
-}
+Build (recommended: use the Maven wrapper)
+```
+./mvnw -B -DskipTests clean package
 ```
 
-## Extracting a Delta Change Impact:
-- Create a configuration file (see above)
-- Import `edu.university.ecs.lab.delta.services.DeltaExtractionService` in your code.
-- Use `DeltaExtractionService.create(configPath, oldCommit, newCommit)` where configPath is a path to your configuration file to
-  create an IR, and oldCommit and newCommit are the two commits you want to create a SystemChange (set of Deltas) between.
-- Use `DeltaExtractionService.createAndWrite(configPath, oldCommit, newCommit, outputPath)` to create and write a SystemChange (set of Deltas) to outputPath.
-- Use `DeltaExtractionService.read(fPath)` to read a SystemChange (set of Deltas) from a JSON file.
-
-Sample output produced (See `/.docs/schema` or Generating a JSON Schema for a full output schema):
-```json
-{
-  "oldCommit": "06f3e1efe2e2539d05d91b0699cc8d9fe7be29d7",
-  "newCommit": "82949fa07dcf82f66641f5807d629d15bab663a6",
-  "changes": [
-    {
-      "oldPath": ".\\clone\\train-ticket-microservices-test\\ts-price-service\\src\\main\\java\\com\\cloudhubs\\trainticket\\price\\controller\\PriceController.java",
-      "newPath": ".\\clone\\train-ticket-microservices-test\\ts-price-service\\src\\main\\java\\com\\cloudhubs\\trainticket\\price\\controller\\PriceController.java",
-      "changeType": "MODIFY",
-      "classChange": {}
-    },
-    ...
-  ]
-}
+Run tests
+```
+./mvnw -B test
 ```
 
-## Merging an IR & System Change:
-- Create a configuration file (see above)
-- Import `edu.university.ecs.lab.intermediate.merge.services.MergeService` in your code.
-- Use `MergeService.create(configPath, intermediatePath, deltaPath, newCommitID)` where configPath is a path to your configuration file to
-  create an IR, and intermediatePath is a path for the IR you want to apply the SystemChange at deltaPath to in order to create a new commit with newCommitID.
-- Use `MergeService.createAndWrite(configPath, intermediatePath, deltaPath, newCommitID, outputPath)` to write a new IR with the SystemChange applied.
+Quickstart — Devcontainer (recommended for contributors)
+-------------------------------------------------------
+Prerequisites
+- Docker Desktop (or compatible docker runtime)
+- VS Code + Remote - Containers extension (optional if you use the CLI)
 
-## Documentation
-### Javadocs
-You can build the latest javadocs by cloning the repository and running `mvn javadoc:javadoc`.
+Open in container
+1. Open the repository in VS Code.
+2. Use "Dev Containers: Rebuild and Reopen in Container".
 
-### Generating a JSON Schema
-You can generate JSON schemas for the IR and SystemChange:
-- Import `edu.university.ecs.lab.common.services.JsonSchemaService` in your code.
- - Use `JsonSchemaService.writeSchemas()` to generate the schemas in the `/.docs/schema/` folder.
- - Pre-generated schemas are available in the repository under `/.docs/schema/`.
+What the devcontainer provides
+- Java 21 runtime
+- Maven
+- Recommended VS Code extensions preinstalled
+- Post-create scripts that validate the workspace and verify the Maven wrapper
+
+Testing (local & in-container)
+-----------------------------
+- Unit tests: `mvn test`
+- Integration/E2E: `mvn verify` (runs failsafe)
+- There is a lightweight test that generates JSON documentation: `mvn -Dtest=JSONDocumentationTest test` or run the JsonSchemaService from IDE.
+
+Contributing
+------------
+- Fork, create a branch, push a PR.
+- Run tests and linters locally before opening a PR.
+
+Docs directory
+--------------
+This repository contains a structured docs directory at `/.docs/`. See the linked pages below for focused guides:
+
+- Schema docs: [/.docs/schema/README.md](./.docs/schema/README.md) — JSON Schema artifacts and validation guidance
+- Devcontainer: [/.docs/devcontainer/README.md](./.docs/devcontainer/README.md) — deep dive into the devcontainer image, scripts and extension choices
+- Development: [/.docs/development/README.md](./.docs/development/README.md) — regular development workflows, coding standards, and IDE tips
+- Testing: [/.docs/testing/README.md](./.docs/testing/README.md) — unit/integration/E2E guidance and CI notes
+- Deployment: [/.docs/deployment/README.md](./.docs/deployment/README.md) — packaging and release guidance
+
+For a central index see [/.docs/README.md](./.docs/README.md).
+
+Contact
+-------
+Issues and PRs welcome. Use GitHub issues for bug reports and feature requests.
