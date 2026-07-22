@@ -8,7 +8,7 @@ public class JSONDocumentationTest {
     @Test
     void testGenerateDocs() throws IOException {
         // Only generate new docs if the old ones have been deleted
-        File docsFolder = new File("docs");
+        File docsFolder = new File(".docs");
         if (docsFolder.exists() && docsFolder.isDirectory()) {
             File[] files = docsFolder.listFiles();
             if (files != null && files.length > 0)
@@ -16,6 +16,6 @@ public class JSONDocumentationTest {
         }
 
         JsonSchemaService.writeSchemas();
-        System.out.println("Generated JSON documentation at ./docs/");
+        System.out.println("Generated JSON documentation at ./.docs/schema/");
     }
 }

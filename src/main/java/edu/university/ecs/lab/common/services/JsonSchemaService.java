@@ -11,6 +11,7 @@ import edu.university.ecs.lab.delta.models.SystemChange;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
@@ -43,7 +44,7 @@ public class JsonSchemaService {
         // Ensure the local directories exist
         FileUtils.makeDirs();
 
-        writeSchemas("./docs/");
+        writeSchemas("./.docs/schema/");
     }
 
     /**
@@ -53,6 +54,9 @@ public class JsonSchemaService {
     public static void writeSchemas(String directoryPath) throws IOException {
         // Ensure the local directories exist
         FileUtils.makeDirs();
+
+        // Ensure the target directory exists (supports nested paths like './.docs/schema/')
+        Files.createDirectories(Path.of(directoryPath));
 
         JsonReadWriteUtils.writeToJSON(Path.of(directoryPath + "MicroserviceSystemSchema.json"), getMicroserviceSystemSchema());
         JsonReadWriteUtils.writeToJSON(Path.of(directoryPath + "SystemChangeSchema.json"), getSystemChangeSchema());

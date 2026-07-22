@@ -32,7 +32,7 @@ Sample input config file:
 }
 ```
 
-Sample output produced (See `/docs` or Generating a JSON Schema for a full output schema):
+Sample output produced (See `/.docs/schema` or Generating a JSON Schema for a full output schema):
 ```json
 {
   "name": "Train-ticket",
@@ -111,7 +111,7 @@ Sample output produced (See `/docs` or Generating a JSON Schema for a full outpu
 - Use `DeltaExtractionService.createAndWrite(configPath, oldCommit, newCommit, outputPath)` to create and write a SystemChange (set of Deltas) to outputPath.
 - Use `DeltaExtractionService.read(fPath)` to read a SystemChange (set of Deltas) from a JSON file.
 
-Sample output produced (See `/docs` or Generating a JSON Schema for a full output schema):
+Sample output produced (See `/.docs/schema` or Generating a JSON Schema for a full output schema):
 ```json
 {
   "oldCommit": "06f3e1efe2e2539d05d91b0699cc8d9fe7be29d7",
@@ -142,5 +142,5 @@ You can build the latest javadocs by cloning the repository and running `mvn jav
 ### Generating a JSON Schema
 You can generate JSON schemas for the IR and SystemChange:
 - Import `edu.university.ecs.lab.common.services.JsonSchemaService` in your code.
-- Use `JsonSchemaService.writeSchemas()` to generate the schemas in the `/docs` folder.
-- Pre-generated schemas are available in the repository under `/docs`.
+ - Use `JsonSchemaService.writeSchemas()` to generate the schemas in the `/.docs/schema/` folder.
+ - Pre-generated schemas are available in the repository under `/.docs/schema/`.
