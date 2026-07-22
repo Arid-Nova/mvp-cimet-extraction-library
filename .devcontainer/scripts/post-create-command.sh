@@ -2,34 +2,52 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "[devcontainer] post-create: starting workspace validation"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPTS_DIR="$ROOT_DIR/post-create-command"
 
-# Ensure mvnw exists and is executable
-if [ -f "./mvnw" ]; then
-  chmod +x ./mvnw || true
+# Source shared lib if present
+LIB="$ROOT_DIR/lib.sh"
+if [ -f "$LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$LIB"
 else
-  echo "[devcontainer] warning: mvnw not found in repo root"
+  echo "[devcontainer] warning: helper library not found at $LIB"
 fi
 
-echo "[devcontainer] Attempting to run './mvnw -N -B validate' to download wrapper and validate reactor"
-if command -v ./mvnw >/dev/null 2>&1; then
-  if ./mvnw -N -B validate; then
-    echo "[devcontainer] mvnw validate succeeded"
-  else
-    echo "[devcontainer] mvnw validate failed, attempting system 'mvn' as fallback"
-    if command -v mvn >/dev/null 2>&1; then
-      mvn -N -B validate && echo "[devcontainer] system mvn validate succeeded" || echo "[devcontainer] system mvn validate failed"
-    else
-      echo "[devcontainer] no system mvn available; skipping validate"
-    fi
-  fi
-else
-  echo "[devcontainer] mvnw not runnable; trying system 'mvn'"
-  if command -v mvn >/dev/null 2>&1; then
-    mvn -N -B validate && echo "[devcontainer] system mvn validate succeeded" || echo "[devcontainer] system mvn validate failed"
-  else
-    echo "[devcontainer] no mvn available; cannot perform validate"
-  fi
+echo "[devcontainer] post-create: launching modular post-create scripts from $SCRIPTS_DIR"
+
+if [ ! -d "$SCRIPTS_DIR" ]; then
+  echo "[devcontainer] no modular scripts directory found at $SCRIPTS_DIR — nothing to run"
+  exit 0
 fi
 
-echo "[devcontainer] post-create: finished"
+# Portable iteration over files; avoid bash-only shopt/arrays to work with /bin/sh
+found=0
+for script in "$SCRIPTS_DIR"/*; do
+  if [ ! -e "$script" ]; then
+    # no matches - break
+    break
+  fi
+  found=1
+  base=$(basename "$script")
+  if [ -f "$script" ] && [ -x "$script" ]; then
+    echo "[devcontainer] running $base"
+    "$script"
+  else
+    case "$base" in
+      *.sh)
+        echo "[devcontainer] running (shell) $base"
+        sh "$script"
+        ;;
+      *)
+        echo "[devcontainer] skipping non-shell or non-executable file: $base"
+        ;;
+    esac
+  fi
+done
+
+if [ "$found" -eq 0 ]; then
+  echo "[devcontainer] no scripts found in $SCRIPTS_DIR"
+fi
+
+echo "[devcontainer] post-create: completed all modular scripts"

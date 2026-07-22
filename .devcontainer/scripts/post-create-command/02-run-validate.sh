@@ -1,28 +1,42 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -eu
 
-echo "[02-run-validate] Running mvn validate (wrapper preferred, fallback to system mvn)"
+# source helpers
+LIB="$(cd "$(dirname "$0")/.." && pwd)/lib.sh"
+if [ -f "$LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$LIB"
+fi
+
+info "[02-run-validate] Running mvn validate (wrapper preferred, fallback to system mvn)"
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
-cd "$REPO_ROOT"
+safe_cd "$REPO_ROOT"
 
-if [ -x "./mvnw" ]; then
-  echo "[02-run-validate] invoking ./mvnw -N -B validate"
-  if ./mvnw -N -B validate; then
-    echo "[02-run-validate] ./mvnw validate succeeded"
-    exit 0
-  else
-    echo "[02-run-validate] ./mvnw validate failed — will try system mvn"
-  fi
-fi
+validate_with_wrapper() {
+  [ -x "./mvnw" ] || return 1
+  info "[02-run-validate] invoking ./mvnw -N -B validate"
+  run_cmd ./mvnw -N -B validate
+}
 
-if command -v mvn >/dev/null 2>&1; then
-  echo "[02-run-validate] invoking system mvn -N -B validate"
-  if mvn -N -B validate; then
-    echo "[02-run-validate] system mvn validate succeeded"
-  else
-    echo "[02-run-validate] system mvn validate failed"
+validate_with_system() {
+  command -v mvn >/dev/null 2>&1 || return 1
+  info "[02-run-validate] invoking system mvn -N -B validate"
+  run_cmd mvn -N -B validate
+}
+
+main() {
+  if validate_with_wrapper; then
+    info "[02-run-validate] ./mvnw validate succeeded"
+    return 0
   fi
-else
-  echo "[02-run-validate] no mvn available on PATH"
-fi
+  warn "[02-run-validate] ./mvnw validate failed — will try system mvn"
+
+  if validate_with_system; then
+    info "[02-run-validate] system mvn validate succeeded"
+  else
+    warn "[02-run-validate] system mvn validate failed or not present"
+  fi
+}
+
+main "$@"
