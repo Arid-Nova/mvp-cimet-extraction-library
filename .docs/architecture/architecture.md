@@ -36,3 +36,28 @@ Design notes
 ------------
 - Models are Jackson-serializable and the project provides JsonSchemaService to generate a contract for JSON consumers.
 - File path normalization and cross-OS compatibility are handled centrally in FileUtils.
+
+Sequence diagram (Mermaid)
+--------------------------
+Below is a simple sequence visualization of the main flow (IR extraction → delta → merge):
+
+```mermaid
+sequenceDiagram
+  participant Dev as Developer (config)
+  participant IR as IRExtractionService
+  participant IO as JsonReadWriteUtils
+  participant Delta as DeltaExtractionService
+  participant Merge as MergeService
+
+  Dev->>IR: provide config (repo URL, commit)
+  IR->>IO: write IR JSON (output/IR.json)
+  Dev->>Delta: request diff (oldCommit, newCommit)
+  Delta->>IO: write SystemChange (output/Delta.json)
+  Dev->>Merge: apply Delta to IR
+  Merge->>IO: write New IR (output/NewIR.json)
+```
+
+Notes
+-----
+- Keep the flow idempotent: modules should not mutate input files in place; they write to `./output/`.
+- The sequence above is intentionally linear for clarity — the implementation includes checks for partial IRs and caching of intermediate results.

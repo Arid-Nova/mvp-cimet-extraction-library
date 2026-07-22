@@ -1,7 +1,7 @@
 Contributing
 ============
 
-Thank you for contributing. This document is a short summary; the canonical guide lives in `/.docs/development/contributing.md`.
+Thank you for contributing. This document is a short summary; the canonical guide lives in `/.docs/development/DEVELOPERS.md`.
 
 Quick checklist before opening a PR
 - Ensure all unit tests pass: `./mvnw test`
@@ -19,4 +19,4 @@ Coding standards and commit messages
 - Keep commits small and focused
 - Use imperative present tense in commit messages: "Add feature X", "Fix bug Y"
 
-See `/.docs/development/contributing.md` for the full developer workflow and PR checklist.
+See `/.docs/development/DEVELOPERS.md` for the full developer workflow and PR checklist.

@@ -38,7 +38,7 @@ public class JsonSchemaService {
     }
 
     /**
-     * Writes JSON schema documentation for MicroserviceSystem and SystemChange to the default location (./docs/).
+     * Writes JSON schema documentation for MicroserviceSystem and SystemChange to the default location (./.docs/schema/).
      */
     public static void writeSchemas() throws IOException {
         // Ensure the local directories exist

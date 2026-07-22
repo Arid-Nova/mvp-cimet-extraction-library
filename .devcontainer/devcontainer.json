@@ -27,7 +27,9 @@
         "redhat.vscode-yaml",
         "redhat.vscode-xml",
         "EditorConfig.EditorConfig",
-        "dbaeumer.vscode-eslint"
+        "dbaeumer.vscode-eslint",
+        "mermaidchart.vscode-mermaid-chart",
+        "vstirbu.vscode-mermaid-preview"
       ],
       "settings": {
         "java.maven.downloadSources": true,

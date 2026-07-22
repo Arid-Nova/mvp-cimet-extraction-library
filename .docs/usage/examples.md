@@ -83,3 +83,23 @@ Where outputs are written
 ------------------------
 - IRs and deltas are written to `./output/` by default. Partial IRs are written as `PART_<repo>_<branch>_<commit>.json`.
 - JSON Schemas are written to `./.docs/schema/` by default (use `JsonSchemaService.writeSchemas()`).
+
+Reproduce end-to-end (quick)
+----------------------------
+From the repository root (Linux/macOS):
+
+```
+# generate JSON schema docs (unit test will write files when none exist)
+./mvnw -Dtest=JSONDocumentationTest test
+
+# run integration verification (may run failsafe bindings)
+./mvnw -B -DskipTests=false verify
+```
+
+Expected artifacts (after successful run):
+
+- `./output/IR.json` or `PART_*.json` — produced by IRExtractionService when you run extraction flows
+- `./output/Delta.json` — produced by DeltaExtractionService when computing diffs
+- `./.docs/schema/MicroserviceSystemSchema.json` and `SystemChangeSchema.json` — created by JsonSchemaService
+
+If your CI enforces schema packaging, copy `.docs/schema/*.json` into `src/main/resources` as part of your release build.

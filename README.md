@@ -17,9 +17,9 @@ This project is licensed under the Apache License 2.0 — see the [LICENSE](./LI
 
 Quick Links
 -----------
-- Docs index: [/.docs/README.md](./.docs/README.md)
-- Schema docs: [/.docs/schema/README.md](./.docs/schema/README.md)
-- Devcontainer docs: [/.docs/devcontainer/README.md](./.docs/devcontainer/README.md)
+- Docs index: [/.docs/index.md](./.docs/index.md)
+- Schema docs: [/.docs/schema/schema.md](./.docs/schema/schema.md)
+- Development & Devcontainer: [/.docs/development/DEVELOPERS.md](./.docs/development/DEVELOPERS.md)
 
 Table of Contents
 -----------------
@@ -114,20 +114,20 @@ Testing (local & in-container)
 
 Contributing
 ------------
-- Fork, create a branch, push a PR.
+- Look at the GitHub issues and pick work to do. Comment on the issue "I'm working on this" to avoid duplication.
+- Create a branch using `issue-<number>/<short-desc>` (e.g. `issue-123/fix-npe`) and open a PR when ready. If you don't have push access, opening a PR from a fork is supported.
 - Run tests and linters locally before opening a PR.
 
 Docs directory
 --------------
 This repository contains a structured docs directory at `/.docs/`. See the linked pages below for focused guides:
 
-- Schema docs: [/.docs/schema/README.md](./.docs/schema/README.md) — JSON Schema artifacts and validation guidance
-- Devcontainer: [/.docs/devcontainer/README.md](./.docs/devcontainer/README.md) — deep dive into the devcontainer image, scripts and extension choices
-- Development: [/.docs/development/README.md](./.docs/development/README.md) — regular development workflows, coding standards, and IDE tips
-- Testing: [/.docs/testing/README.md](./.docs/testing/README.md) — unit/integration/E2E guidance and CI notes
-- Deployment: [/.docs/deployment/README.md](./.docs/deployment/README.md) — packaging and release guidance
+ - Schema docs: [/.docs/schema/schema.md](./.docs/schema/schema.md) — JSON Schema artifacts and regeneration instructions
+ - Development: [/.docs/development/DEVELOPERS.md](./.docs/development/DEVELOPERS.md) — developer workflows, contributing, devcontainer, and testing (preferred devcontainer)
+ - Devcontainer: [/.docs/development/devcontainer.md](./.docs/development/devcontainer.md) — devcontainer design, scripts and extension choices
+ - Deployment & Release: [/.docs/development/release.md](./.docs/development/release.md) — packaging and release guidance
 
-For a central index see [/.docs/README.md](./.docs/README.md).
+For a central index see [/.docs/index.md](./.docs/index.md).
 
 Contact
 -------

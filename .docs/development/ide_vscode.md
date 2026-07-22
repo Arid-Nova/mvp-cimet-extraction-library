@@ -1,5 +1,5 @@
 VS Code Support
-================
+===============
 
 Recommended extensions
 - See `.devcontainer/devcontainer.json` for the exact extension list that will be installed into the container for VS Code sessions.

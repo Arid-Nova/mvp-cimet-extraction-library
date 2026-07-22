@@ -1,5 +1,5 @@
 JetBrains IDEs (IntelliJ IDEA)
-===============================
+================================
 
 Recommendations
 - Use the project SDK set to Java 21.
