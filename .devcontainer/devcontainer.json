@@ -22,7 +22,6 @@
         "vscjava.vscode-java-pack",
         "GabrielBB.vscode-lombok",
         "shengchen.vscode-checkstyle",
-        "ms-azuretools.vscode-docker",
         "eamodio.gitlens",
         "timonwong.shellcheck",
         "redhat.vscode-yaml",
