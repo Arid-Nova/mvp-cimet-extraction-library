@@ -2,7 +2,7 @@
 set -euo pipefail
 
 echo "[02-run-validate] Running mvn validate (wrapper preferred, fallback to system mvn)"
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 cd "$REPO_ROOT"
 

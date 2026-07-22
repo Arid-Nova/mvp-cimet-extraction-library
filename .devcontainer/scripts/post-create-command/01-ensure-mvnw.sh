@@ -2,8 +2,7 @@
 set -euo pipefail
 
 echo "[01-ensure-mvnw] Ensuring mvnw exists and is executable"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-REPO_ROOT="$(cd "$ROOT/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 if [ -f "$REPO_ROOT/mvnw" ]; then
   chmod +x "$REPO_ROOT/mvnw" || true
