@@ -27,4 +27,4 @@ fi
 export JAVA_TOOL_OPTIONS
 
 # Execute the wrapper main
-exec java -cp "$WRAPPER_JAR" org.apache.maven.wrapper.MavenWrapperMain "$@"
+exec java -Dmaven.multiModuleProjectDirectory="$PWD" -cp "$WRAPPER_JAR" org.apache.maven.wrapper.MavenWrapperMain "$@"
