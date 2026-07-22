@@ -13,7 +13,7 @@ Active development. The repository includes a reproducible devcontainer for loca
 
 License
 -------
-This project is open source. See LICENSE in the repository root for the exact terms.
+This project is licensed under the Apache License 2.0 — see the [LICENSE](./LICENSE) file for details. (SPDX: Apache-2.0)
 
 Quick Links
 -----------
