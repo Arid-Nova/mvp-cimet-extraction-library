@@ -8,4 +8,16 @@ if not exist "%WRAPPER_JAR%" (
   exit /b 1
 )
 
+if not defined MAVEN_OPTS (
+  set MAVEN_OPTS=-Dmaven.multiModuleProjectDirectory=%CD%
+) else (
+  set MAVEN_OPTS=%MAVEN_OPTS% -Dmaven.multiModuleProjectDirectory=%CD%
+)
+
+if not defined JAVA_TOOL_OPTIONS (
+  set JAVA_TOOL_OPTIONS=--enable-native-access=ALL-UNNAMED
+) else (
+  set JAVA_TOOL_OPTIONS=%JAVA_TOOL_OPTIONS% --enable-native-access=ALL-UNNAMED
+)
+
 java -cp "%WRAPPER_JAR%" org.apache.maven.wrapper.MavenWrapperMain %*
