@@ -40,3 +40,7 @@ Debugging
 ---------
 - Rebuild the devcontainer and inspect the post-create output in the Dev Containers log.
 - To run scripts manually inside container: `bash .devcontainer/scripts/post-create-command.sh`
+
+Devcontainer scripts reference
+-----------------------------
+Detailed guidance for the devcontainer modular scripts has been moved into the docs: [Devcontainer scripts](./devcontainer-scripts.md). That page documents the post-create launcher, helper functions, and how to add new modular scripts.
