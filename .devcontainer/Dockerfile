@@ -1,1 +1,1 @@
-FROM mcr.microsoft.com/devcontainers/java:dev-21
+FROM mcr.microsoft.com/devcontainers/java:dev-21-trixie
