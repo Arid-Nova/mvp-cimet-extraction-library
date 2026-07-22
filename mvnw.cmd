@@ -1,5 +1,5 @@
 @echo off
-REM Minimal Maven wrapper launcher for Windows
+REM Maven wrapper launcher for Windows — invokes the wrapper main class directly
 set DIR=%~dp0
 set WRAPPER_JAR=%DIR%\.mvn\wrapper\maven-wrapper.jar
 
@@ -8,4 +8,4 @@ if not exist "%WRAPPER_JAR%" (
   exit /b 1
 )
 
-java -jar "%WRAPPER_JAR%" %*
+java -cp "%WRAPPER_JAR%" org.apache.maven.wrapper.MavenWrapperMain %*

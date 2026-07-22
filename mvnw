@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Minimal Maven wrapper launcher — delegates to .mvn/wrapper/maven-wrapper.jar
+# Maven wrapper launcher that invokes the wrapper main class directly.
 DIR="$(cd "$(dirname "$0")" && pwd)"
 WRAPPER_JAR="$DIR/.mvn/wrapper/maven-wrapper.jar"
 
@@ -8,4 +8,5 @@ if [ ! -f "$WRAPPER_JAR" ]; then
   exit 1
 fi
 
-exec java -jar "$WRAPPER_JAR" "$@"
+# Call the wrapper main class directly to avoid relying on a Main-Class in the JAR manifest
+exec java -cp "$WRAPPER_JAR" org.apache.maven.wrapper.MavenWrapperMain "$@"
