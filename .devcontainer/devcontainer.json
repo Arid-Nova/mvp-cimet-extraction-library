@@ -1,0 +1,46 @@
+{
+  "name": "mvp-cimet-devcontainer",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "vscode",
+  "containerEnv": {
+    "MAVEN_OPTS": "-Xmx1024m -XX:+UseContainerSupport",
+    "JAVA_TOOL_OPTIONS": "--enable-native-access=ALL-UNNAMED"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "none",
+      "installMaven": true,
+      "mavenVersion": "3.6.3"
+    },
+    "ghcr.io/devcontainers/features/git": {}
+  },
+  "postCreateCommand": "bash -lc 'chmod +x .devcontainer/scripts/post-create-command.sh && .devcontainer/scripts/post-create-command.sh'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "GabrielBB.vscode-lombok",
+        "shengchen.vscode-checkstyle",
+        "eamodio.gitlens",
+        "timonwong.shellcheck",
+        "redhat.vscode-yaml",
+        "redhat.vscode-xml",
+        "EditorConfig.EditorConfig",
+        "dbaeumer.vscode-eslint",
+        "mermaidchart.vscode-mermaid-chart",
+        "vstirbu.vscode-mermaid-preview"
+      ],
+      "settings": {
+        "java.maven.downloadSources": true,
+        "java.import.gradle.enabled": false,
+        "java.import.gradle.wrapper.enabled": false,
+        "java.import.maven.enabled": true,
+        "java.compile.nullAnalysis.mode": "automatic",
+        "java.configuration.updateBuildConfiguration": "interactive"
+      }
+    }
+  }
+}

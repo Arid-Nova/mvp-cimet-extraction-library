@@ -8,3 +8,6 @@ target/
 output/
 clone/
 settings.xml
+
+# Ignore Gradle caches inside test fixtures (these are generated and should not be committed)
+src/test/resources/**/.gradle/
