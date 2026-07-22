@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # source helpers
-LIB="$(cd "$(dirname "$0")/.." && pwd)/lib.sh"
+LIB="$(cd "$(dirname "$0")/../common" && pwd)/lib.sh"
 if [[ -f "$LIB" ]]; then
   # shellcheck source=/dev/null
   . "$LIB"

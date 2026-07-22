@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPTS_DIR="$ROOT_DIR/post-create-command"
 
 # load helpers
-LIB="$ROOT_DIR/lib.sh"
+LIB="$ROOT_DIR/common/lib.sh"
 if [[ -f "$LIB" ]]; then
   # shellcheck source=/dev/null
   . "$LIB"

@@ -11,6 +11,10 @@
     },
     "ghcr.io/devcontainers/features/git": {}
   },
+  "postCreateCommand": "bash -lc 'chmod +x .devcontainer/scripts/post-create-command.sh && .devcontainer/scripts/post-create-command.sh'",
+  "containerEnv": {
+    "MAVEN_OPTS": "-Xmx1024m -XX:+UseContainerSupport"
+  },
   "customizations": {
     "vscode": {
       "extensions": [
