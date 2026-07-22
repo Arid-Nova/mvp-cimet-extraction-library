@@ -18,13 +18,9 @@ else
 fi
 export MAVEN_OPTS
 
-# For recent JDKs, warn about native access; enable it to silence warnings from older libraries
-if [ -z "${JAVA_TOOL_OPTIONS+x}" ]; then
-  JAVA_TOOL_OPTIONS="--enable-native-access=ALL-UNNAMED"
-else
-  JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS --enable-native-access=ALL-UNNAMED"
-fi
-export JAVA_TOOL_OPTIONS
+# NOTE: JAVA_TOOL_OPTIONS is intentionally not set here.
+# It's provided via the devcontainer environment (containerEnv) so it applies
+# uniformly to the whole container and all Java processes.
 
 # Execute the wrapper main
 exec java -Dmaven.multiModuleProjectDirectory="$PWD" -cp "$WRAPPER_JAR" org.apache.maven.wrapper.MavenWrapperMain "$@"

@@ -5,6 +5,10 @@
     "context": ".."
   },
   "remoteUser": "vscode",
+  "containerEnv": {
+    "MAVEN_OPTS": "-Xmx1024m -XX:+UseContainerSupport",
+    "JAVA_TOOL_OPTIONS": "--enable-native-access=ALL-UNNAMED"
+  },
   "features": {
     "ghcr.io/devcontainers-extra/features/maven-sdkman:2": {
       "version": "3.6.3"
@@ -12,14 +16,19 @@
     "ghcr.io/devcontainers/features/git": {}
   },
   "postCreateCommand": "bash -lc 'chmod +x .devcontainer/scripts/post-create-command.sh && .devcontainer/scripts/post-create-command.sh'",
-  "containerEnv": {
-    "MAVEN_OPTS": "-Xmx1024m -XX:+UseContainerSupport"
-  },
   "customizations": {
     "vscode": {
       "extensions": [
-        "redhat.java",
-        "redhat.vscode-xml"
+        "vscjava.vscode-java-pack",
+        "GabrielBB.vscode-lombok",
+        "shengchen.vscode-checkstyle",
+        "ms-azuretools.vscode-docker",
+        "eamodio.gitlens",
+        "timonwong.shellcheck",
+        "redhat.vscode-yaml",
+        "redhat.vscode-xml",
+        "EditorConfig.EditorConfig",
+        "dbaeumer.vscode-eslint"
       ],
       "settings": {
         "java.maven.downloadSources": true,
