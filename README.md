@@ -103,6 +103,24 @@ Sample output produced (See `/docs` or Generating a JSON Schema for a full outpu
 }
 ```
 
+## Partial IR Caching:
+
+IR extraction is expensive (clone + full parse), so per-repository partial IRs are cached.
+As of 1.3.0 the cache is pluggable and no longer writes `PART_*.json` files to the output
+directory (issue #14). The backend is selected via environment variables:
+
+| Variable | Values | Default |
+|---|---|---|
+| `CIMET_CACHE` | `redis` \| `memory` \| `none` | `redis` if `CIMET_REDIS_URI` is set, else `memory` |
+| `CIMET_REDIS_URI` | e.g. `redis://localhost:6379` | unset |
+| `CIMET_REDIS_TTL_SECONDS` | per-entry TTL, `0` = none | `0` |
+| `CIMET_CACHE_MAX_ENTRIES` | in-memory LRU bound | `64` |
+
+For LRU eviction with Redis, run the server with `maxmemory <bound>` and
+`maxmemory-policy allkeys-lru`. Redis being unreachable never fails extraction —
+the library logs a warning and proceeds uncached. A cache can also be injected
+programmatically via `new IRExtractionService(config, cache)`.
+
 ## Extracting a Delta Change Impact:
 - Create a configuration file (see above)
 - Import `edu.university.ecs.lab.delta.services.DeltaExtractionService` in your code.

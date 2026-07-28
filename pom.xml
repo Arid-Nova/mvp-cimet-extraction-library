@@ -5,7 +5,7 @@
     <groupId>edu.university.ecs.lab</groupId>
     <artifactId>cimet-extract-lib</artifactId>
     <!-- Version for tagging the library -->
-    <version>1.2.1</version>
+    <version>1.3.0</version>
     <url>https://github.com/Arid-Nova/mvp-cimet-extraction-library</url>
 
     <scm>
@@ -80,6 +80,12 @@
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
             <version>3.0.0</version>
+        </dependency>
+        <!-- Redis client for the partial IR cache (issue #14) -->
+        <dependency>
+            <groupId>redis.clients</groupId>
+            <artifactId>jedis</artifactId>
+            <version>5.2.0</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

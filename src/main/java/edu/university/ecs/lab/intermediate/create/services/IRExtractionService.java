@@ -1,6 +1,8 @@
 package edu.university.ecs.lab.intermediate.create.services;
 
 import edu.university.ecs.lab.common.models.ir.*;
+import edu.university.ecs.lab.common.cache.PartialIRCache;
+import edu.university.ecs.lab.common.cache.PartialIRCaches;
 import edu.university.ecs.lab.common.config.Config;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.services.GitService;
@@ -32,15 +34,35 @@ public class IRExtractionService {
     private final Config config;
 
     /**
+     * Cache for per-repository partial IRs. Replaces the legacy PART_*.json files
+     * previously written to the output directory (issue #14).
+     */
+    private final PartialIRCache partialIRCache;
+
+    /**
      * This constructor initializes a new IRExtractionService and instantiates a
-     * GitService object for repository manipulation
+     * GitService object for repository manipulation. The partial IR cache backend
+     * is selected from the environment (see {@link PartialIRCaches#fromEnvironment()}).
      *
      * @param config the Config to use
      * @see GitService
      */
     public IRExtractionService(Config config) throws IOException, InterruptedException {
+        this(config, PartialIRCaches.fromEnvironment());
+    }
+
+    /**
+     * Constructor allowing an explicit partial IR cache, for embedding services
+     * and tests that manage the cache lifecycle themselves.
+     *
+     * @param config         the Config to use
+     * @param partialIRCache the cache backend for partial IRs
+     * @see GitService
+     */
+    public IRExtractionService(Config config, PartialIRCache partialIRCache) throws IOException, InterruptedException {
         gitService = new GitService(config);
         this.config = config;
+        this.partialIRCache = Objects.requireNonNull(partialIRCache, "partialIRCache");
     }
 
     /**
@@ -54,19 +76,16 @@ public class IRExtractionService {
             throws IOException, InterruptedException, GitAPIException {
         for (RepositoryConfig rc : config.getSystemRepositories()) {
             Set<Microservice> microservices;
-            File partialIR = new File(FileUtils.getPartialIRPath(rc).toString());
-            if (partialIR.exists() && !partialIR.isDirectory()) {
-                microservices = readPartial(FileUtils.getPartialIRPath(rc)).getMicroservices();
+            String cacheKey = PartialIRCaches.keyFor(rc);
+            Optional<PartialMicroserviceSystemDto> cached = partialIRCache.get(cacheKey);
+            if (cached.isPresent()) {
+                microservices = cached.get().getMicroservices();
                 normalizeRepositoryPaths(microservices, rc);
-                if (writePartialIRs) {
-                    JsonReadWriteUtils.writeToJSON(FileUtils.getPartialIRPath(rc), new PartialMicroserviceSystemDto(microservices));
-                }
-            }
-            else {
+            } else {
                 microservices = cloneAndScanServices(microserviceSystem, rc);
                 normalizeRepositoryPaths(microservices, rc);
                 if (writePartialIRs) {
-                    JsonReadWriteUtils.writeToJSON(FileUtils.getPartialIRPath(rc), new PartialMicroserviceSystemDto(microservices));
+                    partialIRCache.put(cacheKey, new PartialMicroserviceSystemDto(microservices));
                 }
             }
 
