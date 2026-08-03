@@ -31,7 +31,7 @@ public class FileUtils {
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
     private static final String DEFAULT_OUTPUT_PATH = "output";
     private static final String DEFAULT_CLONE_PATH = "clone";
-    private static final String DEFAULT_DOCS_PATH = "docs";
+    private static final String DEFAULT_DOCS_PATH = ".docs";
     private static final String DOT = ".";
     public static final String GIT_SEPARATOR = "/";
 

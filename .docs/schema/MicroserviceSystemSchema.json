@@ -1,0 +1,105 @@
+{
+  "type" : "object",
+  "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:MicroserviceSystem",
+  "properties" : {
+    "name" : {
+      "type" : "string"
+    },
+    "commitID" : {
+      "type" : "string"
+    },
+    "microservices" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object",
+        "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Microservice",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "string"
+          },
+          "controllers" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass",
+              "properties" : {
+                "name" : {
+                  "type" : "string"
+                },
+                "path" : {
+                  "type" : "string"
+                },
+                "fileType" : {
+                  "type" : "string",
+                  "enum" : [ "JCLASS", "JINTERFACE", "JENUM", "JRECORD", "CONFIG", "POM" ]
+                },
+                "packageName" : {
+                  "type" : "string"
+                },
+                "protection" : {
+                  "type" : "string",
+                  "enum" : [ "PUBLIC", "PROTECTED", "PRIVATE", "PACKAGE_PRIVATE" ]
+                },
+                "imports" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Import",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "packageAndClassName" : {
+                        "type" : "string"
+                      },
+                      "location" : {
+                        "type" : "object",
+                        "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location",
+                        "properties" : {
+                          "startLine" : {
+                            "type" : "integer"
+                          },
+                          "endLine" : {
+                            "type" : "integer"
+                          }
+                        }
+                      },
+                      "importPackage" : {
+                        "type" : "string"
+                      },
+                      "importObject" : {
+                        "type" : "string"
+                      },
+                      "isStatic" : {
+                        "type" : "boolean"
+                      }
+                    }
+                  }
+                },
+                "implementedTypes" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "string"
+                  }
+                },
+                "extendedTypes" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "string"
+                  }
+                },
+                "classRole" : {
+                  "type" : "string",
+                  "enum" : [ "CONTROLLER", "SERVICE", "REPOSITORY", "ENTITY", "REP_REST_RSC", "FEIGN_CLIENT", "UNKNOWN" ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

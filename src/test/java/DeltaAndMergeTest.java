@@ -10,7 +10,7 @@ import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
 import edu.university.ecs.lab.intermediate.merge.services.MergeService;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
-import org.junit.jupiter.api.Assertions;
+import static org.assertj.core.api.Assertions.assertThat;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -88,7 +88,8 @@ class DeltaAndMergeTest {
         microserviceSystem2.setOrphans(new HashSet<>());
 
         TestUtilities.deepCompareSystems(microserviceSystem1, microserviceSystem2);
-        Assertions.assertTrue(Objects.deepEquals(microserviceSystem1, microserviceSystem2));
+        // Use AssertJ recursive comparison for a clear, field-level equality check
+        assertThat(microserviceSystem1).usingRecursiveComparison().isEqualTo(microserviceSystem2);
     }
 
     void testComparisonLoop(List<RevCommit> list, boolean finalRun, int rcId) throws GitAPIException, IOException, InterruptedException {
