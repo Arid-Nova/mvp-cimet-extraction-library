@@ -69,7 +69,13 @@ public class GitService {
     }
 
     /**
-     * Clones repositories for each Git repo that does not already have an IR generated for it
+     * Clones and initializes each configured Git repository.
+     *
+     * <p>Note: this method previously checked for existing {@code PART_*.json} files
+     * to decide between a bare-mirror and full repository init, but the flag was
+     * never honored by {@link #initRepository} and partial IRs are no longer kept
+     * on the file system (they live in a
+     * {@link edu.university.ecs.lab.common.cache.PartialIRCache}, issue #14).
      */
     public void prepareRepositories() throws IOException, InterruptedException {
         this.rawToken = tokenClient.fetchToken();
@@ -77,22 +83,9 @@ public class GitService {
 
         repositories = new HashMap<>();
 
-        // For each repository
         for (RepositoryConfig rc : config.getSystemRepositories()) {
-            // Check for existing IR part
-            String irName = "PART_" + rc.getRepoName() + "_" + rc.repoBranchPair().branchName() + "_" + rc.commitID() + ".json";
-            File existingIR = new File(FileUtils.getOutputPath() + File.separator + irName);
-
-            // If an IR already exists, just set up a bare mirror of the repository for deltas
-            if (existingIR.exists()) {
-                cloneRemote(rc);
-                repositories.put(rc.repoBranchPair(), initRepository(rc, true));
-            }
-            // Else clone it and prepare to generate an IR
-            else {
-                cloneRemote(rc);
-                repositories.put(rc.repoBranchPair(), initRepository(rc, false));
-            }
+            cloneRemote(rc);
+            repositories.put(rc.repoBranchPair(), initRepository(rc, false));
         }
     }
 

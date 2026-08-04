@@ -357,7 +357,11 @@ public class FileUtils {
      *
      * @param rc The RepositoryConfig
      * @return a Path including the file name where the partial IR should be written
+     * @deprecated Partial IRs are no longer written to the file system; they are held in a
+     *             {@link edu.university.ecs.lab.common.cache.PartialIRCache} (issue #14).
+     *             Kept only for reading legacy {@code PART_*.json} files; will be removed.
      */
+    @Deprecated(since = "1.3.0", forRemoval = true)
     public static Path getPartialIRPath(RepositoryConfig rc) {
         String fileName = "PART_" + rc.getRepoName() + "_" + rc.repoBranchPair().branchName() + "_" + rc.commitID() + ".json";
         return Path.of(getOutputPath() + File.separator + fileName);

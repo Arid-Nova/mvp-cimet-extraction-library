@@ -224,12 +224,17 @@ public class MergeService {
                     case ADD:
                         // If a delta is more/less specific than an active microservice
                         Microservice removeMicroservice = null;
+                        String newMicroservicePath = delta.getPath().normalize().toString().replace(File.separator + "pom.xml", "").replace(File.separator + "build.gradle", "");
                         for (Microservice compareMicroservice : microserviceSystem.getMicroservices()) {
+                            String comparePath = compareMicroservice.getPath().normalize().toString();
+                            // A microservice already exists at this exact path, skip the addition
+                            if (comparePath.equals(newMicroservicePath)) {
+                                break match;
                             // If delta is more specific than compareMicroservice, we remove this one
-                            if (delta.getPath().normalize().toString().replace(File.separator + "pom.xml", "").replace(File.separator + "build.gradle", "").matches((compareMicroservice.getPath().normalize().toString() + File.separator + ".*").replace("\\", "\\\\"))) {
+                            } else if (newMicroservicePath.matches((comparePath + File.separator + ".*").replace("\\", "\\\\"))) {
                                 removeMicroservice = compareMicroservice;
                             // If a microservice already exists that is more specific, skip the addition
-                            } else if (compareMicroservice.getPath().normalize().toString().matches((delta.getPath().normalize().toString().replace(File.separator + "pom.xml", "").replace(File.separator + "build.gradle", "") + separator + ".*").replace("\\", "\\\\"))) {
+                            } else if (comparePath.matches((newMicroservicePath + separator + ".*").replace("\\", "\\\\"))) {
                                 break match;
                             }
                         }

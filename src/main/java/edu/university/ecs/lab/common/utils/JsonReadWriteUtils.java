@@ -56,6 +56,18 @@ public class JsonReadWriteUtils {
         return setupObjectReader().readValue(data, type);
     }
 
+    /**
+     * Serializes an object to a JSON String, using the same configuration as
+     * {@link #writeToJSON(Path, Object)}.
+     *
+     * @param <T>    the type of the object to serialize
+     * @param object the object to serialize into JSON
+     * @return the JSON representation of the object
+     */
+    public static <T> String writeToJSONString(T object) throws IOException {
+        return setupObjectWriter().writeValueAsString(object);
+    }
+
     public static ObjectWriter setupObjectWriter() {
         ObjectMapper objectMapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
