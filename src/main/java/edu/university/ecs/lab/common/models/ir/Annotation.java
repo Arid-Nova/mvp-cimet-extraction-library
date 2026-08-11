@@ -55,7 +55,7 @@ public class Annotation extends Component {
             if(smAnnotationExpr.getMemberValue() instanceof StringLiteralExpr sle) {
                 attributes.put("default", sle.asString());
             } else {
-                return attributes;
+                attributes.put("default", smAnnotationExpr.getMemberValue().toString());
             }
         } else if (annotationExpr instanceof NormalAnnotationExpr nAnnotationExpr) {
             for(MemberValuePair mvp : nAnnotationExpr.getPairs()) {
