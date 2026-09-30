@@ -59,4 +59,35 @@ class JavaScriptArchitectureBoundaryTest {
         ((ObjectNode) missing.path("architecture").path("endpointHandlers").get(0)).put("endpointId", "absent");
         assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(missing));
     }
+
+    @Test void contractEvidenceMustCoverDeclaredEndpointsAndUseSourceMetadata() {
+        ObjectNode snapshot = graphSnapshot();
+        ObjectNode contracts = snapshot.withObject("architecture").putObject("contracts").put("schemaVersion", 1);
+        var operations = contracts.putArray("operations");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        ObjectNode operation = operations.addObject().put("endpointId", "route").put("inputComplete", false).put("outputComplete", false);
+        operation.putArray("inputs"); operation.putArray("responses"); operation.putArray("limitations");
+        assertDoesNotThrow(() -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        ObjectNode input = operation.withArray("inputs").addObject().put("location", "body").put("name", "count")
+                .put("type", "number").put("evidence", "coercion").put("file", "app.js").put("line", 2);
+        assertDoesNotThrow(() -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        input.put("file", "../outside.js");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        input.put("file", "app.js").put("type", "invented-type");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        input.put("type", "number");
+        contracts.putObject("summary").put("truncatedOperations", 2);
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        contracts.withObject("summary").put("truncatedOperations", 0);
+        assertDoesNotThrow(() -> JavaScriptExtractionService.validateSnapshot(snapshot));
+    }
+
+    @Test void unresolvedFunctionCallCountsMustBeNonnegativeIntegers() {
+        ObjectNode snapshot = graphSnapshot();
+        ObjectNode function = (ObjectNode) snapshot.path("architecture").path("functions").get(0);
+        function.put("unresolvedCalls", -1);
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        function.put("unresolvedCalls", 2);
+        assertDoesNotThrow(() -> JavaScriptExtractionService.validateSnapshot(snapshot));
+    }
 }

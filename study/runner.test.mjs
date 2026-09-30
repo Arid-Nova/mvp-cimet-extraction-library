@@ -202,10 +202,19 @@ test('architecture commands read saved reports and trends preserve missing metri
   const data = { graphs: {
     modules: { status: 'partial', metrics: { nodeCount: 12, density: null } },
     backendApplications: { status: 'not-applicable', metrics: null },
-  }, capabilities: [{ id: 'runtime', status: 'unsupported', reason: 'Static source only' }] };
+  }, cohesion: { components: [{ component: 'backend:api', operationCount: 4,
+    SIDC: { value: null, status: 'insufficient-evidence', coverage: { completeOperations: 0 },
+      availableEvidenceEstimate: { value: 0.5, eligibleOperations: 2 } },
+    SSIC: { value: 0.25, status: 'partial', coverage: { operationsWithHandlers: 4 } },
+    observedFieldShapeProxy: { SIDC: { value: 0.75, eligibleOperations: 3 } },
+  }] }, capabilities: [{ id: 'runtime', status: 'unsupported', reason: 'Static source only' }] };
   const rows = historyRows({ name: 'first', cutoff: null }, 'api', { api: 'abc' }, 'report.json', data);
   assert.equal(rows.metrics.find(item => item.metric === 'density').value, null);
   assert.equal(rows.metrics.find(item => item.graph === 'backendApplications').status, 'not-applicable');
+  assert.equal(rows.metrics.find(item => item.metric === 'SIDC').value, null);
+  assert.equal(rows.metrics.find(item => item.metric === 'SIDC.availableEvidenceEstimate').value, 0.5);
+  assert.equal(rows.metrics.find(item => item.metric === 'SIDC.availableEvidenceEstimate').coverage.eligibleOperations, 2);
+  assert.equal(rows.metrics.find(item => item.metric === 'SIDC.observedFieldShapeProxy').basis, 'observed-field-shape-proxy');
   assert.equal(rows.capabilities[0].reason, 'Static source only');
   assert.equal(rows.capabilities[0].association, 'candidate_not_release_verified');
   const csv = rowsCsv([{ value: null }, { value: '=SYNTHETIC()' }], ['value']);

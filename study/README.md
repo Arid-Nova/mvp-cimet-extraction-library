@@ -168,7 +168,7 @@ results/*.architecture-delta.json          # JVM architecture/impact comparisons
 results/*.candidate-links.json             # method/path candidate links
 results/*.candidate-change-links.json      # changed endpoint/caller candidates
 results/history-trends.json                # checkpoints, metrics, capabilities, delta references
-results/history-metrics.csv                # long-form graph metrics and reported status
+results/history-metrics.csv                # graph/cohesion values, basis, coverage and status
 results/history-capabilities.csv           # capability id, status and reason per checkpoint/scope
 results/maintainer-validation.csv           # judgments initially blank
 ```
@@ -202,6 +202,17 @@ inapplicable measurement must not be interpreted as zero, and a two-component
 frontend/backend graph must not be reported as a two-microservice system.
 Capability reasons and the full reports' limitations remain part of the evidence.
 Potentially affected endpoints are static candidates, not demonstrated failures.
+
+The same history table now includes SC/LWF/GWF and SCCmodularity, with the weighted
+projection's status and weight semantics. `cohesion:<component>` rows include SIDC,
+SSIC and LOMLC. Strict contract values, `.availableEvidenceEstimate` and
+`.observedFieldShapeProxy` are separate metric names and carry `basis` and
+`coverage` columns. Never replace a null strict value with an estimate without
+changing its label. Eligible operation populations can vary across revisions;
+inspect their endpoint IDs/counts before interpreting a trend. SSIC's legacy
+formula has an operation-count-dependent scale, so compare its shared-element
+fraction and operation count too. The full architecture report retains per-
+operation evidence; architecture deltas include before/after cohesion coverage.
 
 Candidate classifications are deliberately limited:
 

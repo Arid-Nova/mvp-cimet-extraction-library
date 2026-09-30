@@ -92,7 +92,11 @@ proof of a breaking contract.
 ## Architectural analysis and evolution
 
 New snapshots also contain source-module dependencies, resolved local function
-calls, function body fingerprints, and directly supplied endpoint handlers.
+calls, function body fingerprints, directly supplied endpoint handlers and
+bounded request/response contract observations. Weighted SC/LWF/GWF,
+SCCmodularity and coverage-qualified SIDC/SSIC/LOMLC are available through the
+architecture commands. Coarse contract evidence, estimates and field/shape
+proxies are reported separately; missing information does not become a score.
 The opt-in analysis service consumes this richer snapshot evidence:
 
 ```sh

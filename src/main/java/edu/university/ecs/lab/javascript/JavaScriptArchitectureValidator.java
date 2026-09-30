@@ -50,6 +50,7 @@ final class JavaScriptArchitectureValidator {
             if (function.path("endLine").asInt() < function.path("line").asInt()) fail("Invalid function source range");
             text(function, "name");
             if (!text(function, "bodyFingerprint").matches("[a-f0-9]{64}")) fail("Invalid function fingerprint");
+            if (function.has("unresolvedCalls")) nonnegative(function, "unresolvedCalls");
         }
         Set<String> callIds = new HashSet<>();
         for (JsonNode call : calls) {
@@ -68,6 +69,57 @@ final class JavaScriptArchitectureValidator {
             String pair = handler.path("endpointId").asText() + "\n" + handler.path("functionId").asText();
             if (!linkedHandlers.add(pair)) fail("Duplicate endpoint handler link");
         }
+        if (architecture.has("contracts")) validateContracts(architecture.path("contracts"), endpointIds, files);
+    }
+
+    private static void validateContracts(JsonNode contracts, Set<String> endpointIds, Set<String> files) throws IOException {
+        if (!contracts.isObject() || !contracts.path("schemaVersion").isIntegralNumber()
+                || contracts.path("schemaVersion").asInt() != 1) fail("Unsupported operation contract schema");
+        Set<String> seen = new HashSet<>();
+        int observations = 0;
+        for (JsonNode operation : array(contracts, "operations", 100_000)) {
+            String endpoint = text(operation, "endpointId");
+            if (!endpointIds.contains(endpoint) || !seen.add(endpoint)) fail("Invalid operation contract endpoint");
+            for (String flag : List.of("inputComplete", "outputComplete"))
+                if (!operation.path(flag).isBoolean()) fail("Contract completeness must be explicit");
+            for (JsonNode input : array(operation, "inputs", 4096)) {
+                contractEvidence(input, files);
+                if (!Set.of("body", "query", "params", "headers").contains(text(input, "location")))
+                    fail("Unknown contract input location");
+                text(input, "name");
+                if (!Set.of("declared", "coercion", "property-read", "route-param").contains(text(input, "evidence")))
+                    fail("Unknown contract input evidence");
+                observations++;
+            }
+            for (JsonNode response : array(operation, "responses", 4096)) {
+                contractEvidence(response, files);
+                if (!Set.of("json", "send", "end").contains(text(response, "kind"))) fail("Unknown response contract kind");
+                text(response, "shape");
+                if (!response.path("complete").isBoolean()) fail("Response completeness must be explicit");
+                observations++;
+            }
+            for (JsonNode limitation : array(operation, "limitations", 100))
+                if (!limitation.isTextual() || limitation.asText().length() > 4096) fail("Invalid contract limitation");
+            if (observations > 200_000) fail("Operation contract observation limit exceeded");
+        }
+        if (!seen.equals(endpointIds)) fail("Contracts must report every extracted endpoint, including unknowns");
+        if (contracts.path("summary").has("truncatedOperations")) {
+            nonnegative(contracts.path("summary"), "truncatedOperations");
+            if (contracts.path("summary").path("truncatedOperations").asInt() > endpointIds.size())
+                fail("Contract truncation count exceeds operation count");
+        }
+    }
+
+    private static void contractEvidence(JsonNode record, Set<String> files) throws IOException {
+        if (!record.isObject() || !files.contains(sourcePath(record, "file"))) fail("Unknown contract source module");
+        line(record, "line");
+        if (!Set.of("string", "number", "boolean", "array", "object", "null", "unknown").contains(text(record, "type")))
+            fail("Unknown contract evidence type");
+    }
+
+    private static void nonnegative(JsonNode node, String field) throws IOException {
+        if (!node.path(field).isIntegralNumber() || !node.path(field).canConvertToInt() || node.path(field).asInt() < 0)
+            fail("Invalid architecture count: " + field);
     }
 
     private static JsonNode array(JsonNode parent, String field, int maximum) throws IOException {

@@ -35,10 +35,15 @@ class JavaScriptArchitectureCliTest {
         assertEquals("static-javascript-architecture", analysis.path("analysis").asText());
         assertEquals(2, analysis.path("graphs").path("modules").path("metrics").path("nodeCount").asInt());
         assertEquals(1, analysis.path("graphs").path("modules").path("metrics").path("edgeCount").asInt());
+        assertEquals(-1.0, analysis.path("graphs").path("modules").path("metrics").path("avgSC").asDouble(), 1e-12);
+        assertEquals(0.0, analysis.path("graphs").path("modules").path("metrics").path("SCCmodularity").asDouble(), 1e-12);
+        assertEquals(1, analysis.path("cohesion").path("components").get(0).path("operationCount").asInt());
+        assertTrue(analysis.path("cohesion").path("components").get(0).path("SIDC").path("value").isNull());
         JsonNode oldSnapshot = JavaScriptExtractionService.JSON.readTree(Files.readString(before));
         JsonNode newSnapshot = JavaScriptExtractionService.JSON.readTree(Files.readString(after));
         assertEquals(1, newSnapshot.path("architecture").path("endpointHandlers").size());
         assertEquals(1, newSnapshot.path("architecture").path("calls").size());
+        assertEquals(1, newSnapshot.path("architecture").path("contracts").path("operations").size());
         // A helper-body edit changes semantic evidence while keeping function identities stable.
         assertEquals(oldSnapshot.path("architecture").path("functions").get(1).path("id"),
                 newSnapshot.path("architecture").path("functions").get(1).path("id"));
@@ -49,6 +54,7 @@ class JavaScriptArchitectureCliTest {
                 "--new", newAnalysis.toString(), "--output", delta.toString()});
         JsonNode difference = JavaScriptExtractionService.JSON.readTree(Files.readString(delta));
         assertEquals(1, difference.path("summary").path("changedFunctions").asInt());
+        assertEquals(1, difference.path("cohesion").path("components").size());
         assertEquals(2, difference.path("potentiallyAffectedEndpoints").size());
         for (JsonNode impact : difference.path("potentiallyAffectedEndpoints")) {
             assertEquals("/sum", impact.path("endpoint").path("normalizedPath").asText());

@@ -1,4 +1,5 @@
 'use strict';
+const { buildContracts } = require('./contracts.cjs');
 
 // Uses only ASTs already read by analyzer.cjs. Never loads a target module.
 function buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwrap, isFunction, literal, semanticHash, hash, location, endpoints, endpointHandlerNodes, consignLoads }) {
@@ -33,7 +34,7 @@ function buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwra
     nodeFiles.set(node, file);
     if (isFunction(node)) {
       const label = functionLabel(node);
-      const record = { id: id('function', [file.rel, parentFunction?.id || '<module>', label]), ...location(file, node), name: label, bodyFingerprint: semanticHash(node) };
+      const record = { id: id('function', [file.rel, parentFunction?.id || '<module>', label]), ...location(file, node), name: label, bodyFingerprint: semanticHash(node), unresolvedCalls: 0 };
       functions.push(record); functionRecords.set(node, record); parentFunction = record;
     }
     if (ts.isExportDeclaration(node)) exportDeclarations.get(file).push(node);
@@ -187,7 +188,7 @@ function buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwra
         let parent = node.parent;
         while (parent && !isFunction(parent)) parent = parent.parent;
         const callerRecord = parent && functionRecords.get(parent);
-        if (!targetRecord) unresolvedCallSites++;
+        if (!targetRecord) { unresolvedCallSites++; if (callerRecord) callerRecord.unresolvedCalls++; }
         else if (!callerRecord) resolvedTopLevelCallsOmitted++;
         else calls.push({ id: id('local-call', [file.rel, callerRecord.id, targetRecord.id]), file: file.rel, line: location(file, node).line, callerId: callerRecord.id, targetId: targetRecord.id });
       }
@@ -204,8 +205,9 @@ function buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwra
   const order = (a, b) => (a.file || a.source || '').localeCompare(b.file || b.source || '', 'en') || (a.line || 0) - (b.line || 0) || a.id.localeCompare(b.id, 'en');
   dependencies.sort(order); functions.sort(order); calls.sort(order);
   uniqueHandlers.sort((a, b) => a.endpointId.localeCompare(b.endpointId, 'en') || a.functionId.localeCompare(b.functionId, 'en'));
+  const contracts = buildContracts({ ts, validFiles, lookup, unwrap, isFunction, literal, location, endpoints, endpointHandlerNodes, resolveValue, functionRecords, nodeFiles, mutations });
   return {
-    schemaVersion: 1, modules, dependencies, functions, calls, endpointHandlers: uniqueHandlers,
+    schemaVersion: 1, modules, dependencies, functions, calls, endpointHandlers: uniqueHandlers, contracts,
     summary: {
       modules: modules.length, dependencies: dependencies.length,
       resolvedRuntimeDependencies: dependencies.filter(d => d.resolution === 'resolved' && !d.typeOnly).length,

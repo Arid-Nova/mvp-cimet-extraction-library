@@ -17,7 +17,10 @@ The JavaScript architecture extension additionally extracts local module and
 function dependencies and runs bounded graph analysis, degree-coupling metrics,
 cycle/chain observations, API caller checks, and historical comparisons with
 candidate endpoint impact paths. Each report states which capabilities have
-sufficient evidence. Java/Spring-specific checks and unported metrics are
+sufficient evidence. Weighted SC/LWF/GWF and SCC modularity are available over
+static observation graphs. SIDC, LOMLC and SSIC include explicit contract or
+local-function coverage, with partial estimates separated from complete-contract
+values. Java/Spring-specific checks and unported metrics are
 explicitly unsupported; this does not enable every legacy CIMET2 detector.
 
 See [JavaScript adapter](docs/javascript-adapter.md) for setup, supported patterns,

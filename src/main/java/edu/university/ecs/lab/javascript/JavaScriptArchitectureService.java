@@ -103,6 +103,7 @@ public final class JavaScriptArchitectureService {
                     ObjectNode copy = evidence(function, component).put("id", qualified(component, functionId));
                     copy.put("name", function.path("name").asText());
                     copy.put("bodyFingerprint", function.path("bodyFingerprint").asText());
+                    if (function.has("unresolvedCalls")) copy.set("unresolvedCalls", function.path("unresolvedCalls"));
                     functions.add(copy);
                 }
                 for (JsonNode call : sorted(architecture.path("calls"))) {
@@ -144,16 +145,24 @@ public final class JavaScriptArchitectureService {
         graphs.withObject("modules").putObject("coverage").put("snapshotsWithArchitecture", withArchitecture)
                 .put("snapshotsTotal", snapshots.size()).put("excludedTypeOnlyDependencies", dependencyTypeOnly)
                 .put("externalDependencies", dependencyExternal).put("unresolvedDependencies", dependencyUnresolved);
+        for (String scope : List.of("components", "backendApplications"))
+            graphs.withObject(scope).putObject("coverage").put("matchingComplete", http.path("summary").path("matchingComplete").asBoolean());
+        for (String scope : List.of("modules", "components", "backendApplications"))
+            JavaScriptWeightedMetrics.enrich(graphs.withObject(scope));
+        ObjectNode cohesion = new JavaScriptCohesionService().analyze(ordered);
+        result.set("cohesion", cohesion);
         ObjectNode limits = result.putObject("limits");
         limits.put("degreeThreshold", options.degreeThreshold).put("chainLengthNodes", options.chainLength)
                 .put("maxWitnessesPerGraph", options.maxWitnesses).put("maxNodes", options.maxNodes)
                 .put("maxEdges", options.maxEdges).put("maxMatchComparisons", options.maxMatchComparisons)
                 .put("maxTraversalStepsPerGraph", options.maxTraversalSteps);
-        capabilities(result.putArray("capabilities"), moduleStatus, backends.nodes.size(), withArchitecture);
+        limits.put("metricDefinitionsVersion", 2);
+        limits.set("cohesion", cohesion.path("limits").deepCopy());
+        capabilities(result.putArray("capabilities"), moduleStatus, backends.nodes.size(), withArchitecture, graphs, cohesion);
         result.putArray("limitations")
                 .add("Static observations are incomplete: dynamic loading, reflection, callbacks and runtime dispatch may be missing.")
                 .add("Application boundaries are declared input components; files and endpoints are never promoted to services.")
-                .add("HTTP links are method/path candidates, not verified deployment routing; URL origins and payload contracts are not analyzed.")
+                .add("HTTP links are method/path candidates, not verified routing; contract observations do not establish payload compatibility.")
                 .add("No observed caller is a closed-world observation, not proof that an API is unused.")
                 .add("Metrics and threshold candidates do not establish design defects, behavioral regressions or a universal degradation score.")
                 .add("Cycle and chain witnesses are bounded examples, not exhaustive enumeration of all simple paths or cycles.");
@@ -350,8 +359,23 @@ public final class JavaScriptArchitectureService {
             JsonNode oldGraph = before.path("graphs").path(scope), newGraph = after.path("graphs").path(scope);
             ObjectNode delta = graphs.putObject(scope);
             delta.put("beforeStatus", oldGraph.path("status").asText()).put("afterStatus", newGraph.path("status").asText());
+            for (String field : List.of("coverage", "weightedMetrics")) {
+                String suffix = Character.toUpperCase(field.charAt(0)) + field.substring(1);
+                delta.set("before" + suffix, nullable(oldGraph.path(field)));
+                delta.set("after" + suffix, nullable(newGraph.path(field)));
+            }
             difference(oldGraph.path("nodes"), newGraph.path("nodes"), delta, "nodesAdded", "nodesRemoved");
             difference(oldGraph.path("edges"), newGraph.path("edges"), delta, "edgesAdded", "edgesRemoved");
+            ArrayNode weightChanges = delta.putArray("edgeWeightsChanged");
+            Map<String, JsonNode> oldEdges = index(oldGraph.path("edges"));
+            for (JsonNode edge : newGraph.path("edges")) {
+                JsonNode oldEdge = oldEdges.get(edge.path("id").asText());
+                if (oldEdge != null && !oldEdge.path("observations").equals(edge.path("observations"))) {
+                    ObjectNode change = object().put("id", edge.path("id").asText());
+                    change.set("before", oldEdge.path("observations")); change.set("after", edge.path("observations"));
+                    weightChanges.add(change);
+                }
+            }
             delta.remove("persistingCount");
             ObjectNode metrics = delta.putObject("metrics");
             newGraph.path("metrics").fieldNames().forEachRemaining(key -> {
@@ -362,6 +386,7 @@ public final class JavaScriptArchitectureService {
                 else entry.putNull("change");
             });
         }
+        compareCohesion(before.path("cohesion"), after.path("cohesion"), result);
         ArrayNode changedFunctions = result.putArray("changedFunctions");
         Map<String, JsonNode> oldFunctions = index(before.path("functions")), newFunctions = index(after.path("functions"));
         Set<String> oldSeeds = new TreeSet<>(), newSeeds = new TreeSet<>(), all = new TreeSet<>(oldFunctions.keySet()); all.addAll(newFunctions.keySet());
@@ -434,6 +459,61 @@ public final class JavaScriptArchitectureService {
         return new ImpactReport(queue.isEmpty() && budget.remaining > 0, emitted.size(), emitted.size() > emittedWitnesses);
     }
 
+    private static void compareCohesion(JsonNode before, JsonNode after, ObjectNode result) throws IOException {
+        if (before.isMissingNode() && after.isMissingNode()) return;
+        if (before.isMissingNode() || after.isMissingNode()) throw new IOException("Cohesion evidence availability differs");
+        Map<String, JsonNode> oldComponents = cohesionIndex(before), newComponents = cohesionIndex(after);
+        ObjectNode comparison = result.putObject("cohesion");
+        comparison.put("interpretation", "Observed metric changes only; inspect coverage and operation populations. Estimates and proxies are not strict metric deltas.");
+        ArrayNode components = comparison.putArray("components");
+        Set<String> ids = new TreeSet<>(oldComponents.keySet()); ids.addAll(newComponents.keySet());
+        for (String id : ids) {
+            JsonNode oldComponent = oldComponents.getOrDefault(id, com.fasterxml.jackson.databind.node.MissingNode.getInstance());
+            JsonNode newComponent = newComponents.getOrDefault(id, com.fasterxml.jackson.databind.node.MissingNode.getInstance());
+            ObjectNode component = components.addObject().put("component", id);
+            component.set("beforeOperationCount", nullable(oldComponent.path("operationCount")));
+            component.set("afterOperationCount", nullable(newComponent.path("operationCount")));
+            for (String metric : List.of("SIDC", "SSIC", "LOMLC")) {
+                JsonNode a = oldComponent.path(metric), b = newComponent.path(metric);
+                ObjectNode entry = component.putObject(metric);
+                entry.put("beforeStatus", a.path("status").asText("unavailable"));
+                entry.put("afterStatus", b.path("status").asText("unavailable"));
+                JsonNode av = nullable(a.path("value")), bv = nullable(b.path("value"));
+                entry.set("before", av); entry.set("after", bv);
+                if (av.isNumber() && bv.isNumber()) entry.put("change", bv.asDouble() - av.asDouble());
+                else entry.putNull("change");
+                for (String field : List.of("coverage", "availableEvidenceEstimate")) {
+                    entry.set("before" + Character.toUpperCase(field.charAt(0)) + field.substring(1), nullable(a.path(field)));
+                    entry.set("after" + Character.toUpperCase(field.charAt(0)) + field.substring(1), nullable(b.path(field)));
+                }
+            }
+            component.set("beforeObservedFieldShapeProxy", nullable(oldComponent.path("observedFieldShapeProxy")));
+            component.set("afterObservedFieldShapeProxy", nullable(newComponent.path("observedFieldShapeProxy")));
+        }
+    }
+
+    private static JsonNode nullable(JsonNode value) {
+        return value.isMissingNode() ? JavaScriptExtractionService.JSON.nullNode() : value.deepCopy();
+    }
+
+    private static Map<String, JsonNode> cohesionIndex(JsonNode report) throws IOException {
+        if (!report.isObject() || report.path("schemaVersion").asInt() != 1 || !report.path("components").isArray())
+            throw new IOException("Invalid cohesion analysis");
+        Map<String, JsonNode> components = new TreeMap<>();
+        for (JsonNode component : report.path("components")) {
+            String id = component.path("component").asText();
+            if (!component.isObject() || id.isBlank() || id.length() > 4096 || components.putIfAbsent(id, component) != null)
+                throw new IOException("Invalid cohesion component identity");
+            for (String metric : List.of("SIDC", "SSIC", "LOMLC")) {
+                JsonNode measurement = component.path(metric), value = measurement.path("value");
+                if (!measurement.isObject() || !measurement.path("status").isTextual()
+                        || !(value.isNull() || value.isNumber() && Double.isFinite(value.asDouble())))
+                    throw new IOException("Invalid cohesion metric measurement");
+            }
+        }
+        return components;
+    }
+
     private void validateAnalysis(JsonNode value) throws IOException {
         if (value == null || !value.isObject() || value.path("schemaVersion").asInt() != 1 || !ANALYSIS.equals(value.path("analysis").asText())
                 || !value.path("name").isTextual() || value.path("name").asText().isBlank()
@@ -442,6 +522,11 @@ public final class JavaScriptArchitectureService {
             if (!value.path(group).isArray() || value.path(group).size() > options.maxEdges) throw new IOException("Invalid architecture analysis records");
         for (String group : List.of("components", "findings", "functions", "functionCalls")) strictIndex(value.path(group));
         if (!value.path("sourceCoverage").isArray()) throw new IOException("Missing architecture source coverage");
+        if (value.has("cohesion") || value.path("limits").path("metricDefinitionsVersion").asInt() >= 2) {
+            Set<String> components = strictIndex(value.path("components")).keySet();
+            if (!components.equals(cohesionIndex(value.path("cohesion")).keySet()))
+                throw new IOException("Cohesion component coverage differs from architecture components");
+        }
         if (value.path("functions").size() > options.maxNodes) throw new IOException("Architecture function limit exceeded");
         for (String graph : List.of("modules", "components", "backendApplications")) {
             JsonNode node = value.path("graphs").path(graph);
@@ -508,7 +593,8 @@ public final class JavaScriptArchitectureService {
         }
     }
 
-    private static void capabilities(ArrayNode output, String modules, int backends, int withArchitecture) {
+    private static void capabilities(ArrayNode output, String modules, int backends, int withArchitecture,
+                                     JsonNode graphs, JsonNode cohesion) {
         capability(output, "module-dependency-graph", modules, "Runtime local imports/requires only; type-only, external and unresolved dependencies are excluded.");
         capability(output, "AIS-ADS-ACS-density-reciprocal-SCC", modules, "Defined over distinct graph neighbors; module analogs have a separate scope from applications.");
         capability(output, "backend-service-topology", backends < 2 ? "not-applicable" : "partial", "Requires at least two declared backend applications; HTTP edges remain static method/path candidates.");
@@ -517,8 +603,16 @@ public final class JavaScriptArchitectureService {
         capability(output, "AR6-style-function-impact", withArchitecture == 0 ? "unsupported" : "partial", "Historical comparison propagates changed function fingerprints along resolved local call edges; does not predict behavior.");
         capability(output, "historical-architecture-comparison", "supported", "Stable graph/finding identities and metric differences; no universal degradation score.");
         for (String name : List.of("SC", "LWF", "GWF", "SCCmodularity"))
-            capability(output, name, "unsupported", "The original weighted structural-coupling or partition-modularity formula has not been ported and validated for these graphs.");
-        for (String name : List.of("SIDC", "SSIC", "LOMLC", "WrongCuts", "health-checks", "API-gateway", "wobbly-interactions", "AR7-data-access-impact"))
+            capability(output, name, graphs.path("modules").path("weightedMetrics").path("status").asText("unsupported"),
+                    "Implemented over explicit static observation weights; inspect each graph's scope, weight semantics and status.");
+        for (String name : List.of("SIDC", "SSIC", "LOMLC")) {
+            String status = withArchitecture == 0 ? "unsupported" : backends == 0 ? "not-applicable" : "supported";
+            for (JsonNode component : cohesion.path("components"))
+                if ("backend".equals(component.path("kind").asText()) && !"supported".equals(component.path(name).path("status").asText())
+                        && !"unsupported".equals(status)) status = "partial";
+            capability(output, name, status, "Implemented per declared backend; strict values, available-evidence estimates and field/shape proxies have separate coverage.");
+        }
+        for (String name : List.of("WrongCuts", "health-checks", "API-gateway", "wobbly-interactions", "AR7-data-access-impact"))
             capability(output, name, "unsupported", "Required typed contracts, domain/service roles, configuration or data-access semantics are not extracted.");
     }
 

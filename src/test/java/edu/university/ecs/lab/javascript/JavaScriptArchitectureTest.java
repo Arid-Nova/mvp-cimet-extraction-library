@@ -136,6 +136,37 @@ class JavaScriptArchitectureTest {
             assertEquals("unsupported", capability(analysis, id).path("status").asText());
     }
 
+    @Test void weightedChangesAndCompleteContractDifferencesSurviveArchitectureIntegration() throws Exception {
+        var snapshot = snapshot("backend", "api"); var graph = architecture(snapshot, "a.js", "b.js");
+        dependency(graph, "a.js", "b.js");
+        var contracts = graph.putObject("contracts").put("schemaVersion", 1).putArray("operations");
+        for (String route : List.of("one", "two")) {
+            snapshot.withArray("endpoints").add(endpoint(route, "/" + route).put("file", "a.js"));
+            var contract = contracts.addObject().put("endpointId", route).put("inputComplete", true).put("outputComplete", true);
+            contract.putArray("inputs").addObject().put("location", "body").put("name", "value").put("type", "string")
+                    .put("evidence", "declared").put("file", "a.js").put("line", 1);
+            contract.putArray("responses").addObject().put("kind", "json").put("type", "string").put("shape", "string")
+                    .put("complete", true).put("file", "a.js").put("line", 1);
+            contract.putArray("limitations");
+        }
+        var before = analyze(snapshot);
+        dependency(graph, "a.js", "b.js");
+        ((ObjectNode) contracts.get(1).path("inputs").get(0)).put("type", "number");
+        var after = analyze(snapshot); var delta = service.compare(before, after);
+        assertEquals("supported", capability(after, "SC").path("status").asText());
+        assertEquals("supported", capability(after, "SIDC").path("status").asText());
+        assertEquals(1, delta.path("graphs").path("modules").path("edgeWeightsChanged").size());
+        assertEquals(before.path("graphs").path("modules").path("weightedMetrics"), delta.path("graphs").path("modules").path("beforeWeightedMetrics"));
+        assertEquals(after.path("graphs").path("modules").path("coverage"), delta.path("graphs").path("modules").path("afterCoverage"));
+        assertEquals(.5, delta.path("graphs").path("modules").path("metrics").path("avgSC").path("change").asDouble(), 1e-12);
+        JsonNode cohesion = delta.path("cohesion").path("components").get(0);
+        assertEquals(-1.0, cohesion.path("SIDC").path("change").asDouble(), 1e-12);
+        assertEquals(.5, cohesion.path("LOMLC").path("change").asDouble(), 1e-12);
+        assertEquals(2, cohesion.path("SIDC").path("afterCoverage").path("operationCount").asInt());
+        var missing = after.deepCopy(); missing.remove("cohesion");
+        assertThrows(IOException.class, () -> service.compare(before, missing));
+    }
+
     @Test void changedFunctionPropagatesToEndpointAcrossResolvedCallsWithoutLineNoise() throws Exception {
         var snapshot = snapshot("backend", "api"); var graph = architecture(snapshot, "handler.js", "logic.js");
         snapshot.withArray("endpoints").add(endpoint("route", "/work"));

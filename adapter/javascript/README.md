@@ -126,7 +126,7 @@ the same parsed source corpus, without additional target file reads or execution
 ```text
 modules: [{id: file, file, line: 1}]
 dependencies: [{id, source: file, target: file|null, line, kind, resolution, typeOnly}]
-functions: [{id, file, line, endLine, name, bodyFingerprint}]
+functions: [{id, file, line, endLine, name, bodyFingerprint, unresolvedCalls}]
 calls: [{id, file, line, callerId, targetId}]
 endpointHandlers: [{endpointId, functionId}]
 summary: {... counts ...}
@@ -173,6 +173,67 @@ dynamically assembled middleware are not propagated. Having a binding for an
 endpoint does not establish complete middleware coverage or runtime invocation
 order. Downstream reverse graph traversal provides candidate impact paths, not
 proof of behavior changes or independent microservice boundaries.
+
+## Request and response contract evidence
+
+`architecture.contracts` is another optional object with `schemaVersion: 1`.
+Its `operations` array has exactly one record per extracted endpoint:
+
+```text
+{endpointId,
+ inputs: [{location, name, type, evidence, file, line}], inputComplete,
+ responses: [{kind, type, shape, complete, file, line}], outputComplete,
+ limitations: [...]}
+```
+
+Input locations are `body`, `query`, `params`, and `headers`. Types are `string`,
+`number`, `boolean`, `array`, `object`, `null`, or `unknown`. Evidence is `declared`,
+`coercion`, `property-read`, or `route-param`. The helper follows request/response
+parameters from resolved supplied handlers through lexical aliases, destructuring,
+bounded local helper calls, and captured callbacks. Recursive entries clear stale
+parameter/local aliases. Unknown calls and unrelated objects do not acquire a
+request or response role. Explicit unshadowed `Number`, `parseInt`, `parseFloat`,
+`String`, `Boolean`, and unary coercions provide field type evidence; plain reads
+remain unknown. Route parameter strings alone never establish a complete input.
+
+Response observations recognize proven response receivers using `json`, `send`,
+and `end`, including common response-builder chains. Canonical shapes contain
+only sorted field names and type tags, for example `object{data:null,ok:boolean}`;
+literal strings, numbers, payloads, headers, and annotation prose are not exported.
+Dynamic values remain `unknown`. Aggregate identifiers are conservatively unknown
+unless explicitly declared, because initializer literals can escape into mutating
+code. Direct literal arrays/objects, scalar constants, and bounded explicit source
+type declarations can supply shapes. `end()` has shape `empty` and unknown type;
+it is not a known typed output. Duplicate fields, spreads, unsupported types,
+mutation, and unknown nested values prevent complete shape claims.
+
+`inputComplete` requires one resolved handler and an explicit closed request
+declaration containing all four input locations with known fields and types.
+Inline TypeScript/JSDoc object declarations and simple same-file TypeScript
+aliases/interfaces are supported. Open indexes, optional fields, generics,
+intersections/unions, imported types, and arbitrary validation libraries are not
+treated as closed schemas. Completeness describes a source declaration, not proof
+of runtime validation. No reads, or a subset of reads, is never a complete schema.
+
+`outputComplete` requires a single resolved handler with a simple terminal
+response or exhaustive `if`/`else` branches, complete response shapes, and no
+opaque calls. Complex control flow stays incomplete. Any `.use(...)` registration
+in the included corpus conservatively prevents operation completeness because
+global/inherited middleware is not propagated. This guard can also reject an
+unrelated method named `use`; it cannot establish middleware provenance.
+Captured callback evidence does not prove callback execution. Observed fields and
+shapes support explicitly labelled partial cohesion estimates; strict typed
+metrics must respect completeness and unknown values.
+
+Per operation, contract extraction caps inputs at 256, responses at 128, local
+function contexts at 128, AST visits at 40,000, declared type work at 4,000 nodes,
+recursive depth at 8, and individual shapes at 2,048 characters. Type expansion
+uses a cache and early shape limits, including tuples and nested arrays.
+`summary.truncatedOperations` and operation limitations report reached bounds.
+Other summary counts report observed fields/responses and complete operations.
+Each function's `unresolvedCalls` counts all unproven callees, including libraries
+and builtins; this is conservative coverage evidence for structural cohesion,
+not a count of missing local function targets or a runtime completeness guarantee.
 
 ## Privacy, bounds, and limitations
 

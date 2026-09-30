@@ -177,8 +177,13 @@ function checkedArchitecture(file) {
 function architectureSummary(data) {
   return {
     graphs: Object.fromEntries(Object.entries(data.graphs).map(([name, graph]) => [name,
-      { status: graph.status, metrics: graph.metrics ?? null }])),
+      { status: graph.status, metrics: graph.metrics ?? null, weightedMetrics: graph.weightedMetrics ?? null }])),
     http: data.http?.summary ?? null,
+    cohesion: data.cohesion ? { scope: data.cohesion.scope, components: data.cohesion.components.map(component => ({
+      component: component.component, operationCount: component.operationCount,
+      SIDC: component.SIDC, SSIC: component.SSIC, LOMLC: component.LOMLC,
+      observedFieldShapeProxy: component.observedFieldShapeProxy,
+    })) } : null,
     findings: data.findings.length, findingKinds: groupedCounts(data.findings, 'kind'),
     capabilities: data.capabilities,
   };
@@ -191,9 +196,30 @@ function historyRows(checkpoint, scope, commits, report, data) {
   const metrics = [];
   for (const [graph, value] of Object.entries(data.graphs)) {
     for (const [metric, measurement] of Object.entries(value.metrics || {})) {
-      metrics.push({ ...common, graph, status: value.status, metric, value: measurement });
+      const weighted = /^(?:max|avg|std)(?:SC|LWF|GWF)$/.test(metric) || metric === 'SCCmodularity';
+      metrics.push({ ...common, graph, status: weighted ? value.weightedMetrics?.status ?? value.status : value.status,
+        metric, value: measurement, basis: weighted ? 'static-observation-weighted-graph' : 'observed-graph',
+        coverage: weighted ? value.weightedMetrics ?? null : value.coverage ?? null });
     }
     if (!Object.keys(value.metrics || {}).length) metrics.push({ ...common, graph, status: value.status, metric: null, value: null });
+  }
+  for (const component of data.cohesion?.components || []) {
+    const graph = `cohesion:${component.component}`;
+    for (const name of ['SIDC', 'SSIC', 'LOMLC']) {
+      const measurement = component[name];
+      if (!measurement) continue;
+      metrics.push({ ...common, graph, status: measurement.status, metric: name, value: measurement.value ?? null,
+        basis: name === 'SSIC' ? 'observed-local-function-reachability' : 'whole-component-contracts',
+        coverage: measurement.coverage ?? null, reason: measurement.reason ?? null });
+      const estimate = measurement.availableEvidenceEstimate;
+      if (estimate) metrics.push({ ...common, graph, status: estimate.status ?? 'partial',
+        metric: `${name}.availableEvidenceEstimate`, value: estimate.value ?? null, basis: 'available-evidence-subset',
+        coverage: { totalOperations: component.operationCount, ...estimate }, reason: estimate.reason ?? null });
+      const proxy = component.observedFieldShapeProxy?.[name];
+      if (proxy) metrics.push({ ...common, graph, status: proxy.status ?? 'partial',
+        metric: `${name}.observedFieldShapeProxy`, value: proxy.value ?? null, basis: 'observed-field-shape-proxy',
+        coverage: { totalOperations: component.operationCount, ...proxy }, reason: proxy.reason ?? null });
+    }
   }
   const capabilities = data.capabilities.map(item => ({ ...common, id: item.id, status: item.status, reason: item.reason ?? null }));
   return { metrics, capabilities };
@@ -404,7 +430,7 @@ function executeStudy(options, { invokeJvm = run } = {}) {
       selection: config.historySelection, checkpoints: history, metrics: trendMetrics, capabilities: trendCapabilities };
     writeJson(path.join(resultsDir, 'history-trends.json'), evidence);
     fs.writeFileSync(path.join(resultsDir, 'history-metrics.csv'), rowsCsv(trendMetrics,
-      ['checkpoint', 'cutoff', 'scope', 'commits', 'association', 'graph', 'status', 'metric', 'value', 'report']), { flag: 'wx' });
+      ['checkpoint', 'cutoff', 'scope', 'commits', 'association', 'graph', 'status', 'metric', 'value', 'basis', 'coverage', 'reason', 'report']), { flag: 'wx' });
     fs.writeFileSync(path.join(resultsDir, 'history-capabilities.csv'), rowsCsv(trendCapabilities,
       ['checkpoint', 'cutoff', 'scope', 'commits', 'association', 'id', 'status', 'reason', 'report']), { flag: 'wx' });
   }
