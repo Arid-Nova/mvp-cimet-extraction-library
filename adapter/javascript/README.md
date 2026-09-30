@@ -116,6 +116,64 @@ also have `handler` and, when resolved, `handlerFile`/`handlerLine`. Calls inclu
 this Node subprocess only, not combined JVM/web application memory. The 256 MiB
 V8 heap setting is not a 256 MiB RSS limit.
 
+## Source architecture evidence
+
+New snapshots include the additive `architecture` object with its own
+`schemaVersion: 1`. Existing HTTP fields retain their schema; readers can continue
+to accept older snapshots without architecture evidence. The graph is built from
+the same parsed source corpus, without additional target file reads or execution.
+
+```text
+modules: [{id: file, file, line: 1}]
+dependencies: [{id, source: file, target: file|null, line, kind, resolution, typeOnly}]
+functions: [{id, file, line, endLine, name, bodyFingerprint}]
+calls: [{id, file, line, callerId, targetId}]
+endpointHandlers: [{endpointId, functionId}]
+summary: {... counts ...}
+limitations: [... fixed explanations ...]
+```
+
+Every valid included source file is a module node. Dependencies cover imports,
+re-exports, unshadowed require and require aliases, dynamic imports, TypeScript
+import-equals/import types, and proven default-configuration Consign loads.
+`kind` identifies that evidence. A resolved target is an included module's file
+path. External and unresolved targets are explicitly null; raw import specifiers
+are never exported, including URLs and credential-bearing strings. Type-only
+edges are retained and must be excluded from runtime dependency calculations.
+Mixed type/value imports can produce two edges with different `typeOnly` values.
+
+`resolvedRuntimeDependencies` counts static dependency observations eligible for
+a runtime-source graph. It is not proof that a module loads at runtime. Conditional
+imports, unreachable source, and Consign registrations remain source evidence.
+Relative asset, stylesheet, and JSON imports contribute to unresolved dependencies
+because those files are excluded from the code corpus. Package aliases and
+dependencies are not loaded to resolve them.
+
+Local call edges require a proven function target and an enclosing source
+function. Lexical aliases, object methods, local imports, ESM named/star/namespace
+re-exports, and CommonJS exports are supported. Resolution has cycle/depth guards;
+ambiguous star exports, shadowed require/exports, and reassigned bindings are not
+assigned guessed targets. The graph omits class-instance dispatch, implicit `this`,
+returned-function inference, and callback invocation by libraries. Calls inside
+callbacks may resolve, but invocation of the callback itself is not inferred.
+
+Functions are actual syntax functions, including callbacks; no synthetic module
+initializer nodes are added. `resolvedTopLevelCallsOmitted` reports resolved calls
+without an enclosing function. `unresolvedCallSites` includes library, builtin,
+dynamic, and unresolved local calls. These counts are coverage information, not
+error or defect counts. Function IDs use component identity, file, logical parent,
+name/context, and occurrence rather than lines or body hashes. Anonymous callbacks
+on the same line have distinct IDs; inserting earlier identical callback contexts
+may change occurrence-based identities.
+
+Endpoint bindings include every statically resolved handler/middleware directly
+supplied to a registration, allowing several unique function IDs per endpoint.
+Global `app.use` middleware, middleware inherited through mounted routers, and
+dynamically assembled middleware are not propagated. Having a binding for an
+endpoint does not establish complete middleware coverage or runtime invocation
+order. Downstream reverse graph traversal provides candidate impact paths, not
+proof of behavior changes or independent microservice boundaries.
+
 ## Privacy, bounds, and limitations
 
 Only recognized source extensions are read. Dot directories, `.env`, dependency,
@@ -129,7 +187,7 @@ route paths, module names, and function names and should be handled accordingly.
 
 This is a bounded syntactic analysis, not a full TypeScript type checker, runtime
 interpreter, or interprocedural data-flow engine. Limitations include dynamic
-imports/routes, package aliases/re-exports, router factories and plugin patterns,
+imports/routes, package aliases, HTTP-role propagation through re-exports, router factories and plugin patterns,
 mutations of object properties, runtime environment selection, implicit `this`
 bindings, higher-order wrappers, and complex control flow. Registration reachability
 is not evaluated. Inputs with mutations, dynamic helper-returned URLs, unresolved

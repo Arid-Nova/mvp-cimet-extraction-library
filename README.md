@@ -13,10 +13,22 @@ It runs through a Java API or an executable JAR and projects endpoints/calls int
 CIMET's intermediate representation. Frontend files retain their client role;
 endpoint counts are not microservice counts.
 
+The JavaScript architecture extension additionally extracts local module and
+function dependencies and runs bounded graph analysis, degree-coupling metrics,
+cycle/chain observations, API caller checks, and historical comparisons with
+candidate endpoint impact paths. Each report states which capabilities have
+sufficient evidence. Java/Spring-specific checks and unported metrics are
+explicitly unsupported; this does not enable every legacy CIMET2 detector.
+
 See [JavaScript adapter](docs/javascript-adapter.md) for setup, supported patterns,
 snapshot/delta commands and limitations, and [study runner](study/README.md) for
 reproducible analysis of local Git revisions. The existing Java extraction APIs
 continue to use the Java parser.
+
+See [JavaScript architecture analysis](docs/javascript-architecture.md) for the
+capability matrix, differences from CIMET2's original metrics, CLI commands,
+and interpretation of historical indicators. The study runner also accepts
+`study/nutrosal-history.config.json` for pinned calendar checkpoints.
 
 ## Prerequisites
 

@@ -190,6 +190,7 @@ public final class JavaScriptExtractionService {
                 }
             }
         }
+        if (snapshot.has("architecture")) JavaScriptArchitectureValidator.validate(snapshot);
     }
 
     public MicroserviceSystem toIR(JsonNode snapshot, String repositoryURL, String commit) throws IOException {

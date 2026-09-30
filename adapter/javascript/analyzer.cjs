@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const ts = require('typescript');
+const { buildArchitecture } = require('./architecture.cjs');
 const HTTP = new Set(['get', 'post', 'put', 'patch', 'delete', 'head', 'options', 'all']);
 const REQUEST_METHODS = new Set([...HTTP].filter(method => method !== 'all'));
 const IGNORED = new Set(['.git', 'node_modules', 'vendor', 'dist', 'build', 'coverage', '.next', 'target', 'uploads', 'public', 'test', 'tests', '__tests__', '__mocks__']);
@@ -58,6 +59,8 @@ function analyze({ root, kind, name, config = {} }) {
   const endpointCandidates = [];
   const calls = [];
   const mounts = [];
+  const consignLoads = [];
+  const endpointHandlerNodes = new WeakMap();
   const wrappers = config.wrappers || [
     { module: 'server_requests', kind: 'server' },
     { module: 'dataUtility', kind: 'method-first', relativeTarget: 'backend', methodPolicy: 'get-or-post' },
@@ -114,6 +117,7 @@ function analyze({ root, kind, name, config = {} }) {
       if (named && ts.isNamedImports(named)) for (const element of named.elements) binding(scope, element.name.text, node, { module: source, imported: memberName(element.propertyName || element.name) });
     }
     if (ts.isVariableDeclaration(node)) declarePattern(scope, node.name, node, { init: node.initializer });
+    if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && literal(node.moduleReference.expression)) binding(scope, node.name.text, node, { module: literal(node.moduleReference.expression), imported: '*', typeOnly: !!node.isTypeOnly });
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
       const key = dotted(node.left);
       if (key === 'module.exports') file.exports.set('default', node.right);
@@ -246,7 +250,10 @@ function analyze({ root, kind, name, config = {} }) {
         const router = role(call.arguments[0]);
         for (const directory of directories) {
           const prefix = slash(directory).replace(/^\.\//, '').replace(/\/$/, '');
-          for (const loaded of files.values()) if (loaded.rel === prefix || loaded.rel.startsWith(prefix + '/') || EXTENSIONS.some(ext => loaded.rel === prefix + ext)) bindFunction(unwrap(exported(loaded, 'default')), router);
+          for (const loaded of files.values()) if (!loaded.bad && (loaded.rel === prefix || loaded.rel.startsWith(prefix + '/') || EXTENSIONS.some(ext => loaded.rel === prefix + ext))) {
+            bindFunction(unwrap(exported(loaded, 'default')), router);
+            if (!chain.arguments.length) consignLoads.push({ file, call, target: loaded });
+          }
         }
       }
     }
@@ -429,7 +436,8 @@ function analyze({ root, kind, name, config = {} }) {
       if (own.path === null) diag(file, call, 'UNRESOLVED_ENDPOINT_PATH', 'The Express registration path could not be resolved statically.');
       if (own.unsupportedPattern || complete && /[?+*()[\]{}]/.test(complete)) diag(file, call, 'UNSUPPORTED_EXPRESS_PATTERN', 'Express path pattern requires runtime-specific matching and is not normalized.');
       if (prefix === null) diag(file, call, 'UNRESOLVED_ROUTER_MOUNT', 'No statically proven application mount was found for this router.');
-      endpoints.push({ ...location(file, call), method: candidate.method, path: complete, normalizedPath: complete === null || /[?+*()[\]{}]/.test(complete) ? null : normalize(complete), handler: last.label, ...(last.file ? { handlerFile: last.file, handlerLine: last.line } : {}), caller: owner(call), bodyFingerprint: hash(resolvedHandlers.map(item => item.fingerprint).join(':')) });
+      const endpoint = { ...location(file, call), method: candidate.method, path: complete, normalizedPath: complete === null || /[?+*()[\]{}]/.test(complete) ? null : normalize(complete), handler: last.label, ...(last.file ? { handlerFile: last.file, handlerLine: last.line } : {}), caller: owner(call), bodyFingerprint: hash(resolvedHandlers.map(item => item.fingerprint).join(':')) };
+      endpoints.push(endpoint); endpointHandlerNodes.set(endpoint, handlers);
     }
   }
   function finish(records, category) {
@@ -444,10 +452,11 @@ function analyze({ root, kind, name, config = {} }) {
     return records.sort((a, b) => a.file.localeCompare(b.file, 'en') || a.line - b.line || a.id.localeCompare(b.id, 'en'));
   }
   finish(endpoints, 'endpoint'); finish(calls, 'call');
+  const architecture = buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwrap, isFunction, literal, semanticHash, hash, location, endpoints, endpointHandlerNodes, consignLoads });
   const deduped = [...new Map(diagnostics.map(d => [JSON.stringify(d), d])).values()].sort((a, b) => a.file.localeCompare(b.file, 'en') || a.line - b.line || a.code.localeCompare(b.code, 'en'));
   return {
     schemaVersion: 1, component: { name, kind }, filesAnalyzed: [...files.values()].filter(file => !file.bad).length,
-    endpoints, calls, diagnostics: deduped,
+    endpoints, calls, diagnostics: deduped, architecture,
     stats: { parser: 'typescript', parserVersion: ts.version, sourceFiles: files.size, parseErrorFiles: [...files.values()].filter(f => f.bad).length, endpointRegistrations: endpoints.length, uniqueMethodPaths: new Set(endpoints.filter(e => e.path !== null).map(e => `${e.method} ${e.path}`)).size, callSites: calls.length, unresolvedCallPaths: calls.filter(c => c.path === null).length, wrapperFilesExcluded: wrapperFiles.size, elapsedMs: Math.round((performance.now() - started) * 100) / 100, peakRssKiB: process.resourceUsage().maxRSS },
   };
 }

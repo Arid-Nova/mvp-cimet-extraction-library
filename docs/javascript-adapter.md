@@ -89,6 +89,35 @@ not enable language support. Line movement alone should not be interpreted as
 an API change. A changed handler fingerprint is implementation evidence, not
 proof of a breaking contract.
 
+## Architectural analysis and evolution
+
+New snapshots also contain source-module dependencies, resolved local function
+calls, function body fingerprints, and directly supplied endpoint handlers.
+The opt-in analysis service consumes this richer snapshot evidence:
+
+```sh
+java -jar target/cimet-javascript.jar architecture --snapshot backend.json --snapshot frontend.json --name Nutrosal --output architecture.json
+java -jar target/cimet-javascript.jar architecture-delta --old architecture-before.json --new architecture-after.json --output architecture-changes.json
+```
+
+Use the same system name and analysis settings for before/after reports. The
+analysis separates file modules, declared applications/clients, and declared
+backend applications. One backend application does not establish a distributed
+microservice architecture. Source graph metrics and heuristic findings can be
+compared over time, subject to extraction coverage and stable boundaries.
+
+Older snapshots without architecture evidence still support HTTP analysis;
+module/function capabilities report missing evidence. The native IR projection
+continues to expose endpoints and HTTP calls; the richer architecture commands
+consume JavaScript snapshots directly. They do not invoke the unmodified legacy
+CIMET2 history runner or Java/Spring-specific detector classes.
+
+See [architecture analysis](javascript-architecture.md) for exact capabilities,
+formula parity, bounds, evidence requirements, and unsupported checks. See the
+[study runner](../study/README.md) for historical checkpoints and traceable
+per-component results. A rise in a metric or candidate count is an observation
+to review with maintainers, not proof of architectural degradation.
+
 ## Scope and validation
 
 Consult the [parser documentation](../adapter/javascript/README.md) for exact

@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 
-/** Explicit CLI for JavaScript snapshots, native IR projection and semantic snapshot deltas. */
+/** Explicit CLI for JavaScript extraction, architecture analysis and historical comparisons. */
 public final class JavaScriptCli {
     private JavaScriptCli() { }
 
@@ -28,7 +28,7 @@ public final class JavaScriptCli {
     }
 
     public static void run(String[] args) throws IOException, InterruptedException {
-        if (args.length == 0) throw new IllegalArgumentException("Expected snapshot, ir or delta command");
+        if (args.length == 0) throw new IllegalArgumentException("Expected snapshot, ir, delta, architecture or architecture-delta command");
         Map<String, List<String>> options = options(Arrays.copyOfRange(args, 1, args.length));
         switch (args[0]) {
             case "snapshot" -> {
@@ -60,7 +60,22 @@ public final class JavaScriptCli {
                 write(Path.of(required(options, "output")), JavaScriptIRConverter.toIR(snapshots,
                         optional(options, "name", "javascript-system")), true);
             }
-            default -> throw new IllegalArgumentException("Expected snapshot, ir or delta command");
+            case "architecture" -> {
+                allow(options, "snapshot", "name", "output");
+                List<String> sources = options.get("snapshot");
+                if (sources == null || sources.isEmpty()) throw new IllegalArgumentException("Missing --snapshot");
+                List<JsonNode> snapshots = new ArrayList<>();
+                for (String source : sources) snapshots.add(read(Path.of(source)));
+                write(Path.of(required(options, "output")), new JavaScriptArchitectureService().analyze(snapshots,
+                        optional(options, "name", "javascript-system")), false);
+            }
+            case "architecture-delta" -> {
+                allow(options, "old", "new", "before", "after", "output");
+                String before = alias(options, "old", "before"), after = alias(options, "new", "after");
+                write(Path.of(required(options, "output")), new JavaScriptArchitectureService().compare(
+                        read(Path.of(before)), read(Path.of(after))), false);
+            }
+            default -> throw new IllegalArgumentException("Expected snapshot, ir, delta, architecture or architecture-delta command");
         }
     }
 
