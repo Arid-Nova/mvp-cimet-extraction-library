@@ -45,7 +45,18 @@ public class RestCall extends MethodCall {
      * @return true if rest call and enpoint match, false otherwise
      */
     public static boolean matchEndpoint(RestCall restcall, Endpoint endpoint){
-        if(restcall.getParentMicroservice().getName().equals(endpoint.getParentMicroservice().getName())){
+        if (restcall == null || endpoint == null || restcall.getUrl() == null || endpoint.getUrl() == null
+                || restcall.getHttpMethod() == null || endpoint.getHttpMethod() == null
+                || restcall.getParent() == null || endpoint.getParent() == null) return false;
+        boolean javascript = restcall.getMetadata() != null
+                && "cimet-javascript".equals(restcall.getMetadata().optString("extractor"));
+        if (javascript && !"backend".equals(restcall.getMetadata().optString("target"))) return false;
+        Microservice sourceService = restcall.getParentMicroservice();
+        Microservice targetService = endpoint.getParentMicroservice();
+        if (targetService == null) return false;
+        boolean frontendClient = javascript && "frontend".equals(restcall.getMetadata().optString("componentKind"));
+        if (sourceService == null && !frontendClient) return false;
+        if(sourceService != null && sourceService.getName().equals(targetService.getName())){
             return false;
         }
 

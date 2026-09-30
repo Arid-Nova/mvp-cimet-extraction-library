@@ -1,0 +1,143 @@
+# CIMET JavaScript static adapter
+
+This adapter parses JavaScript, JSX, TypeScript, and TSX with the pinned TypeScript
+5.9.3 compiler API. It extracts Express route registrations and HTTP request call
+sites. A single Node process parses one repository. Target code is never executed.
+
+## Install and run
+
+Requires Node 22 or newer. Install only the adapter's parser dependency:
+
+```sh
+npm ci --prefix adapter/javascript --ignore-scripts
+npm test --prefix adapter/javascript
+node --max-old-space-size=256 adapter/javascript/analyzer.cjs --root /absolute/checkout --kind backend --name example-api
+node --max-old-space-size=256 adapter/javascript/analyzer.cjs --root /absolute/checkout --kind frontend --name example-web --config /absolute/adapter-config.json
+```
+
+Successful CLI output is one JSON object on stdout. Failures emit a generic
+message on stderr and a nonzero exit status. Windows absolute paths also work.
+The adapter does not clone repositories or switch revisions; its caller supplies
+an existing snapshot. It does not install or load dependencies from that snapshot.
+
+## Supported evidence
+
+- Express `express()` / `Router()` provenance through imports, require, and local
+  aliases; HTTP method registrations, route arrays, chained `route()` methods,
+  imported routers, and application/router mount prefixes.
+- CommonJS and ESM local exports; registration functions passed a proven Express
+  application, including Consign `include/then/into` loading. An arbitrary object
+  with a `get` method is not treated as a router.
+- Terminal handler references through local controller imports. Handler body
+  fingerprints include the supplied middleware functions that can be resolved.
+- Axios method calls, named aliases, callable Axios/config forms, `request`, and
+  instances created with static `baseURL` and method defaults; unshadowed `fetch`.
+  `axios.all` is a combinator and is excluded.
+- Declared local request wrappers; constants, simple string concatenation,
+  template strings, declared backend environment bases, and imported constants.
+
+These are static registration/call-site candidates. Source presence does not
+prove runtime reachability, deployment boundaries, or successful HTTP requests.
+
+## Wrapper and origin configuration
+
+The default profile reflects the inspected Nutrosal wrappers. It is an explicit
+mapping, not automatic inference of arbitrary wrapper implementations:
+
+```json
+{
+  "backendEnv": ["VITE_NUTROSAL_BE", "VITE_LOCAL_URL"],
+  "backendOrigins": [],
+  "wrappers": [
+    {"module": "server_requests", "kind": "server"},
+    {"module": "dataUtility", "kind": "method-first", "relativeTarget": "backend", "methodPolicy": "get-or-post"},
+    {"module": "dataUtilityImage", "kind": "method-first"}
+  ],
+  "maxFiles": 20000,
+  "excludeDirectories": []
+}
+```
+
+Wrapper names match imported module basenames (without extensions), and the
+import must resolve to a local source file. Imports can use aliases. `server`
+recognizes `get_request`, `post_request`, `put_request`, `patch_request`,
+`delete_request`, `head_request`, `options_request`, and method-named calls
+including `get({path})`. `method-first` uses arguments 0 and 1 as method and URL.
+`get-or-post` models the inspected dataUtility implementation: recognized GET
+stays GET and other recognized literal methods become POST. Without that policy,
+the declared method is retained. Unknown methods remain `UNKNOWN`.
+
+For a generic repository, use `{"backendEnv":[],"wrappers":[]}` and then add
+only verified mappings. Wrapper implementation calls are excluded to avoid
+counting application calls a second time. Thus wrapper retries, telemetry, cache
+hits, and conditional fallbacks are not a runtime request-count estimate.
+
+The adapter never reads environment values. A base expression referencing a
+declared backend environment variable identifies a backend call. A literal
+absolute URL is external unless its origin is in `backendOrigins`. For
+dataUtility, a relative path is backend by the declared profile; dataUtilityImage
+has no such assumption. Unknown bases stay unknown, including `this.SERVER_URL`.
+
+## Output schema and matching
+
+`schemaVersion` is 1. `component` contains `name` and `kind`. `endpoints`, `calls`,
+and `diagnostics` use repository-relative file paths and one-based lines.
+
+Each endpoint/call has a stable `id`, `method`, `path`, `normalizedPath`, `caller`,
+`bodyFingerprint`, `contractFingerprint`, and combined `fingerprint`. Endpoints
+also have `handler` and, when resolved, `handlerFile`/`handlerLine`. Calls include
+`source`, `target` (`backend`, `external`, `unknown`), and `resolution`
+(`literal`, `template`, `unresolved`).
+
+- An unresolved path is `null`, never an invented concrete path.
+- JS dynamic path segments and ordinary Express named parameters normalize to
+  `{param}`; case is preserved and a final slash is removed except at root.
+- Express optional parameters, wildcards, regex strings, and other complex
+  patterns retain their raw path but have `normalizedPath: null` and a diagnostic.
+  They must not be used for exact or template contract matches.
+- Unmounted routers retain registration evidence with null complete paths and
+  an unresolved mount diagnostic.
+- URL origins, userinfo, query values, and fragments are not exported. Absolute
+  call URLs retain only their path. Unknown methods/options produce diagnostics;
+  options containing unresolved spreads/computed properties are conservative.
+- IDs use component, relative file, enclosing logical function, method, path,
+  and occurrence, excluding line numbers and body content. Whitespace/body edits
+  preserve IDs. Moving files/functions or inserting identical earlier occurrences
+  can change IDs. Contract hashes fall back to raw paths for unsupported patterns.
+- Body fingerprints hash parser tokens and AST node-kind structure, excluding
+  positions and comments. Harmless whitespace is ignored, while newline changes
+  that alter the AST through automatic semicolon insertion are detected. For
+  endpoints they combine resolved handler/middleware bodies; for calls they hash
+  the request expression. They are syntax change indicators, not semantic equivalence
+  proofs, and do not transitively hash all callees or resolve runtime dispatch.
+
+`stats` includes parser/version, counts, `elapsedMs`, and `peakRssKiB` from
+`process.resourceUsage().maxRSS`. Performance fields vary between runs and report
+this Node subprocess only, not combined JVM/web application memory. The 256 MiB
+V8 heap setting is not a 256 MiB RSS limit.
+
+## Privacy, bounds, and limitations
+
+Only recognized source extensions are read. Dot directories, `.env`, dependency,
+build, upload, public, and test directories are skipped; symlinks are not followed.
+Individual source files over 5 MiB are skipped with a diagnostic; the default
+source count limit is 20,000. Configuration is limited to 64 KiB by the CLI.
+Parser errors use fixed generic messages and exclude the affected file. Raw
+source, request payloads, headers, credentials, and handler bodies are not emitted.
+Only hashes of bodies are exported; public schemas still contain application
+route paths, module names, and function names and should be handled accordingly.
+
+This is a bounded syntactic analysis, not a full TypeScript type checker, runtime
+interpreter, or interprocedural data-flow engine. Limitations include dynamic
+imports/routes, package aliases/re-exports, router factories and plugin patterns,
+mutations of object properties, runtime environment selection, implicit `this`
+bindings, higher-order wrappers, and complex control flow. Registration reachability
+is not evaluated. Inputs with mutations, dynamic helper-returned URLs, unresolved
+options, unsupported framework patterns, or unknown mounts need manual review.
+Tests and inventory agreement are coverage evidence, not a measured precision or
+recall result. Evaluation requires manually validated endpoint/call/link labels.
+
+The synthetic suite exercises router provenance, mounts, Consign registration,
+wrapper imports, templates, aliases, shadowing, method uncertainty, unsupported
+route patterns, deterministic structure, body changes, parser errors, source
+size limits, symlink exclusion, output sanitization, and absence of target execution.

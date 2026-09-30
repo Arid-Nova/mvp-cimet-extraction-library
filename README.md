@@ -5,10 +5,24 @@ It is intended to be used as a temporal parser of microservice systems.
 It is capable of extracting intermediate representations (IR) of the system
 and delta representations of the changes to the system.
 
+## JavaScript / TypeScript API study support
+
+An opt-in AST adapter supports Express endpoints and JavaScript/TypeScript HTTP
+call sites, including React JSX/TSX and configurable local request wrappers.
+It runs through a Java API or an executable JAR and projects endpoints/calls into
+CIMET's intermediate representation. Frontend files retain their client role;
+endpoint counts are not microservice counts.
+
+See [JavaScript adapter](docs/javascript-adapter.md) for setup, supported patterns,
+snapshot/delta commands and limitations, and [study runner](study/README.md) for
+reproducible analysis of local Git revisions. The existing Java extraction APIs
+continue to use the Java parser.
+
 ## Prerequisites
 
 * Maven 3.6+
-* Java 24+ (24 Recommended)
+* Java 21+
+* Node.js 22+ for the optional JavaScript adapter
 
 ## To Compile:
     ``mvn clean install -DskipTests``

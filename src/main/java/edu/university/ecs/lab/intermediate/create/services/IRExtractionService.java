@@ -21,6 +21,11 @@ import java.nio.file.Path;
  * are allowed to exit the program with an error code if an error occurs.
  */
 public class IRExtractionService {
+    /** Explicit opt-in factory; existing Java repository extraction is unchanged. */
+    public static edu.university.ecs.lab.javascript.JavaScriptExtractionService createJavaScript(Path adapterDirectory) {
+        return new edu.university.ecs.lab.javascript.JavaScriptExtractionService(adapterDirectory);
+    }
+
     /**
      * Service to handle cloning from git
      */

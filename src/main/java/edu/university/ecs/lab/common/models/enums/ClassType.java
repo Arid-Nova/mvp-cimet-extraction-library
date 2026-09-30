@@ -4,5 +4,6 @@ public enum ClassType {
     CLASS,
     INTERFACE,
     ENUM,
-    RECORD
+    RECORD,
+    MODULE
 }

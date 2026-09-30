@@ -8,3 +8,7 @@ target/
 output/
 clone/
 settings.xml
+
+# Static JavaScript adapter dependencies and private study output
+adapter/javascript/node_modules/
+study-output/

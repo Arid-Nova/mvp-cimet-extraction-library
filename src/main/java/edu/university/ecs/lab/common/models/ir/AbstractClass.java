@@ -29,7 +29,8 @@ import java.util.stream.Collectors;
 @JsonSubTypes({@JsonSubTypes.Type(value = JClass.class, name = "JClass"),
         @JsonSubTypes.Type(value = JEnum.class, name = "JEnum"),
         @JsonSubTypes.Type(value = JRecord.class, name = "JRecord"),
-        @JsonSubTypes.Type(value = JInterface.class, name = "JInterface")})
+        @JsonSubTypes.Type(value = JInterface.class, name = "JInterface"),
+        @JsonSubTypes.Type(value = JSModule.class, name = "JSModule")})
 
 @JsonTypeName("ProjectFile")
 public abstract class AbstractClass extends ProjectFile {
