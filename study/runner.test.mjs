@@ -248,7 +248,7 @@ test('runner reuses snapshots and architecture, compares cohorts and components,
       output = { schemaVersion: 1, analysis: 'static-javascript-architecture', name: option('--name'), graphs: {
         modules: { status: 'partial', metrics: { nodeCount: files.length, density: null } },
         backendApplications: { status: 'not-applicable', metrics: null },
-      }, findings: [], capabilities: [{ id: 'module-graph', status: 'partial', reason: 'Fixture' }] };
+      }, findings: [{ kind: 'cyclic-dependency' }], capabilities: [{ id: 'module-graph', status: 'partial', reason: 'Fixture' }] };
     } else if (verb === 'architecture-delta') {
       assert.ok(option('--old').endsWith('.architecture.json') && fs.existsSync(option('--old')));
       assert.ok(option('--new').endsWith('.architecture.json') && fs.existsSync(option('--new')));
@@ -267,6 +267,7 @@ test('runner reuses snapshots and architecture, compares cohorts and components,
   assert.equal(counts['architecture-delta'], 6); // Feature and adjacent history, combined plus each component.
   assert.equal(counts.delta, 2);
   assert.equal(manifest.history.length, 2);
+  assert.deepEqual(manifest.cohorts[0].architecture.summary.findingKinds, { 'cyclic-dependency': 1 });
   assert.equal(manifest.history[1].fromPrevious.components.length, 2);
   assert.ok(manifest.tools['adapterFileSha256:architecture.cjs']);
   assert.ok(manifest.tools['adapterFileSha256:helper.mjs']);

@@ -179,7 +179,7 @@ function architectureSummary(data) {
     graphs: Object.fromEntries(Object.entries(data.graphs).map(([name, graph]) => [name,
       { status: graph.status, metrics: graph.metrics ?? null }])),
     http: data.http?.summary ?? null,
-    findings: data.findings.length, findingKinds: groupedCounts(data.findings, 'type'),
+    findings: data.findings.length, findingKinds: groupedCounts(data.findings, 'kind'),
     capabilities: data.capabilities,
   };
 }
