@@ -1,8 +1,9 @@
 'use strict';
 const { buildContracts } = require('./contracts.cjs');
+const { buildSemanticEvidence } = require('./semantics.cjs');
 
 // Uses only ASTs already read by analyzer.cjs. Never loads a target module.
-function buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwrap, isFunction, literal, semanticHash, hash, location, endpoints, endpointHandlerNodes, consignLoads }) {
+function buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwrap, isFunction, literal, semanticHash, hash, location, endpoints, endpointHandlerNodes, consignLoads, sourceInspectionComplete = true, sourceExclusionCounts = {} }) {
   const validFiles = [...files.values()].filter(file => !file.bad);
   const modules = validFiles.map(file => ({ id: file.rel, file: file.rel, line: 1 }));
   const dependencies = [], functions = [], calls = [], endpointHandlers = [];
@@ -206,8 +207,9 @@ function buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwra
   dependencies.sort(order); functions.sort(order); calls.sort(order);
   uniqueHandlers.sort((a, b) => a.endpointId.localeCompare(b.endpointId, 'en') || a.functionId.localeCompare(b.functionId, 'en'));
   const contracts = buildContracts({ ts, validFiles, lookup, unwrap, isFunction, literal, location, endpoints, endpointHandlerNodes, resolveValue, functionRecords, nodeFiles, mutations });
+  const semanticEvidence = buildSemanticEvidence({ ts, validFiles, name, kind, lookup, resolveModule, unwrap, isFunction, literal, location, endpoints, endpointHandlers: uniqueHandlers, resolveValue, functionRecords, nodeFiles, mutations, localExports, exportDeclarations, requireIdentifier, hash, sourceInspectionComplete, sourceExclusionCounts });
   return {
-    schemaVersion: 1, modules, dependencies, functions, calls, endpointHandlers: uniqueHandlers, contracts,
+    schemaVersion: 1, modules, dependencies, functions, calls, endpointHandlers: uniqueHandlers, contracts, semanticEvidence,
     summary: {
       modules: modules.length, dependencies: dependencies.length,
       resolvedRuntimeDependencies: dependencies.filter(d => d.resolution === 'resolved' && !d.typeOnly).length,

@@ -70,6 +70,8 @@ final class JavaScriptArchitectureValidator {
             if (!linkedHandlers.add(pair)) fail("Duplicate endpoint handler link");
         }
         if (architecture.has("contracts")) validateContracts(architecture.path("contracts"), endpointIds, files);
+        if (architecture.has("semanticEvidence"))
+            JavaScriptSemanticValidator.validate(architecture.path("semanticEvidence"), files, functionIds, endpointIds);
     }
 
     private static void validateContracts(JsonNode contracts, Set<String> endpointIds, Set<String> files) throws IOException {

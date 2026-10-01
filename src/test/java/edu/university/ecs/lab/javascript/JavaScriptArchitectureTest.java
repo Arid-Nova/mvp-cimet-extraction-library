@@ -45,6 +45,22 @@ class JavaScriptArchitectureTest {
         throw new AssertionError("Missing capability " + id);
     }
 
+    @Test void savedVersionThreeReportsRequireSemanticCoverageAndConsistentMergedFindings() throws Exception {
+        var snapshot = snapshot("backend", "api"); var graph = architecture(snapshot, "a.js", "b.js");
+        for (int i = 0; i < 6; i++) dependency(graph, "a.js", "b.js");
+        var before = analyze(snapshot); var missingSemantic = before.deepCopy();
+        missingSemantic.remove("semantics");
+        assertThrows(IOException.class, () -> service.compare(before, missingSemantic));
+        var missingFinding = before.deepCopy();
+        var findings = missingFinding.withArray("findings");
+        for (int i = findings.size() - 1; i >= 0; i--)
+            if (findings.get(i).path("kind").asText().equals("weighted-hub")) findings.remove(i);
+        assertThrows(IOException.class, () -> service.compare(before, missingFinding));
+        var alteredLimits = before.deepCopy();
+        alteredLimits.withObject("limits").withObject("additionalGraphs").put("weightedThreshold", 99);
+        assertThrows(IOException.class, () -> service.compare(alteredLimits, alteredLimits));
+    }
+
     @Test void degreeMetricsUseDistinctNeighborsAndProductWithSccCycleWitness() throws Exception {
         var snapshot = snapshot("backend", "api"); var graph = architecture(snapshot, "a.js", "b.js", "c.js");
         dependency(graph, "a.js", "b.js"); dependency(graph, "a.js", "b.js");

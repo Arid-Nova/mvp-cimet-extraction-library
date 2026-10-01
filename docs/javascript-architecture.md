@@ -43,7 +43,16 @@ The definitions and detector families were checked against the local CIMET2 revi
 | SCCmodularity | Implemented | Original JGraphT 1.5.2 SCC partition and undirected modularity implementation, with the same singleton-partition convention. |
 | SIDC, LOMLC | Implemented with contract coverage | Complete-source-contract values, available-evidence estimates, and field/shape proxies are separate. Missing evidence produces null strict values. Coarse JavaScript type tags are not nominal Java DTO equivalence. |
 | SSIC | Implemented as a partial local-function observation | Uses shared reachable implementation sets across endpoint registrations. This replaces the legacy runner's annotation proxy; dynamic and external behavior remains incomplete. |
-| WrongCuts, health checks, API gateway, wobbly interactions, AR7 | Unsupported | Required domain/service/repository roles, contracts, framework configuration or data-access semantics are absent. Applying old Spring-specific tests would be misleading. |
+| Weighted greedy / hub | Sum outgoing / incoming static observation weights; threshold 6 | Original sum/threshold family, separately scoped to modules and declared applications. These are not traffic measurements. |
+| AR20 | Incoming static observation weight at least 4 | The inspected legacy rule uses threshold 4, so it is reported separately from hub threshold 6. Overlapping findings are not independent defects. |
+| Function cycles / chains | Iterative SCCs and bounded simple-path witnesses over resolved local calls | Includes direct recursion. Cycles can be intentional; unresolved dispatch remains outside the graph. |
+| Health checks / AR24 | Health-like Express endpoint name candidates | Working health behavior, liveness/readiness semantics and deployment probes remain unknown. |
+| API gateway / AR23 | Recognized mounted Node proxy middleware or activated proxy server calls | An unused import is not a gateway. External gateways and deployment routing remain uninspected. |
+| WrongCuts / AR21 | No recognized data-access role, only when inspection finished without unresolved data-access candidates | Explicit analogy to the legacy empty-repository-class check; does not discover business boundaries or prove incorrect decomposition. |
+| Wobbly interactions | Activated resilience inventory plus the legacy all-four-kind check at module scope | Circuit breaker, retry, rate limit and concurrency limit must all be activated in the same file. This is a review analogy, not missing-retry detection or runtime instability. |
+| AR1 | A removed, previously unique endpoint candidate leaves an unchanged caller request unmatched | Changed, moved, ambiguous, external or unknown caller relationships are kept separate. Runtime failure is not asserted. |
+| AR7 | Structural query/schema changes propagated to endpoint handlers through resolved local calls | Can detect changed top-level SQL even when handler/function bodies are unchanged. Query values and dynamic SQL can remain unknown. |
+| AR22 | Historical explicit same-name entity field/type evolution across declared backends | Requires at least two backends and usable explicit schemas. Nominal identity does not prove shared persistence ownership or incompatibility. |
 
 ## Conservative HTTP observations
 
@@ -90,6 +99,63 @@ Fewer than two operations, unknown contract data, empty undefined denominators a
 Cohesion analysis defaults to at most 10,000 operations, 1,000,000 reachability steps and 1,000,000 distinct-signature comparisons. A second comparison budget limits estimated character work to 128 times the pair limit. SIDC/SSIC use element frequencies rather than materializing operation pairs. LOMLC groups identical signatures and accounts for their multiplicity. Bound exhaustion is explicit and does not emit scores from truncated subsets. The [adapter contract documentation](../adapter/javascript/README.md) describes extraction limits and the conservative completeness guards for mutable values, opaque calls and possible inherited middleware.
 
 ## History and potential endpoint impact
+
+### Additional graph and semantic reports
+
+`additionalGraphs.weighted` records weighted candidate counts/scores for the
+same three graph scopes. Repeated import or HTTP-call observations contribute
+their counts; self loops are excluded from these weighted sums. Missing module
+coverage or incomplete HTTP matching makes the corresponding thresholds
+unavailable, with null counts. `additionalGraphs.functionGraph` reports exact
+SCC membership for the observed resolved local graph, including recursive
+singletons. Its overall status remains partial because static calls are not a
+complete runtime graph. Witness limits do not change SCC finding identities.
+
+`semantics.components` preserves source locations and qualified function IDs
+for sanitized database access, explicit schemas, health-like routes, proxy
+activation and resilience policies. Node package provenance is required for
+recognized database/proxy/resilience APIs; a similarly named method on an
+unrelated object is not evidence. Supported source patterns and limits are in
+the [adapter README](../adapter/javascript/README.md). These detectors do not
+execute queries, resolve credentials or read production configuration.
+
+WrongCuts follows the narrow inspected legacy empty-repository-role concept.
+It must not be presented as automated discovery of bad business boundaries.
+Likewise, the original wobbly check accumulates four resilience annotation
+kinds; its JavaScript counterpart reports activated policy kinds at file scope,
+with an explicit analogy label. AR21, AR23 and AR24 are aliases for WrongCuts,
+gateway and health respectively, so aliases do not duplicate finding counts.
+Unimplemented legacy skeletons such as AR2/AR12 do not supply a defined rule to
+port and are not claimed as implemented capabilities.
+
+`endpointRemovalImpact` in a delta is the AR1 temporal analysis. It requires a
+previous unique candidate match, removal of that registration, the same caller
+identity and request, and a new unmatched status. A replacement endpoint still
+matching the caller is classified separately. Removing an input component or
+exhausting HTTP matching cannot create a dangling-caller finding.
+
+`semantics.changedDataAccess` and `changedEntities` compare structural
+fingerprints. AR7 traces those seeds through the old and new resolved call
+graphs, reporting endpoint observations separately for each side. Literal-only
+SQL edits intentionally do not change sanitized structural fingerprints.
+Unknown query arguments, dynamic identifiers, callback dispatch and unbound
+schema ownership limit impact coverage. AR22 compares explicit nominal schema
+fields across backend components and reports candidates for maintainer review;
+one backend is not applicable. The adaptation does not reproduce the inspected
+legacy AR22 implementation's inverted modification condition.
+
+Incomplete changed records remain review candidates and are marked
+`incomplete-structural-evidence-change`, retaining `beforeEvidenceComplete` and
+`afterEvidenceComplete`. Bounded association or traversal sets
+`countsAreLowerBounds`; a partial witness count is not an exhaustive impact count.
+
+Semantic comparisons exclude incomplete or missing inspections per component;
+they cannot turn unextracted evidence into removals or repaired findings.
+Finding deltas and AR1/AR7/AR22 observations are separate outputs. New reports
+use `limits.metricDefinitionsVersion: 3`, recording graph/semantic/removal limits.
+Older snapshots remain accepted, with new semantic capabilities unsupported.
+Saved additional graph reports are checked by bounded deterministic
+recomputation before historical comparison.
 
 `compare` uses stable node, edge and finding identities, excluding line numbers, source ordering and commits. It reports introduced/resolved/persisting observations, graph additions/removals, and numeric metric differences. Different names, conflicting repository identities, changed analysis options, duplicate/dangling records, or changed architecture availability for a shared component are rejected. Missing architecture evidence is not treated as deleted code.
 

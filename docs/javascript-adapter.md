@@ -97,6 +97,14 @@ bounded request/response contract observations. Weighted SC/LWF/GWF,
 SCCmodularity and coverage-qualified SIDC/SSIC/LOMLC are available through the
 architecture commands. Coarse contract evidence, estimates and field/shape
 proxies are reported separately; missing information does not become a score.
+Snapshots also include bounded, sanitized `architecture.semanticEvidence`:
+recognized SQL/ORM access, explicit entity fields, health-like Express routes,
+activated proxy calls and resilience policies. No SQL literals, credentials,
+proxy target URLs or database execution are needed. These observations enable
+AR7 data/schema change impact and source-scoped health/gateway/WrongCuts/wobbly
+interpretations. Weighted greedy/hub/AR20 detectors, local function cycles/chains,
+AR1 caller loss and AR22 nominal entity evolution are described in the
+[architecture capability matrix](javascript-architecture.md).
 The opt-in analysis service consumes this richer snapshot evidence:
 
 ```sh

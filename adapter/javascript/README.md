@@ -235,6 +235,84 @@ Each function's `unresolvedCalls` counts all unproven callees, including librari
 and builtins; this is conservative coverage evidence for structural cohesion,
 not a count of missing local function targets or a runtime completeness guarantee.
 
+## Database and operational source evidence
+
+`architecture.semanticEvidence` is additive and has its own `schemaVersion: 1`.
+Older snapshots without it remain valid. It is built from the existing source
+ASTs; target packages, environment files, deployment manifests, and database
+connections are never loaded or executed.
+
+```text
+dataAccess: [{id,file,line,endLine,functionId,kind,library,operation,
+              tables,columns,shape,fingerprint,complete}]
+entities: [{id,file,line,endLine,functionId,library,name,
+            fields:[{name,type}],fingerprint,complete}]
+healthEndpoints: [{endpointId,functionIds,classification,basis}]
+proxies: [{id,file,line,endLine,functionId,library,kind,operation,target,fingerprint}]
+resilience: [{id,file,line,endLine,functionId,library,kind,operation,fingerprint,
+              appliesToFunctionId?}]
+summary: {... counts, inspectionComplete, boundsReached ...}
+limitations: [... fixed explanations ...]
+```
+
+Database observations require recognized `mysql`, `mysql2`, `mysql2/promise`, or
+`pg` client provenance. SQL `query`/`execute` calls can resolve through local
+imports, exports, stable aliases, and bounded parameter-forwarding wrappers.
+This includes Nutrosal's exported connections and `queryRunner` helpers. Both
+the underlying sink and caller observations are retained; these are source
+observations, not distinct runtime requests. IDs are stable across line/value
+edits; `functionId` links each observed call site to the local call graph, or is
+null for module-level code. Wrapper propagation permits four rounds and eight
+descriptors per function. Dynamic arguments stay unknown.
+
+SQL shapes contain coarse operation, table and column identifiers. Single-quoted,
+double-quoted and PostgreSQL dollar-quoted contents, numeric values, comments and
+connection settings are omitted. Only hashes of this sanitized structure are
+retained; raw SQL is never exported. Templates retain static fragments and mark
+interpolations unknown. Joins, CTEs, nested queries, computed expressions, dialect
+ambiguity and dynamic SQL are incomplete. `complete` concerns the supported
+coarse shape extraction, not SQL validity, complete database schema knowledge or
+runtime execution. Fingerprints intentionally ignore SQL value-only changes.
+
+Supported ORM observations include Knex query builders, Prisma client model
+operations, Mongoose models, and Sequelize models/raw queries. ORM names are
+logical model identifiers, not verified physical tables. Explicit Mongoose
+`Schema`/`model` and Sequelize `define` declarations yield field names and type
+tags; unknown/spread/duplicate fields prevent complete field-shape claims.
+Schema modifiers/defaults/validation logic and generated/imported Prisma schemas
+are not interpreted. Arbitrary objects with similar method names are not ORM
+evidence. `unresolvedDataAccessCandidates` combines proven SQL calls with unknown
+operations and coarse unproven query-like calls; it is not a defect count.
+
+Health observations identify endpoint path segments such as `health`, `healthz`,
+`ready`, `readiness`, `live`, `liveness`, and `ping`, with supplied handler IDs.
+This is explicitly a naming heuristic, not proof of a working readiness or
+liveness probe. Proxy observations require proven Express mounting of
+`http-proxy-middleware`, or `http-proxy` `web`/`ws`/`listen` calls. Imports and
+unmounted factories are not registrations; the latter have a separate count.
+Proxy targets are only `literal-redacted`, `dynamic`, or `unknown`; URLs and
+credentials are never emitted.
+
+Resilience observations recognize explicit Opossum circuit breaker construction
+and `fire`, `p-retry` invocation, `retry.operation`/`attempt`/`retry`, mounted
+Express rate-limit middleware, rate-limiter-flexible construction/`consume`,
+Bottleneck construction/`schedule`/`submit`/`wrap`, and p-limit construction/use.
+The `operation` distinguishes construction from invocation or mounting.
+`appliesToFunctionId` is present only when a supplied callback resolves locally.
+These observations do not prove effective limits, retries, circuit state or
+runtime bulkhead isolation. Literal settings and target URLs are deliberately
+excluded from fingerprints, so value-only configuration changes are not detected.
+
+Bounds are 20,000 observations per category, two million AST/resolution work
+steps, resolution depth 64, SQL length 16,384 characters, 4,096 SQL tokens, 64
+table/column names, 128 entity fields, and 2,048 emitted SQL shape characters.
+`inspectionComplete` also becomes false for parser-error files, oversized source
+files, or skipped symbolic links. Numeric `sourceExcludedPaths`,
+`sourceParseErrorFiles`, `sourceOversizedFiles`, and `sourceSymlinkPaths` counters
+explain these exclusions; `boundsReached` remains reserved for semantic work
+limits. These flags never mean exhaustive semantic or deployment coverage.
+No recognized evidence is not evidence that production lacks the capability.
+
 ## Privacy, bounds, and limitations
 
 Only recognized source extensions are read. Dot directories, `.env`, dependency,

@@ -184,6 +184,20 @@ function architectureSummary(data) {
       SIDC: component.SIDC, SSIC: component.SSIC, LOMLC: component.LOMLC,
       observedFieldShapeProxy: component.observedFieldShapeProxy,
     })) } : null,
+    additionalGraphs: data.additionalGraphs ? {
+      weighted: Object.fromEntries(Object.entries(data.additionalGraphs.weighted).map(([scope, value]) => [scope,
+        { status: value.status, available: value.available, counts: value.counts, thresholds: value.thresholds }])),
+      functionGraph: { status: data.additionalGraphs.functionGraph.status, metrics: data.additionalGraphs.functionGraph.metrics,
+        coverage: data.additionalGraphs.functionGraph.coverage, chainWitnessCount: data.additionalGraphs.functionGraph.chainWitnessCount ?? null,
+        chainWitnessesTruncated: data.additionalGraphs.functionGraph.chainWitnessesTruncated },
+    } : null,
+    semantics: data.semantics ? { components: data.semantics.components.map(component => ({
+      component: component.component, status: component.status, coverage: component.coverage,
+      dataAccessCount: component.coverage.semanticEvidenceAvailable ? component.dataAccess.length : null,
+      entityCount: component.coverage.semanticEvidenceAvailable ? component.entities.length : null,
+      health: component.health, proxyGateway: component.proxyGateway, wrongCuts: component.wrongCuts,
+      resilience: component.resilience,
+    })), aliases: data.semantics.aliases } : null,
     findings: data.findings.length, findingKinds: groupedCounts(data.findings, 'kind'),
     capabilities: data.capabilities,
   };
@@ -221,6 +235,28 @@ function historyRows(checkpoint, scope, commits, report, data) {
         coverage: { totalOperations: component.operationCount, ...proxy }, reason: proxy.reason ?? null });
     }
   }
+  for (const [graph, value] of Object.entries(data.additionalGraphs?.weighted || {})) {
+    for (const [rule, count] of Object.entries(value.counts || {})) metrics.push({ ...common,
+      graph, status: value.status, metric: `${rule}.weightedThresholdCandidates`, value: count,
+      basis: 'static-source-observation-weight-threshold', coverage: { available: value.available, thresholds: value.thresholds },
+      reason: value.reason ?? null });
+  }
+  const functions = data.additionalGraphs?.functionGraph;
+  if (functions) for (const [metric, value] of Object.entries(functions.metrics || {})) metrics.push({ ...common,
+    graph: 'resolved-local-functions', status: functions.status, metric, value,
+    basis: 'observed-resolved-local-call-graph', coverage: functions.coverage ?? null, reason: functions.reason ?? null });
+  for (const component of data.semantics?.components || []) {
+    const available = component.coverage?.semanticEvidenceAvailable;
+    const observations = { dataAccessObservations: available ? component.dataAccess.length : null,
+      entityObservations: available ? component.entities.length : null,
+      healthRouteCandidates: component.health?.candidateCount ?? null,
+      sourceProxyObservations: component.proxyGateway?.sourceProxyObservationCount ?? null,
+      resilienceObservations: component.resilience?.sourceEvidenceCount ?? null,
+      legacyAllFourResilienceCandidates: component.resilience?.legacyAnalogyCount ?? null };
+    for (const [metric, value] of Object.entries(observations)) metrics.push({ ...common,
+      graph: `semantics:${component.component}`, status: component.status, metric, value,
+      basis: 'recognized-static-source-semantics', coverage: component.coverage ?? null });
+  }
   const capabilities = data.capabilities.map(item => ({ ...common, id: item.id, status: item.status, reason: item.reason ?? null }));
   return { metrics, capabilities };
 }
@@ -228,7 +264,7 @@ function historyRows(checkpoint, scope, commits, report, data) {
 function rowsCsv(rows, columns) {
   const cell = value => {
     let text = value == null ? '' : typeof value === 'object' ? JSON.stringify(value) : String(value);
-    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    if (typeof value !== 'number' && /^[=+\-@\t\r]/.test(text)) text = `'${text}`;
     return `"${text.replace(/"/g, '""')}"`;
   };
   return [columns.map(cell).join(','), ...rows.map(row => columns.map(column => cell(row[column])).join(','))].join('\r\n') + '\r\n';

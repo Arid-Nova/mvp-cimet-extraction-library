@@ -219,6 +219,25 @@ test('architecture commands read saved reports and trends preserve missing metri
   assert.equal(rows.capabilities[0].association, 'candidate_not_release_verified');
   const csv = rowsCsv([{ value: null }, { value: '=SYNTHETIC()' }], ['value']);
   assert.equal(csv, '"value"\r\n""\r\n"\'=SYNTHETIC()"\r\n');
+  assert.equal(rowsCsv([{ value: -0.25 }, { value: '-unsafe' }], ['value']), '"value"\r\n"-0.25"\r\n"\'-unsafe"\r\n');
+});
+
+test('history rows keep semantic and weighted absence unknown when extraction is unavailable', () => {
+  const data = { graphs: {}, capabilities: [], additionalGraphs: {
+    weighted: { modules: { status: 'unsupported', available: false, counts: { greedy: null, hub: null, AR20: null } } },
+    functionGraph: { status: 'partial', metrics: { cyclicSccCount: 2 }, coverage: { componentsWithArchitecture: 1 } },
+  }, semantics: { components: [
+    { component: 'backend:old', status: 'unsupported', coverage: { semanticEvidenceAvailable: false } },
+    { component: 'backend:new', status: 'partial', coverage: { semanticEvidenceAvailable: true },
+      dataAccess: [{ id: 'query' }], entities: [], health: { candidateCount: 0 },
+      proxyGateway: { sourceProxyObservationCount: 0 }, resilience: { sourceEvidenceCount: 0, legacyAnalogyCount: 0 } },
+  ] } };
+  const rows = historyRows({ name: 'latest', cutoff: null }, 'combined', {}, 'report.json', data).metrics;
+  assert.equal(rows.find(row => row.metric === 'greedy.weightedThresholdCandidates').value, null);
+  assert.equal(rows.find(row => row.metric === 'cyclicSccCount').value, 2);
+  assert.equal(rows.find(row => row.graph === 'semantics:backend:old' && row.metric === 'dataAccessObservations').value, null);
+  assert.equal(rows.find(row => row.graph === 'semantics:backend:new' && row.metric === 'dataAccessObservations').value, 1);
+  assert.equal(rows.find(row => row.graph === 'semantics:backend:new' && row.metric === 'healthRouteCandidates').value, 0);
 });
 
 test('runner reuses snapshots and architecture, compares cohorts and components, and hashes all adapter helpers', t => {

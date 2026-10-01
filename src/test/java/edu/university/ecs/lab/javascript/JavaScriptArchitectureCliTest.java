@@ -68,6 +68,42 @@ class JavaScriptArchitectureCliTest {
                 "--root", root.toString(), "--kind", "backend", "--name", "fixture-api", "--output", output.toString()});
     }
 
+    @Test void changedTopLevelSqlSeedsAr7EvenWhenHandlerAndQueryFunctionBodiesStayIdentical() throws Exception {
+        Path source = Files.createDirectories(temporary.resolve("database fixture"));
+        Files.writeString(source.resolve("app.js"), """
+                const express = require('express');
+                const { list } = require('./queries');
+                const app = express();
+                app.get('/users', (req, res) => res.json(list()));
+                app.get('/health', (req, res) => res.json({status: 'ok'}));
+                throw new Error('Never execute this target or connect to its database');
+                """);
+        String queries = """
+                const mysql = require('mysql2');
+                const pool = mysql.createPool({});
+                const sql = 'SELECT id FROM users';
+                exports.list = function list() { return pool.query(sql); };
+                """;
+        Files.writeString(source.resolve("queries.js"), queries);
+        Path before = temporary.resolve("query-before.json"), after = temporary.resolve("query-after.json");
+        snapshot(source, before);
+        Files.writeString(source.resolve("queries.js"), queries.replace("SELECT id FROM", "SELECT id, name FROM"));
+        snapshot(source, after);
+        Path a = temporary.resolve("query-a.json"), b = temporary.resolve("query-b.json"), delta = temporary.resolve("query-delta.json");
+        architecture(before, a); architecture(after, b);
+        JavaScriptCli.run(new String[]{"architecture-delta", "--old", a.toString(), "--new", b.toString(), "--output", delta.toString()});
+        JsonNode result = JavaScriptExtractionService.JSON.readTree(Files.readString(delta));
+        assertEquals(0, result.path("changedFunctions").size(), "The query value changed outside the function bodies");
+        assertEquals(1, result.path("semantics").path("changedDataAccess").size());
+        assertEquals(2, result.path("semantics").path("AR7").path("potentiallyAffectedEndpointObservations").asInt());
+        for (JsonNode impact : result.path("semantics").path("AR7").path("potentiallyAffectedEndpoints"))
+            assertEquals("/users", impact.path("endpoint").path("normalizedPath").asText());
+        JsonNode analysis = JavaScriptExtractionService.JSON.readTree(Files.readString(b));
+        assertEquals(3, analysis.path("limits").path("metricDefinitionsVersion").asInt());
+        assertEquals(1, analysis.path("semantics").path("components").get(0).path("health").path("candidateCount").asInt());
+        assertTrue(analysis.path("additionalGraphs").path("functionGraph").path("available").asBoolean());
+    }
+
     private void architecture(Path snapshot, Path output) throws Exception {
         JavaScriptCli.run(new String[]{"architecture", "--snapshot", snapshot.toString(), "--name", "fixture",
                 "--output", output.toString()});

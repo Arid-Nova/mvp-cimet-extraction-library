@@ -12,6 +12,15 @@ local function graphs, and API/architecture evolution research. It does not by
 itself validate microservice boundary recovery. The JVM architecture report
 lists the implemented, partial, unsupported and inapplicable capabilities.
 
+Metric definition version 3 adds weighted greedy/hub/AR20 counts, local function
+cycle observations and sanitized source-semantic inventories to history JSON
+and CSV. Architecture deltas contain `endpointRemovalImpact` (AR1) and
+`semantics` (data/schema changes, AR7 endpoint reachability and AR22 nominal
+entity evolution). Existing version-2 results remain valid saved artifacts;
+rerun extraction before comparing version-3 semantic observations. Cross-version
+measurement comparisons are rejected. Unknown values stay null, and uninspected
+source/deployment evidence must not be interpreted as zero defects.
+
 ## Requirements and invocation
 
 Use Node.js 22+, Java 21+, Git, and the built adapter. From the CIMET checkout:

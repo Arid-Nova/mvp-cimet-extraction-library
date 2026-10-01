@@ -90,4 +90,47 @@ class JavaScriptArchitectureBoundaryTest {
         function.put("unresolvedCalls", 2);
         assertDoesNotThrow(() -> JavaScriptExtractionService.validateSnapshot(snapshot));
     }
+
+    private ObjectNode semanticSnapshot() {
+        ObjectNode snapshot = graphSnapshot();
+        ObjectNode semantic = snapshot.withObject("architecture").putObject("semanticEvidence").put("schemaVersion", 1);
+        for (String group : java.util.List.of("dataAccess", "entities", "proxies", "resilience", "healthEndpoints", "limitations")) semantic.putArray(group);
+        semantic.putObject("summary").put("inspectionComplete", true).put("boundsReached", false)
+                .put("unresolvedDataAccessCandidates", 0);
+        semantic.withArray("dataAccess").addObject().put("id", "query").put("file", "app.js").put("line", 2).put("endLine", 3)
+                .put("functionId", "handler").put("kind", "sql").put("library", "mysql2").put("operation", "select")
+                .put("shape", "select users.id from users").put("fingerprint", "a".repeat(64)).put("complete", true)
+                .putArray("tables").add("users");
+        ((ObjectNode) semantic.path("dataAccess").get(0)).putArray("columns").add("id");
+        return snapshot;
+    }
+
+    @Test void semanticRecordsRequireKnownProvenanceAndSafeStructuralTokens() {
+        ObjectNode snapshot = semanticSnapshot();
+        assertDoesNotThrow(() -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        ObjectNode query = (ObjectNode) snapshot.path("architecture").path("semanticEvidence").path("dataAccess").get(0);
+        query.put("functionId", "absent");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        query.put("functionId", "handler").put("file", "../outside.js");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        query.put("file", "app.js").put("fingerprint", "invalid");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        query.put("fingerprint", "b".repeat(64)).withArray("tables").add("users; DROP TABLE users");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+    }
+
+    @Test void semanticCoverageCannotClaimCompleteTruncationOrInventedHealthEndpoints() {
+        ObjectNode snapshot = semanticSnapshot();
+        ObjectNode semantic = snapshot.withObject("architecture").withObject("semanticEvidence");
+        semantic.withObject("summary").put("boundsReached", true);
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        semantic.withObject("summary").put("inspectionComplete", false);
+        assertDoesNotThrow(() -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        semantic.withObject("summary").put("unresolvedDataAccessCandidates", -1);
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+        semantic.withObject("summary").put("unresolvedDataAccessCandidates", 0);
+        semantic.withArray("healthEndpoints").addObject().put("endpointId", "missing")
+                .put("classification", "health-like-route").put("basis", "path-name").putArray("functionIds").add("handler");
+        assertThrows(IOException.class, () -> JavaScriptExtractionService.validateSnapshot(snapshot));
+    }
 }

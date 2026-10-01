@@ -20,8 +20,12 @@ candidate endpoint impact paths. Each report states which capabilities have
 sufficient evidence. Weighted SC/LWF/GWF and SCC modularity are available over
 static observation graphs. SIDC, LOMLC and SSIC include explicit contract or
 local-function coverage, with partial estimates separated from complete-contract
-values. Java/Spring-specific checks and unported metrics are
-explicitly unsupported; this does not enable every legacy CIMET2 detector.
+values. Additional JavaScript detectors now cover weighted greedy/hub/AR20
+candidates, function cycles/chains, health-like routes, activated Node proxies
+and resilience policies, the legacy WrongCuts analogy, AR1 endpoint-removal
+caller impact, AR7 data-access impact, and AR22 explicit entity evolution.
+These source observations state their scope and uncertainty; Java/Spring
+annotations and production deployment behavior are not inferred.
 
 See [JavaScript adapter](docs/javascript-adapter.md) for setup, supported patterns,
 snapshot/delta commands and limitations, and [study runner](study/README.md) for

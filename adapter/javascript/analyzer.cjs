@@ -452,7 +452,15 @@ function analyze({ root, kind, name, config = {} }) {
     return records.sort((a, b) => a.file.localeCompare(b.file, 'en') || a.line - b.line || a.id.localeCompare(b.id, 'en'));
   }
   finish(endpoints, 'endpoint'); finish(calls, 'call');
-  const architecture = buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwrap, isFunction, literal, semanticHash, hash, location, endpoints, endpointHandlerNodes, consignLoads });
+  const sourceExclusions = diagnostics.filter(d => d.code.startsWith('PARSE_') || ['FILE_TOO_LARGE', 'SYMLINK_SKIPPED'].includes(d.code));
+  const sourceExclusionCounts = {
+    sourceExcludedPaths: new Set(sourceExclusions.map(d => d.file)).size,
+    sourceParseErrorFiles: new Set(sourceExclusions.filter(d => d.code.startsWith('PARSE_')).map(d => d.file)).size,
+    sourceOversizedFiles: new Set(sourceExclusions.filter(d => d.code === 'FILE_TOO_LARGE').map(d => d.file)).size,
+    sourceSymlinkPaths: new Set(sourceExclusions.filter(d => d.code === 'SYMLINK_SKIPPED').map(d => d.file)).size,
+  };
+  const sourceInspectionComplete = sourceExclusionCounts.sourceExcludedPaths === 0;
+  const architecture = buildArchitecture({ ts, files, name, kind, lookup, resolveModule, unwrap, isFunction, literal, semanticHash, hash, location, endpoints, endpointHandlerNodes, consignLoads, sourceInspectionComplete, sourceExclusionCounts });
   const deduped = [...new Map(diagnostics.map(d => [JSON.stringify(d), d])).values()].sort((a, b) => a.file.localeCompare(b.file, 'en') || a.line - b.line || a.code.localeCompare(b.code, 'en'));
   return {
     schemaVersion: 1, component: { name, kind }, filesAnalyzed: [...files.values()].filter(file => !file.bad).length,

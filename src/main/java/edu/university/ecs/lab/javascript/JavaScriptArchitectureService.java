@@ -151,14 +151,32 @@ public final class JavaScriptArchitectureService {
             JavaScriptWeightedMetrics.enrich(graphs.withObject(scope));
         ObjectNode cohesion = new JavaScriptCohesionService().analyze(ordered);
         result.set("cohesion", cohesion);
+        ObjectNode additionalGraphs = new JavaScriptAdditionalGraphService(new JavaScriptAdditionalGraphService.Options(
+                6, 4, options.chainLength, options.maxWitnesses, options.maxNodes, options.maxEdges,
+                options.maxTraversalSteps)).analyze(result);
+        ObjectNode semantics = new JavaScriptSemanticService().analyze(ordered);
+        result.set("additionalGraphs", additionalGraphs); result.set("semantics", semantics);
+        findings.addAll((ArrayNode) additionalGraphs.path("findings"));
+        findings.addAll((ArrayNode) semantics.path("findings"));
         ObjectNode limits = result.putObject("limits");
         limits.put("degreeThreshold", options.degreeThreshold).put("chainLengthNodes", options.chainLength)
                 .put("maxWitnessesPerGraph", options.maxWitnesses).put("maxNodes", options.maxNodes)
                 .put("maxEdges", options.maxEdges).put("maxMatchComparisons", options.maxMatchComparisons)
                 .put("maxTraversalStepsPerGraph", options.maxTraversalSteps);
-        limits.put("metricDefinitionsVersion", 2);
+        limits.put("metricDefinitionsVersion", 3);
         limits.set("cohesion", cohesion.path("limits").deepCopy());
+        limits.set("additionalGraphs", additionalGraphs.path("limits").deepCopy());
+        limits.set("semantics", semantics.path("limits").deepCopy());
+        limits.putObject("endpointRemoval").put("maxRecords", options.maxEdges).put("maxWitnesses", options.maxWitnesses);
         capabilities(result.putArray("capabilities"), moduleStatus, backends.nodes.size(), withArchitecture, graphs, cohesion);
+        ArrayNode capabilities = result.withArray("capabilities");
+        capability(capabilities, "weighted-greedy-hub-AR20", additionalGraphs.path("weighted").path("modules").path("status").asText(),
+                "Original static weighted sums: greedy/hub threshold 6 and legacy AR20 hub threshold 4; module and application scopes stay separate.");
+        capability(capabilities, "function-cycles-chains", additionalGraphs.path("functionGraph").path("status").asText(),
+                "SCCs over resolved local calls, including recursion; bounded cycle and simple chain witnesses are not defects.");
+        capability(capabilities, "AR1-endpoint-removal-impact", "partial",
+                "Historical unique endpoint candidate removed while the same caller request persists unmatched; runtime breakage is not asserted.");
+        capabilities.addAll((ArrayNode) semantics.path("capabilities"));
         result.putArray("limitations")
                 .add("Static observations are incomplete: dynamic loading, reflection, callbacks and runtime dispatch may be missing.")
                 .add("Application boundaries are declared input components; files and endpoints are never promoted to services.")
@@ -352,7 +370,29 @@ public final class JavaScriptArchitectureService {
         }
         if (!"supported".equals(before.path("graphs").path("modules").path("status").asText())
                 || !"supported".equals(after.path("graphs").path("modules").path("status").asText())) excludedScopes.add("file-modules");
+        for (JsonNode analysis : List.of(before, after))
+            if (analysis.has("additionalGraphs") && (!analysis.path("additionalGraphs").path("functionGraph").path("available").asBoolean()
+                    || !analysis.path("additionalGraphs").path("functionGraph").path("coverage").path("componentsWithoutArchitecture").isEmpty()))
+                excludedScopes.add("resolved-local-functions");
+        // Semantic comparisons use their own per-component coverage, rather than a global absence assertion.
+        excludedScopes.add("semantic-evidence");
         difference(comparableFindings(before, excludedScopes), comparableFindings(after, excludedScopes), changes, "introduced", "resolved");
+        boolean semanticComparisonComplete = true;
+        if (before.has("semantics") && after.has("semantics")) {
+            ObjectNode semanticDelta = new JavaScriptSemanticService().compare(before.path("semantics"), after.path("semantics"), before, after);
+            result.set("semantics", semanticDelta);
+            changes.withArray("introduced").addAll((ArrayNode) semanticDelta.path("introducedFindings"));
+            changes.withArray("resolved").addAll((ArrayNode) semanticDelta.path("resolvedFindings"));
+            Set<String> excluded = new HashSet<>(); semanticDelta.path("excludedComponents").forEach(n -> excluded.add(n.asText()));
+            Set<String> oldSemanticIds = index(before.path("semantics").path("findings")).keySet();
+            int persisting = changes.path("persistingCount").asInt();
+            for (JsonNode finding : after.path("semantics").path("findings"))
+                if (!excluded.contains(finding.path("component").asText()) && oldSemanticIds.contains(finding.path("id").asText())) persisting++;
+            changes.put("persistingCount", persisting);
+            semanticComparisonComplete = semanticDelta.path("comparisonCompleteForInspectedComponents").asBoolean();
+        }
+        if (semanticComparisonComplete) excludedScopes.remove("semantic-evidence");
+        sortArray(changes.withArray("introduced"), "id"); sortArray(changes.withArray("resolved"), "id");
         array(changes, "excludedScopes", excludedScopes);
         ObjectNode graphs = result.putObject("graphs");
         for (String scope : List.of("modules", "components", "backendApplications")) {
@@ -387,6 +427,18 @@ public final class JavaScriptArchitectureService {
             });
         }
         compareCohesion(before.path("cohesion"), after.path("cohesion"), result);
+        if (before.has("additionalGraphs") && after.has("additionalGraphs")) {
+            ObjectNode additional = result.putObject("additionalGraphs");
+            additional.set("beforeFunctionGraph", before.path("additionalGraphs").path("functionGraph").deepCopy());
+            additional.set("afterFunctionGraph", after.path("additionalGraphs").path("functionGraph").deepCopy());
+            for (String side : List.of("beforeFunctionGraph", "afterFunctionGraph"))
+                ((ObjectNode) additional.path(side)).remove(List.of("cycleWitnesses", "chainWitnesses", "cyclicComponents"));
+            additional.set("beforeWeighted", weightedCounts(before.path("additionalGraphs").path("weighted")));
+            additional.set("afterWeighted", weightedCounts(after.path("additionalGraphs").path("weighted")));
+        }
+        ObjectNode endpointRemoval = new JavaScriptEndpointRemovalService(new JavaScriptEndpointRemovalService.Options(
+                options.maxEdges, options.maxWitnesses)).compare(before, after);
+        result.set("endpointRemovalImpact", endpointRemoval);
         ArrayNode changedFunctions = result.putArray("changedFunctions");
         Map<String, JsonNode> oldFunctions = index(before.path("functions")), newFunctions = index(after.path("functions"));
         Set<String> oldSeeds = new TreeSet<>(), newSeeds = new TreeSet<>(), all = new TreeSet<>(oldFunctions.keySet()); all.addAll(newFunctions.keySet());
@@ -410,6 +462,12 @@ public final class JavaScriptArchitectureService {
                 .put("emittedImpactWitnesses", affected.size()).put("impactWitnessesTruncated", oldImpact.witnessesTruncated || newImpact.witnessesTruncated)
                 .put("impactTraversalComplete", oldImpact.traversalComplete && newImpact.traversalComplete)
                 .put("findingComparisonComplete", excludedScopes.isEmpty());
+        summary.set("AR1DanglingCallerCandidates", endpointRemoval.path("summary").path("danglingCallerCandidates"));
+        if (result.has("semantics")) {
+            summary.set("AR7PotentiallyAffectedEndpointObservations", result.path("semantics").path("AR7").path("potentiallyAffectedEndpointObservations"));
+            summary.set("AR22EntityEvolutionCandidates", result.path("semantics").path("AR22").path("candidateCount"));
+            summary.put("semanticComparisonComplete", semanticComparisonComplete);
+        }
         result.putArray("limitations")
                 .add("Introduced/resolved means finding identity changed between supplied snapshots, not a confirmed defect or repair.")
                 .add("Changed functions reach endpoint handlers only through statically resolved calls; one witness per endpoint per side is emitted.")
@@ -418,6 +476,16 @@ public final class JavaScriptArchitectureService {
                 .add("Added/removed components and extraction coverage changes can change metrics; inspect provenance and capability status.")
                 .add("Bounded chain witnesses are excluded from finding deltas; incomplete HTTP searches or missing module coverage suppress affected finding scopes.")
                 .add("No behavioral prediction, payload compatibility judgment or universal architectural degradation score is produced.");
+        return result;
+    }
+
+    private static ObjectNode weightedCounts(JsonNode weighted) {
+        ObjectNode result = object();
+        weighted.fields().forEachRemaining(entry -> {
+            ObjectNode summary = result.putObject(entry.getKey());
+            for (String field : List.of("status", "available", "counts", "thresholds", "reason"))
+                summary.set(field, nullable(entry.getValue().path(field)));
+        });
         return result;
     }
 
@@ -515,6 +583,7 @@ public final class JavaScriptArchitectureService {
     }
 
     private void validateAnalysis(JsonNode value) throws IOException {
+        JavaScriptHttpAnalysisValidator.validate(value, options.maxEdges);
         if (value == null || !value.isObject() || value.path("schemaVersion").asInt() != 1 || !ANALYSIS.equals(value.path("analysis").asText())
                 || !value.path("name").isTextual() || value.path("name").asText().isBlank()
                 || !value.path("graphs").isObject() || !value.path("limits").isObject()) throw new IOException("Invalid architecture analysis");
@@ -522,6 +591,8 @@ public final class JavaScriptArchitectureService {
             if (!value.path(group).isArray() || value.path(group).size() > options.maxEdges) throw new IOException("Invalid architecture analysis records");
         for (String group : List.of("components", "findings", "functions", "functionCalls")) strictIndex(value.path(group));
         if (!value.path("sourceCoverage").isArray()) throw new IOException("Missing architecture source coverage");
+        if (value.has("additionalGraphs") || value.path("limits").path("metricDefinitionsVersion").asInt() >= 3)
+            JavaScriptAdditionalGraphService.validateSavedAnalysis(value);
         if (value.has("cohesion") || value.path("limits").path("metricDefinitionsVersion").asInt() >= 2) {
             Set<String> components = strictIndex(value.path("components")).keySet();
             if (!components.equals(cohesionIndex(value.path("cohesion")).keySet()))
@@ -554,6 +625,24 @@ public final class JavaScriptArchitectureService {
             String endpoint = handler.path("endpointId").asText(), function = handler.path("functionId").asText();
             if (!functions.contains(function) || !endpointIds.contains(endpoint) || !pairs.add(endpoint + "\0" + function))
                 throw new IOException("Invalid endpoint function graph reference");
+        }
+        if (value.has("semantics") || value.path("limits").path("metricDefinitionsVersion").asInt() >= 3)
+            new JavaScriptSemanticService().validateAnalysis(value.path("semantics"), value);
+        Map<String, JsonNode> topFindings = strictIndex(value.path("findings"));
+        for (String section : List.of("additionalGraphs", "semantics")) {
+            if (!value.has(section)) continue;
+            if (!value.path("limits").path(section).equals(value.path(section).path("limits")))
+                throw new IOException("Nested architecture measurement limits differ");
+            Map<String, JsonNode> nestedFindings = strictIndex(value.path(section).path("findings"));
+            for (Map.Entry<String, JsonNode> finding : nestedFindings.entrySet())
+                if (!finding.getValue().equals(topFindings.get(finding.getKey())))
+                    throw new IOException("Nested finding is missing or differs from top-level findings");
+            for (JsonNode finding : value.path("findings")) {
+                boolean belongs = section.equals("semantics") ? finding.path("scope").asText().equals("semantic-evidence")
+                        : Set.of("weighted-greedy", "weighted-hub", "AR20-weighted-hub", "function-cycle").contains(finding.path("kind").asText());
+                if (belongs && !nestedFindings.containsKey(finding.path("id").asText()))
+                    throw new IOException("Unexpected nested-family finding in top-level findings");
+            }
         }
     }
 
@@ -612,8 +701,6 @@ public final class JavaScriptArchitectureService {
                         && !"unsupported".equals(status)) status = "partial";
             capability(output, name, status, "Implemented per declared backend; strict values, available-evidence estimates and field/shape proxies have separate coverage.");
         }
-        for (String name : List.of("WrongCuts", "health-checks", "API-gateway", "wobbly-interactions", "AR7-data-access-impact"))
-            capability(output, name, "unsupported", "Required typed contracts, domain/service roles, configuration or data-access semantics are not extracted.");
     }
 
     private static void capability(ArrayNode array, String id, String status, String reason) { array.add(object().put("id", id).put("status", status).put("reason", reason)); }
