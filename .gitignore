@@ -8,3 +8,7 @@ target/
 output/
 clone/
 settings.xml
+
+# Spreadsheet deliverables (ground truth, etc.) - working documents, not source
+*.xlsx
+~$*
