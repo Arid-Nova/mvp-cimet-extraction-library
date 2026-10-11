@@ -1,6 +1,6 @@
-package edu.university.ecs.lab.experiments;
+package edu.university.ecs.lab.common.parsers.treesitter;
 
-import edu.university.ecs.lab.experiments.TsUtil.SNode;
+import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
 import org.treesitter.*;
 
 import java.nio.charset.StandardCharsets;
@@ -20,7 +20,8 @@ import java.util.regex.Pattern;
 public class PolyglotExtractor {
 
     public static final List<String> DIMENSIONS = List.of(
-            "types", "classRole", "functions", "imports", "annotations", "endpoints", "httpCalls", "rpcServers", "rpcClients");
+            "types", "classRole", "fields", "functions", "parameters", "imports", "annotations",
+            "endpoints", "httpCalls", "rpcServers", "rpcClients");
 
     private static final LanguageConfig CONFIG = LanguageConfig.get();
 
@@ -40,6 +41,8 @@ public class PolyglotExtractor {
             this.grammar = grammar;
             this.extensions = List.of(extensions);
         }
+
+        public List<String> getExtensions() { return extensions; }
 
         public static Optional<Language> forFile(String fileName) {
             for (Language l : values()) {
@@ -163,6 +166,12 @@ public class PolyglotExtractor {
         return i < 0 ? s : s.substring(i + 1);
     }
 
+    // "<module>" marks a call made at a file's top level (e.g. Program.cs's top-level statements, a
+    // module-level script), outside any function; "<anonymous>" one inside a function with no
+    // discoverable name. Each language's own enclosing-name helper also qualifies with the owning
+    // class ("ClassName.methodName") when the enclosing function is a class method, so a call made
+    // from one of several classes in the same file is attributed to the right one.
+
     // ------------------------------------------------------------------ JavaScript
 
     private void javascript(SNode root, Out out) {
@@ -175,15 +184,23 @@ public class PolyglotExtractor {
                         out.add("types", "class " + className);
                         String role = CONFIG.classifyRole("javascript", className, List.of(), jsSupertypes(n, out));
                         out.add("classRole", className + ":" + role);
+                        jsClassFields(n, out).forEach(f -> out.add("fields", className + "." + f));
                     }
                 }
-                case "function_declaration", "generator_function_declaration", "method_definition" ->
-                        out.add("functions", out.text(n.field("name")));
+                case "function_declaration", "generator_function_declaration", "method_definition" -> {
+                    // method_definition is only ever valid directly inside a class body, so it always
+                    // gets qualified; function_declaration is a top-level statement so it never is.
+                    String name = n.type.equals("method_definition") ? jsQualifiedMethodName(n, out) : out.text(n.field("name"));
+                    out.add("functions", name);
+                    out.add("parameters", name + "(" + jsParamList(n.field("parameters"), out) + ")");
+                }
                 case "variable_declarator" -> {
                     SNode v = n.field("value");
                     if (v != null && (v.type.equals("arrow_function") || v.type.equals("function_expression")
                             || v.type.equals("function"))) {
-                        out.add("functions", out.text(n.field("name")));
+                        String name = out.text(n.field("name"));
+                        out.add("functions", name);
+                        out.add("parameters", name + "(" + jsParamList(v.field("parameters"), out) + ")");
                     }
                 }
                 case "import_statement" -> out.add("imports", urlOf(n.field("source"), out));
@@ -206,11 +223,12 @@ public class PolyglotExtractor {
         SNode fn = call.field("function");
         List<SNode> args = args(call, out);
         if (fn == null) return;
+        String caller = jsEnclosingName(call, out);
         if (fn.type.equals("identifier")) {
             String name = out.text(fn);
             if (name.equals("require") && !args.isEmpty()) out.add("imports", urlOf(args.get(0), out));
             String httpMethod = CONFIG.httpMethodFor("javascript", name, name); // e.g. bare fetch(url)
-            if (httpMethod != null && !args.isEmpty()) out.add("httpCalls", httpMethod + " " + urlOf(args.get(0), out));
+            if (httpMethod != null && !args.isEmpty()) out.add("httpCalls", caller + ": " + httpMethod + " " + urlOf(args.get(0), out));
             return;
         }
         if (!fn.type.equals("member_expression")) return;
@@ -221,12 +239,12 @@ public class PolyglotExtractor {
         if (method.equals("addService") && !args.isEmpty()) {
             // server.addService(proto.pkg.CartService.service, impl)
             String svc = out.text(args.get(0)).replaceAll("\\.service$", "");
-            out.add("rpcServers", lastSegment(svc));
+            out.add("rpcServers", caller + ": " + lastSegment(svc));
             return;
         }
         String httpMethod = CONFIG.httpMethodFor("javascript", objectText, method);
         if (httpMethod != null && !args.isEmpty()) {
-            out.add("httpCalls", httpMethod + " " + urlOf(args.get(0), out));
+            out.add("httpCalls", caller + ": " + httpMethod + " " + urlOf(args.get(0), out));
             return;
         }
         if (HTTP_VERBS.contains(method.toLowerCase()) && !args.isEmpty()) {
@@ -242,6 +260,74 @@ public class PolyglotExtractor {
         return List.of(lastSegment(out.text(heritage.namedChild(0))));
     }
 
+    private static List<String> jsClassFields(SNode classNode, Out out) {
+        SNode body = classNode.field("body");
+        if (body == null) return List.of();
+        List<String> fields = new ArrayList<>();
+        for (SNode m : body.namedChildren()) {
+            // The TSX grammar (used here) calls this "public_field_definition" with a "name" field;
+            // kept the plain-JS grammar's "field_definition"/"property" as a defensive fallback.
+            if (!m.type.equals("public_field_definition") && !m.type.equals("field_definition")) continue;
+            SNode name = m.field("name") != null ? m.field("name") : m.field("property");
+            SNode type = m.field("type"); // only present for TS-annotated fields; empty for plain/Flow JS
+            if (name != null) fields.add(out.text(name) + ":" + (type == null ? "" : out.text(type)));
+        }
+        return fields;
+    }
+
+    private static String jsParamList(SNode params, Out out) {
+        if (params == null) return "";
+        List<String> parts = new ArrayList<>();
+        for (SNode p : params.namedChildren()) {
+            switch (p.type) {
+                // The TSX grammar wraps every parameter in required_parameter/optional_parameter, with
+                // the actual name/destructuring under "pattern" and an optional type annotation.
+                case "required_parameter", "optional_parameter" -> {
+                    SNode pattern = p.field("pattern");
+                    SNode type = p.field("type");
+                    String name = pattern == null ? out.text(p)
+                            : pattern.type.equals("rest_pattern")
+                                    ? "..." + (pattern.namedChildCount() > 0 ? out.text(pattern.namedChild(0)) : "")
+                                    : out.text(pattern);
+                    parts.add(name + (type != null ? ":" + out.text(type) : ""));
+                }
+                // Plain-JS grammar shapes, kept as a defensive fallback.
+                case "identifier" -> parts.add(out.text(p));
+                case "assignment_pattern" -> {
+                    SNode left = p.field("left");
+                    if (left != null) parts.add(out.text(left));
+                }
+                case "rest_pattern" -> parts.add("..." + (p.namedChildCount() > 0 ? out.text(p.namedChild(0)) : ""));
+                default -> parts.add(out.text(p)); // object/array destructuring etc.: keep the raw pattern text
+            }
+        }
+        return String.join(", ", parts);
+    }
+
+    /** "ClassName.methodName" for a class method, else just its own name (method_definition is only ever
+     * valid directly inside a class body, so a name field is always present when it applies here). */
+    private static String jsQualifiedMethodName(SNode methodDef, Out out) {
+        String name = out.text(methodDef.field("name"));
+        SNode cls = methodDef.ancestorOfType("class_declaration", "class");
+        if (cls == null) return name;
+        SNode clsName = cls.field("name");
+        return clsName == null ? name : out.text(clsName) + "." + name;
+    }
+
+    private static String jsEnclosingName(SNode node, Out out) {
+        SNode fn = node.ancestorOfType("function_declaration", "generator_function_declaration", "method_definition",
+                "arrow_function", "function_expression", "function");
+        if (fn == null) return "<module>";
+        if (fn.type.equals("method_definition")) return jsQualifiedMethodName(fn, out);
+        SNode name = fn.field("name");
+        if (name != null) return out.text(name);
+        if (fn.parent != null && fn.parent.type.equals("variable_declarator")) {
+            SNode vname = fn.parent.field("name");
+            if (vname != null) return out.text(vname);
+        }
+        return "<anonymous>";
+    }
+
     // ------------------------------------------------------------------ Python
 
     private static final Pattern PY_GRPC_SERVER = Pattern.compile("add_(\\w+?)Servicer_to_server");
@@ -255,8 +341,17 @@ public class PolyglotExtractor {
                     out.add("types", "class " + className);
                     String role = CONFIG.classifyRole("python", className, pyDecoratorNames(n, out), pySupertypes(n, out));
                     out.add("classRole", className + ":" + role);
+                    pyClassFields(n, out).forEach(f -> out.add("fields", className + "." + f));
                 }
-                case "function_definition" -> out.add("functions", out.text(n.field("name")));
+                case "function_definition" -> {
+                    // Prefixed "ClassName.methodName" when it's a direct class method (any nesting depth
+                    // in between still resolves to the right owner, since ancestorOfType finds the nearest
+                    // enclosing class regardless), bare name otherwise - lets the converter attribute
+                    // methods/fields/calls to the class that actually owns them when a file has several.
+                    String name = pyQualifiedFunctionName(n, out);
+                    out.add("functions", name);
+                    out.add("parameters", name + "(" + pyParamList(n.field("parameters"), out) + ")");
+                }
                 case "import_statement" -> n.fields("name").forEach(x -> out.add("imports", out.text(
                         x.type.equals("aliased_import") ? x.field("name") : x)));
                 case "import_from_statement" -> {
@@ -301,7 +396,7 @@ public class PolyglotExtractor {
             return;
         }
         SNode def = decorator.parent == null ? null : decorator.parent.field("definition");
-        out.add("endpoints", method + " " + url + (def == null ? "" : " -> " + out.text(def.field("name"))));
+        out.add("endpoints", method + " " + url + (def == null ? "" : " -> " + pyQualifiedFunctionName(def, out)));
     }
 
     private void pyCall(SNode call, Out out) {
@@ -309,11 +404,12 @@ public class PolyglotExtractor {
         if (fn == null) return;
         List<SNode> args = args(call, out);
         String callee = fn.type.equals("attribute") ? out.text(fn.field("attribute")) : out.text(fn);
+        String caller = pyEnclosingQualifiedName(call, out);
 
         Matcher server = PY_GRPC_SERVER.matcher(callee);
-        if (server.matches()) { out.add("rpcServers", server.group(1)); return; }
+        if (server.matches()) { out.add("rpcServers", caller + ": " + server.group(1)); return; }
         Matcher stub = PY_GRPC_STUB.matcher(callee);
-        if (stub.matches()) { out.add("rpcClients", stub.group(1)); return; }
+        if (stub.matches()) { out.add("rpcClients", caller + ": " + stub.group(1)); return; }
 
         if (fn.type.equals("identifier") && (callee.equals("path") || callee.equals("re_path")) && !args.isEmpty()) {
             out.add("endpoints", "ANY /" + urlOf(args.get(0), out)); // Django urls.py
@@ -324,11 +420,68 @@ public class PolyglotExtractor {
             // requests.get(...), self.client.get(...) (Locust / test clients), session.post(...)
             String httpMethod = CONFIG.httpMethodFor("python", lastSegment(object), callee);
             if (httpMethod != null && !args.isEmpty()) {
-                out.add("httpCalls", httpMethod + " " + urlOf(args.get(0), out));
+                out.add("httpCalls", caller + ": " + httpMethod + " " + urlOf(args.get(0), out));
             } else if (object.endsWith("request") && callee.equals("urlopen") && !args.isEmpty()) {
-                out.add("httpCalls", "ANY " + urlOf(args.get(0), out));
+                out.add("httpCalls", caller + ": ANY " + urlOf(args.get(0), out));
             }
         }
+    }
+
+    /** "ClassName.functionName" if def is a direct method of some class (at any nesting depth), else just its own name. */
+    private static String pyQualifiedFunctionName(SNode functionDef, Out out) {
+        String name = out.text(functionDef.field("name"));
+        SNode cls = functionDef.ancestorOfType("class_definition");
+        return cls == null ? name : out.text(cls.field("name")) + "." + name;
+    }
+
+    private static String pyEnclosingQualifiedName(SNode node, Out out) {
+        SNode fn = node.ancestorOfType("function_definition");
+        return fn == null ? "<module>" : pyQualifiedFunctionName(fn, out);
+    }
+
+    /** Direct class-level attributes, e.g. "name: str" or "age: int = 0" - not instance fields set via self.x. */
+    private static List<String> pyClassFields(SNode classNode, Out out) {
+        SNode body = classNode.field("body");
+        if (body == null) return List.of();
+        List<String> fields = new ArrayList<>();
+        for (SNode stmt : body.namedChildren()) {
+            if (!stmt.type.equals("expression_statement") || stmt.namedChildCount() == 0) continue;
+            SNode assign = stmt.namedChild(0);
+            if (assign == null || !assign.type.equals("assignment")) continue;
+            SNode left = assign.field("left");
+            if (left == null || !left.type.equals("identifier")) continue; // skips self.x = ... (an "attribute", not identifier)
+            SNode type = assign.field("type");
+            fields.add(out.text(left) + ":" + (type == null ? "" : out.text(type)));
+        }
+        return fields;
+    }
+
+    private static String pyParamList(SNode params, Out out) {
+        if (params == null) return "";
+        List<String> parts = new ArrayList<>();
+        for (SNode p : params.namedChildren()) {
+            switch (p.type) {
+                case "identifier" -> parts.add(out.text(p)); // untyped, e.g. self
+                case "typed_parameter" -> {
+                    SNode inner = p.namedChildCount() > 0 ? p.namedChild(0) : null;
+                    String type = p.field("type") != null ? out.text(p.field("type")) : "";
+                    if (inner == null) break;
+                    String prefix = inner.type.equals("list_splat_pattern") ? "*"
+                            : inner.type.equals("dictionary_splat_pattern") ? "**" : "";
+                    SNode name = prefix.isEmpty() ? inner : (inner.namedChildCount() > 0 ? inner.namedChild(0) : inner);
+                    parts.add((type.isEmpty() ? "" : type + " ") + prefix + out.text(name));
+                }
+                case "default_parameter" -> parts.add(out.text(p.field("name")));
+                case "typed_default_parameter" -> {
+                    String type = p.field("type") != null ? out.text(p.field("type")) : "";
+                    parts.add((type.isEmpty() ? "" : type + " ") + out.text(p.field("name")));
+                }
+                case "list_splat_pattern" -> parts.add("*" + (p.namedChildCount() > 0 ? out.text(p.namedChild(0)) : ""));
+                case "dictionary_splat_pattern" -> parts.add("**" + (p.namedChildCount() > 0 ? out.text(p.namedChild(0)) : ""));
+                default -> { }
+            }
+        }
+        return String.join(", ", parts);
     }
 
     /** Decorator names on a class, e.g. ["app.route"] for @app.route("/x") — empty if the class isn't decorated. */
@@ -381,16 +534,17 @@ public class PolyglotExtractor {
                     if (!kind.equals("type")) {
                         out.add("classRole", typeName + ":" + CONFIG.classifyRole("go", typeName, List.of(), List.of()));
                     }
+                    if (kind.equals("struct")) goStructFields(t, out).forEach(f -> out.add("fields", typeName + "." + f));
                 }
-                case "function_declaration" -> out.add("functions", out.text(n.field("name")));
+                case "function_declaration" -> {
+                    String name = out.text(n.field("name"));
+                    out.add("functions", name);
+                    out.add("parameters", name + "(" + goParamList(n.field("parameters"), out) + ")");
+                }
                 case "method_declaration" -> {
-                    SNode recv = n.field("receiver");
-                    String recvType = "";
-                    if (recv != null) {
-                        SNode param = recv.firstChildOfType("parameter_declaration");
-                        if (param != null) recvType = out.text(param.field("type")).replace("*", "");
-                    }
-                    out.add("functions", recvType + "." + out.text(n.field("name")));
+                    String fullName = goReceiverType(n, out) + "." + out.text(n.field("name"));
+                    out.add("functions", fullName);
+                    out.add("parameters", fullName + "(" + goParamList(n.field("parameters"), out) + ")");
                 }
                 case "import_spec" -> out.add("imports", urlOf(n.field("path"), out));
                 case "call_expression" -> goCall(n, out);
@@ -405,23 +559,24 @@ public class PolyglotExtractor {
         String name = out.text(fn.field("field"));
         String operand = out.text(fn.field("operand"));
         List<SNode> args = args(call, out);
+        String caller = goEnclosingName(call, out);
 
         Matcher server = GO_GRPC_SERVER.matcher(name);
-        if (server.matches()) { out.add("rpcServers", server.group(1)); return; }
+        if (server.matches()) { out.add("rpcServers", caller + ": " + server.group(1)); return; }
         Matcher client = GO_GRPC_CLIENT.matcher(name);
-        if (client.matches()) { out.add("rpcClients", client.group(1)); return; }
+        if (client.matches()) { out.add("rpcClients", caller + ": " + client.group(1)); return; }
 
         if (operand.equals("http")) {
             // net/http client helpers; http.HandleFunc/Handle register routes on the default mux
             String httpMethod = CONFIG.httpMethodFor("go", "http", name);
             if (httpMethod != null) {
-                if (!args.isEmpty()) out.add("httpCalls", httpMethod + " " + urlOf(args.get(0), out));
+                if (!args.isEmpty()) out.add("httpCalls", caller + ": " + httpMethod + " " + urlOf(args.get(0), out));
                 return;
             }
             if (name.equals("NewRequest") || name.equals("NewRequestWithContext")) {
                 int i = name.equals("NewRequest") ? 0 : 1;
                 if (args.size() > i + 1) {
-                    out.add("httpCalls", goHttpMethod(out.text(args.get(i))) + " " + urlOf(args.get(i + 1), out));
+                    out.add("httpCalls", caller + ": " + goHttpMethod(out.text(args.get(i))) + " " + urlOf(args.get(i + 1), out));
                 }
                 return;
             }
@@ -448,6 +603,46 @@ public class PolyglotExtractor {
         return m.find() ? (m.group(1) != null ? m.group(1) : m.group(2)).toUpperCase() : "{" + arg + "}";
     }
 
+    private static String goReceiverType(SNode methodDecl, Out out) {
+        SNode recv = methodDecl.field("receiver");
+        if (recv == null) return "";
+        SNode param = recv.firstChildOfType("parameter_declaration");
+        return param == null ? "" : out.text(param.field("type")).replace("*", "");
+    }
+
+    private static String goEnclosingName(SNode node, Out out) {
+        SNode fn = node.ancestorOfType("function_declaration", "method_declaration");
+        if (fn == null) return "<module>";
+        String name = out.text(fn.field("name"));
+        return fn.type.equals("method_declaration") ? goReceiverType(fn, out) + "." + name : name;
+    }
+
+    private static List<String> goStructFields(SNode structType, Out out) {
+        SNode fieldList = structType.firstChildOfType("field_declaration_list");
+        if (fieldList == null) return List.of();
+        List<String> fields = new ArrayList<>();
+        for (SNode fd : fieldList.namedChildren()) {
+            if (!fd.type.equals("field_declaration")) continue;
+            SNode name = fd.field("name");
+            SNode type = fd.field("type");
+            if (name != null) fields.add(out.text(name) + ":" + (type == null ? "" : out.text(type)));
+        }
+        return fields;
+    }
+
+    private static String goParamList(SNode params, Out out) {
+        if (params == null) return "";
+        List<String> parts = new ArrayList<>();
+        for (SNode p : params.namedChildren()) {
+            if (!p.type.equals("parameter_declaration") && !p.type.equals("variadic_parameter_declaration")) continue;
+            SNode name = p.field("name");
+            SNode type = p.field("type");
+            String t = type == null ? "" : out.text(type);
+            parts.add(t + (name != null ? " " + out.text(name) : ""));
+        }
+        return String.join(", ", parts);
+    }
+
     // ------------------------------------------------------------------ C#
 
     private static final Pattern CS_HTTP_ATTR = Pattern.compile("Http(Get|Post|Put|Delete|Patch|Head|Options)");
@@ -468,9 +663,16 @@ public class PolyglotExtractor {
                         String role = CONFIG.classifyRole("csharp", typeName, csharpAttributeNames(n, out), supertypes);
                         out.add("classRole", typeName + ":" + role);
                     }
+                    if (n.type.equals("class_declaration") || n.type.equals("struct_declaration")) {
+                        csharpFields(n, out).forEach(f -> out.add("fields", typeName + "." + f));
+                    }
                     csharpGrpcImpl(supertypes, out);
                 }
-                case "method_declaration" -> out.add("functions", out.text(n.field("name")));
+                case "method_declaration" -> {
+                    String name = csharpQualifiedMethodName(n, out);
+                    out.add("functions", name);
+                    out.add("parameters", name + "(" + csharpParamList(n.field("parameters"), out) + ")");
+                }
                 case "using_directive" -> {
                     SNode name = n.namedChildCount() > 0 ? n.namedChild(n.namedChildCount() - 1) : null;
                     if (name != null) out.add("imports", out.text(name));
@@ -507,7 +709,7 @@ public class PolyglotExtractor {
                     String template = firstAttributeArg(attr, out);
                     String url = "/" + String.join("/", java.util.stream.Stream.of(prefix, template)
                             .filter(s -> s != null && !s.isEmpty()).map(s -> s.replaceAll("^/|/$", "")).toList());
-                    out.add("endpoints", verb.group(1).toUpperCase() + " " + url + " -> " + out.text(m.field("name")));
+                    out.add("endpoints", verb.group(1).toUpperCase() + " " + url + " -> " + className + "." + out.text(m.field("name")));
                 }
             }
         }
@@ -561,9 +763,10 @@ public class PolyglotExtractor {
         SNode nameNode = fn.field("name");
         String name = nameNode == null ? "" : out.text(nameNode.type.equals("generic_name") ? nameNode.namedChild(0) : nameNode);
         List<SNode> args = args(call, out);
+        String caller = csharpEnclosingName(call, out);
 
         if (name.equals("MapGrpcService") && nameNode.type.equals("generic_name")) {
-            out.add("rpcServers", lastSegment(out.text(nameNode.namedChild(1)).replaceAll("[<>]", "")));
+            out.add("rpcServers", caller + ": " + lastSegment(out.text(nameNode.namedChild(1)).replaceAll("[<>]", "")));
             return;
         }
         Matcher minimal = CS_MINIMAL_API.matcher(name);
@@ -578,9 +781,59 @@ public class PolyglotExtractor {
             SNode first = args.get(0).namedChildCount() > 0 ? args.get(0).namedChild(args.get(0).namedChildCount() - 1) : null;
             // Only string-ish first arguments: filters out cache.GetAsync(key) and similar
             if (first != null && (STRING_TYPES.contains(first.type) || first.type.equals("binary_expression"))) {
-                out.add("httpCalls", name.replaceAll("(String|Stream|ByteArray|AsJson|FromJson)?Async$", "").toUpperCase()
+                out.add("httpCalls", caller + ": " + name.replaceAll("(String|Stream|ByteArray|AsJson|FromJson)?Async$", "").toUpperCase()
                         + " " + urlOf(first, out));
             }
         }
+    }
+
+    private static String csharpQualifiedMethodName(SNode methodDecl, Out out) {
+        String name = out.text(methodDecl.field("name"));
+        SNode owner = methodDecl.ancestorOfType("class_declaration", "struct_declaration", "interface_declaration");
+        return owner == null ? name : out.text(owner.field("name")) + "." + name;
+    }
+
+    private static String csharpEnclosingName(SNode node, Out out) {
+        SNode fn = node.ancestorOfType("method_declaration", "constructor_declaration", "local_function_statement");
+        if (fn == null) return "<module>";
+        if (fn.type.equals("method_declaration")) return csharpQualifiedMethodName(fn, out);
+        SNode name = fn.field("name");
+        return name != null ? out.text(name) : "<anonymous>";
+    }
+
+    /** Plain fields and auto-properties directly on a class/struct body (not inherited, not local variables). */
+    private static List<String> csharpFields(SNode decl, Out out) {
+        SNode body = decl.field("body");
+        if (body == null) return List.of();
+        List<String> fields = new ArrayList<>();
+        for (SNode m : body.namedChildren()) {
+            if (m.type.equals("field_declaration")) {
+                SNode varDecl = m.firstChildOfType("variable_declaration");
+                if (varDecl == null) continue;
+                SNode type = varDecl.field("type");
+                for (SNode declarator : varDecl.namedChildren()) {
+                    if (!declarator.type.equals("variable_declarator")) continue;
+                    SNode name = declarator.field("name");
+                    if (name != null) fields.add(out.text(name) + ":" + (type == null ? "" : out.text(type)));
+                }
+            } else if (m.type.equals("property_declaration")) {
+                SNode name = m.field("name");
+                SNode type = m.field("type");
+                if (name != null) fields.add(out.text(name) + ":" + (type == null ? "" : out.text(type)));
+            }
+        }
+        return fields;
+    }
+
+    private static String csharpParamList(SNode params, Out out) {
+        if (params == null) return "";
+        List<String> parts = new ArrayList<>();
+        for (SNode p : params.namedChildren()) {
+            if (!p.type.equals("parameter")) continue;
+            SNode type = p.field("type");
+            SNode name = p.field("name");
+            parts.add((type == null ? "" : out.text(type)) + (name != null ? " " + out.text(name) : ""));
+        }
+        return String.join(", ", parts);
     }
 }

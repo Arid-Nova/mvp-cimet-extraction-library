@@ -1,4 +1,4 @@
-package edu.university.ecs.lab.experiments;
+package edu.university.ecs.lab.common.parsers.treesitter;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,7 +10,7 @@ import java.util.Map;
 
 /**
  * Declarative role-classification and REST-client rules for the non-Java languages, loaded from
- * {@code experiments/language-config.json}. Adapted from LaCIMET
+ * {@code treesitter/language-config.json}. Adapted from LaCIMET
  * (github.com/ShakthiYasas/LaCIMET, language_config.json + ir_generator.py) — the same style of
  * annotation/name-substring rule CIMET already uses for Java (see the original TreeSitterTest's
  * classifyRole, which is a hand-written Java copy of LaCIMET's Java role_patterns).
@@ -32,8 +32,8 @@ public final class LanguageConfig {
     public static LanguageConfig get() { return INSTANCE; }
 
     private static LanguageConfig load() {
-        try (InputStream in = LanguageConfig.class.getResourceAsStream("/experiments/language-config.json")) {
-            if (in == null) throw new IllegalStateException("experiments/language-config.json not found on classpath");
+        try (InputStream in = LanguageConfig.class.getResourceAsStream("/treesitter/language-config.json")) {
+            if (in == null) throw new IllegalStateException("treesitter/language-config.json not found on classpath");
             return new LanguageConfig(new ObjectMapper().readTree(in));
         } catch (Exception e) {
             throw new RuntimeException("Failed to load language-config.json", e);

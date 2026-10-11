@@ -8,6 +8,11 @@ import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import edu.university.ecs.lab.common.models.dto.PartialMicroserviceSystemDto;
+import edu.university.ecs.lab.common.parsers.JavaLanguageParser;
+import edu.university.ecs.lab.common.parsers.ParserRegistry;
+import edu.university.ecs.lab.common.parsers.ParseResult;
+import edu.university.ecs.lab.common.parsers.PolyglotLanguageParser;
+import edu.university.ecs.lab.common.parsers.treesitter.PolyglotExtractor;
 
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.json.JSONObject;
@@ -32,6 +37,13 @@ public class IRExtractionService {
     private final Config config;
 
     /**
+     * Registry of per-language source file parsers. Only a Java parser is registered today (a thin
+     * wrapper around the existing {@link SourceToObjectUtils}, see {@link JavaLanguageParser}); this
+     * is the plug-in point additional languages will register into.
+     */
+    private final ParserRegistry parserRegistry;
+
+    /**
      * This constructor initializes a new IRExtractionService and instantiates a
      * GitService object for repository manipulation
      *
@@ -41,6 +53,14 @@ public class IRExtractionService {
     public IRExtractionService(Config config) throws IOException, InterruptedException {
         gitService = new GitService(config);
         this.config = config;
+        this.parserRegistry = new ParserRegistry();
+        this.parserRegistry.register(new JavaLanguageParser());
+        // First-pass (#16): roles, imports, annotations, functions, and endpoints only - see
+        // PolyglotFactsToIrConverter's class comment for what's deliberately not mapped yet.
+        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.PYTHON));
+        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.GO));
+        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.CSHARP));
+        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.JAVASCRIPT));
     }
 
     /**
@@ -180,7 +200,11 @@ public class IRExtractionService {
         if (files != null) {
             for (File file : files) {
                 if (file.isDirectory()) {
-                    scanDirectory(file, microservice, rc);
+                    // #16: dependency/build directories (node_modules, .venv-equivalents, bin/obj, ...)
+                    // must not be walked - they can hold thousands of real-looking source files.
+                    if (!FileUtils.IGNORED_DIRECTORY_NAMES.contains(file.getName())) {
+                        scanDirectory(file, microservice, rc);
+                    }
                 } else if (FileUtils.isValidFile(file.getPath())) {
                     if(FileUtils.isConfigurationFile(file.getPath())) {
                         ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(file, rc, microservice);
@@ -188,10 +212,15 @@ public class IRExtractionService {
                             microservice.getFiles().add(configFile);
                         }
                     } else {
-                        AbstractClass abstractClass = SourceToObjectUtils.parseClass(microservice, file, rc, false);
-                        if (abstractClass != null) {
-                            microservice.addAbstractClass(abstractClass);
-                        }
+                        parserRegistry.findParserFor(file).ifPresent(parser -> {
+                            ParseResult result = parser.parse(microservice, file, rc, false);
+                            if (result.isSuccess() && result.getAbstractClass() != null) {
+                                microservice.addAbstractClass(result.getAbstractClass());
+                            }
+                            // A parse failure here means the parser itself errored (e.g. a JavaParser
+                            // exception); SourceToObjectUtils returning null for "not a class" or
+                            // "filtered by role" is still reported as success with no AbstractClass.
+                        });
                     }
                 }
             }

@@ -15,6 +15,13 @@ public class FileUtils {
     public static final Set<String> VALID_FILES = Set.of(
             "pom.xml",
             ".java",
+            ".py",
+            ".go",
+            ".cs",
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".cjs",
             ".yml",
             ".yaml",
             ".properties",
@@ -26,6 +33,33 @@ public class FileUtils {
             "DockerFile",
             "docker-compose.yml",
             "docker-compose.yaml"
+    );
+    /**
+     * Source-code extensions across every language a {@code LanguageParser} is registered for.
+     * {@link #isConfigurationFile(String)} used to just check "not .java"; that silently broke the
+     * moment other source languages were added to {@link #VALID_FILES}; it would have classified
+     * every .py/.go/.cs/.js file as a configuration file and routed it to the config-file parser
+     * instead of a language parser. Kept as an explicit list rather than re-deriving it, since
+     * VALID_FILES also contains non-extension config filenames (pom.xml, Dockerfile, ...).
+     */
+    private static final Set<String> SOURCE_FILE_EXTENSIONS = Set.of(
+            ".java", ".py", ".go", ".cs", ".js", ".jsx", ".mjs", ".cjs"
+    );
+    /**
+     * Directory names never worth scanning as application source: dependency trees, build output, VCS
+     * metadata. Also used by {@link edu.university.ecs.lab.intermediate.create.services.ServiceBoundaryDetector}
+     * to decide which folders can be microservice roots - kept here as the single shared list.
+     * IRExtractionService.scanDirectory did not honor this list until #16: for a Java-only pipeline
+     * that mostly went unnoticed (a Maven "target" holds .class files, not .java sources, so there was
+     * nothing there to mis-parse), but a real JS repo's node_modules (or Python's .venv, C#'s bin/obj)
+     * holds thousands of real source files that would otherwise get scanned as if they were application
+     * code - confirmed by reproducing it against a real clone before fixing.
+     */
+    public static final Set<String> IGNORED_DIRECTORY_NAMES = Set.of(
+            ".git", ".gradle", ".idea", ".mvn", "build", "node_modules", "out", "target",
+            // ASP.NET Core's static web assets folder - always vendored frontend libraries (e.g. a
+            // copy of Bootstrap complete with its own package.json), never backend/service code.
+            "wwwroot"
     );
     public static final String SYS_SEPARATOR = System.getProperty("file.separator");
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
@@ -349,7 +383,7 @@ public class FileUtils {
      * @return boolean true if it is a configuration file
      */
     public static boolean isConfigurationFile(String path) {
-        return isValidFile(path) && !path.endsWith(".java");
+        return isValidFile(path) && SOURCE_FILE_EXTENSIONS.stream().noneMatch(path::endsWith);
     }
 
     /**

@@ -11,8 +11,10 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static edu.university.ecs.lab.experiments.FileFacts.sortedAttributes;
-import edu.university.ecs.lab.experiments.TsUtil.SNode;
+import edu.university.ecs.lab.common.parsers.treesitter.FileFacts;
+import static edu.university.ecs.lab.common.parsers.treesitter.FileFacts.sortedAttributes;
+import edu.university.ecs.lab.common.parsers.treesitter.TsUtil;
+import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
 
 /**
  * Tree-sitter re-implementation of CIMET's Java extraction ({@code SourceToObjectUtils}).

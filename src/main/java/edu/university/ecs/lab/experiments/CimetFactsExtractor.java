@@ -11,7 +11,8 @@ import java.io.File;
 import java.nio.file.Path;
 import java.util.*;
 
-import static edu.university.ecs.lab.experiments.FileFacts.sortedAttributes;
+import edu.university.ecs.lab.common.parsers.treesitter.FileFacts;
+import static edu.university.ecs.lab.common.parsers.treesitter.FileFacts.sortedAttributes;
 
 /**
  * Baseline: runs the original CIMET JavaParser pipeline ({@link SourceToObjectUtils#parseClass})
