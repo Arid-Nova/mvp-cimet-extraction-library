@@ -119,6 +119,33 @@ class PolyglotRegistryIntegrationTest {
         assertTrue(declaration.getClasses().isEmpty());
     }
 
+    @Test void explicitTrustedProfilesPropagateWithoutChangingGlobalConfiguration() throws Exception {
+        Path root = Files.createDirectories(temporary.resolve("source"));
+        Path client = root.resolve("client.ts");
+        Files.writeString(client, "import api from './apiClient'; export function read(){return api.get_request('/users');}");
+        Files.writeString(root.resolve("apiClient.ts"), "export default {get_request(path:string){ return path; }};");
+        Path profile = temporary.resolve("trusted-profile.json");
+        Files.writeString(profile, "{\"wrappers\":[{\"module\":\"apiClient\",\"kind\":\"server\"}],\"backendEnv\":[],\"backendOrigins\":[]}");
+        String globalBefore = System.getProperty("cimet.javascript.config");
+        ParserRegistry registry = ParserRegistry.createDefault(adapter, "node", profile);
+        registry.prepareRepository(root, CONFIG);
+        ParseResult result = registry.findParserFor(client.toFile()).orElseThrow().parse(service(), client.toFile(), CONFIG, false);
+        assertTrue(result.isSuccess(), result.getFailureReason());
+        List<RestCall> calls = result.getClasses().stream().flatMap(module->module.getRestCalls().stream()).toList();
+        assertEquals(1, calls.size());
+        assertEquals("/users", calls.getFirst().getUrl());
+        assertEquals("backend", calls.getFirst().getMetadata().getString("target"));
+        assertEquals(globalBefore, System.getProperty("cimet.javascript.config"));
+        // A separate explicit neutral profile stays independent of the configured registry.
+        Path neutral = temporary.resolve("neutral-profile.json");
+        Files.writeString(neutral, "{\"wrappers\":[],\"backendEnv\":[],\"backendOrigins\":[]}");
+        JavaScriptLanguageParser other = new JavaScriptLanguageParser(adapter, "node", neutral);
+        other.prepareRepository(root, CONFIG);
+        ParseResult isolated = other.parse(service(), client.toFile(), CONFIG, false);
+        assertTrue(isolated.isSuccess(), isolated.getFailureReason());
+        assertEquals(0, isolated.getClasses().stream().mapToInt(module->module.getRestCalls().size()).sum());
+    }
+
     @Test void multipleTypesUsePortableIdentitiesAndSharedPhysicalSourceMetadataWithoutSideEffects() {
         FileFacts facts = new FileFacts("/api.cs").put("types", List.of("class AlphaController", "class BetaService"))
                 .put("classRole", List.of("AlphaController:CONTROLLER", "BetaService:SERVICE"))

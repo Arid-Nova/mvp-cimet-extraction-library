@@ -20,13 +20,20 @@ import java.util.Set;
 public final class JavaScriptLanguageParser implements LanguageParser {
     public static final Set<String> EXTENSIONS = Set.of(".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs", ".mts", ".cts");
     private final JavaScriptExtractionService extraction;
+    private final Path analyzerConfig;
     private Path repositoryRoot;
     private RepositoryConfig config;
     private ObjectNode snapshot;
     private String extractionFailure;
 
     public JavaScriptLanguageParser(Path adapterDirectory, String nodeExecutable) {
+        this(adapterDirectory, nodeExecutable, null);
+    }
+
+    /** A trusted caller-selected profile overrides process defaults without mutating global properties. */
+    public JavaScriptLanguageParser(Path adapterDirectory, String nodeExecutable, Path analyzerConfig) {
         this.extraction = new JavaScriptExtractionService(adapterDirectory, nodeExecutable);
+        this.analyzerConfig = analyzerConfig == null ? null : analyzerConfig.toAbsolutePath().normalize();
     }
 
     @Override public boolean canParse(File sourceFile) {
@@ -57,9 +64,14 @@ public final class JavaScriptLanguageParser implements LanguageParser {
         if (extractionFailure != null) throw new IOException(extractionFailure);
         if (snapshot == null) {
             try {
-                String configuredProfile = System.getProperty("cimet.javascript.config");
-                if (configuredProfile != null && !configuredProfile.isBlank()) {
-                    snapshot = extraction.extract(repositoryRoot, "backend", config.getRepoName(), Path.of(configuredProfile));
+                Path configuredProfile = analyzerConfig;
+                if (configuredProfile == null) {
+                    String setting = System.getProperty("cimet.javascript.config");
+                    if (setting == null || setting.isBlank()) setting = System.getenv("CIMET_JAVASCRIPT_CONFIG");
+                    if (setting != null && !setting.isBlank()) configuredProfile = Path.of(setting);
+                }
+                if (configuredProfile != null) {
+                    snapshot = extraction.extract(repositoryRoot, "backend", config.getRepoName(), configuredProfile);
                 } else {
                     // The standalone study's historical defaults must not become assumptions about arbitrary projects.
                     Path neutral = Files.createTempFile("cimet-javascript-profile-", ".json");

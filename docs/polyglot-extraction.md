@@ -95,6 +95,10 @@ service count.
 The integrated JavaScript parser uses a neutral wrapper/origin profile.
 Project-specific wrappers and backend environment names require a trusted JSON
 profile selected with `-Dcimet.javascript.config=/trusted/profile.json`. The
+environment variable `CIMET_JAVASCRIPT_CONFIG` is also supported. Embedded callers
+can pass `ParserRegistry.createDefault(adapterDirectory, nodeExecutable, profile)`
+or construct `JavaScriptLanguageParser(adapterDirectory, nodeExecutable, profile)`.
+The explicit profile takes precedence and does not change global properties. The
 standalone study adapter retains its documented historical default profile; its
 assumptions are not silently applied by the integrated parser.
 

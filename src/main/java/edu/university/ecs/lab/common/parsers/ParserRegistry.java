@@ -25,9 +25,14 @@ public class ParserRegistry {
     }
 
     public static ParserRegistry createDefault(Path adapterDirectory, String nodeExecutable) {
+        return createDefault(adapterDirectory, nodeExecutable, null);
+    }
+
+    /** Explicit trusted JavaScript profile for an extraction job; no process-global configuration changes. */
+    public static ParserRegistry createDefault(Path adapterDirectory, String nodeExecutable, Path analyzerConfig) {
         ParserRegistry registry = new ParserRegistry();
         registry.register(new JavaLanguageParser());
-        registry.register(new JavaScriptLanguageParser(adapterDirectory, nodeExecutable));
+        registry.register(new JavaScriptLanguageParser(adapterDirectory, nodeExecutable, analyzerConfig));
         for (PolyglotExtractor.Language language : List.of(PolyglotExtractor.Language.PYTHON,
                 PolyglotExtractor.Language.GO, PolyglotExtractor.Language.CSHARP)) {
             registry.register(new PolyglotLanguageParser(language));
