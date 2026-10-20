@@ -8,3 +8,9 @@ target/
 output/
 clone/
 settings.xml
+
+# Local deliverables and generated dependencies
+*.xlsx
+~$*
+adapter/javascript/node_modules/
+study-output/

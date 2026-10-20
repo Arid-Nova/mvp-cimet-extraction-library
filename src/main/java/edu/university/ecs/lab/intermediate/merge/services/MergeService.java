@@ -5,6 +5,7 @@ import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.StringUtils;
 import edu.university.ecs.lab.delta.models.*;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
+import edu.university.ecs.lab.delta.services.SnapshotDeltaService;
 import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
 
 import java.io.File;
@@ -34,6 +35,19 @@ public class MergeService {
      * This method generates the new IR from the old IR + Delta file
      */
     public void generateMergeIR() {
+        if (systemChange.getTargetSnapshot() != null) {
+            if (systemChange.getBaseFingerprint() == null ||
+                    !systemChange.getBaseFingerprint().equals(SnapshotDeltaService.fingerprint(microserviceSystem)))
+                throw new IllegalArgumentException("Snapshot delta does not match the supplied base IR");
+            MicroserviceSystem target = SnapshotDeltaService.copy(systemChange.getTargetSnapshot());
+            microserviceSystem.setName(target.getName());
+            microserviceSystem.setVersion(target.getVersion());
+            microserviceSystem.setMetadata(target.getMetadata());
+            microserviceSystem.setMicroservices(target.getMicroservices());
+            microserviceSystem.setOrphans(target.getOrphans());
+            MicroserviceSystem.setParentReferencesRecursively(microserviceSystem, null);
+            return;
+        }
         // If no changes are present, return
         if (Objects.isNull(systemChange.getChanges())) {
             return;

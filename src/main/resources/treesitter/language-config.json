@@ -1,0 +1,64 @@
+{
+  "_comment": "Declarative role-classification and REST-client rules, adapted from LaCIMET (https://github.com/ShakthiYasas/LaCIMET) language_config.json. Consumed by edu.university.ecs.lab.experiments.LanguageConfig for the non-Java languages in PolyglotExtractor. role_patterns are checked in the order listed (first match wins), the same way CIMET's own SourceToObjectUtils.parseClassRole checks Java annotations in order.",
+
+  "javascript": {
+    "role_patterns": {
+      "CONTROLLER": { "annotations": ["Controller", "Get", "Post", "Put", "Delete", "Patch"], "name_contains": ["Controller", "Router"] },
+      "SERVICE":    { "name_contains": ["Service"] },
+      "REPOSITORY": { "name_contains": ["Repository", "Dao", "Store"] },
+      "ENTITY":     { "supertypes": ["Model", "Schema", "Document"] }
+    },
+    "rest_clients": {
+      "_comment": "object name (as written at the call site) -> {method name -> HTTP method}",
+      "axios":       { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH", "head": "HEAD", "options": "OPTIONS" },
+      "fetch":       { "fetch": "ANY" },
+      "got":         { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" },
+      "superagent":  { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" },
+      "ky":          { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" },
+      "http":        { "get": "GET", "request": "ANY" },
+      "https":       { "get": "GET", "request": "ANY" },
+      "request":     { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE" }
+    }
+  },
+
+  "python": {
+    "role_patterns": {
+      "CONTROLLER": { "decorators": ["app.route", "api.get", "api.post", "router.get", "router.post", "app.get", "app.post"], "name_contains": ["View", "Controller", "Resource"] },
+      "SERVICE":    { "name_contains": ["Service", "Manager"] },
+      "REPOSITORY": { "name_contains": ["Repository", "Dao"] },
+      "ENTITY":     { "supertypes": ["Model", "Base", "BaseModel", "Document"] }
+    },
+    "rest_clients": {
+      "requests": { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" },
+      "httpx":    { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" },
+      "session":  { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" },
+      "client":   { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" },
+      "aiohttp":  { "get": "GET", "post": "POST", "put": "PUT", "delete": "DELETE", "patch": "PATCH" }
+    }
+  },
+
+  "go": {
+    "role_patterns": {
+      "CONTROLLER": { "name_contains": ["Handler", "Controller"] },
+      "SERVICE":    { "name_contains": ["Service"] },
+      "REPOSITORY": { "name_contains": ["Repository", "Store"] },
+      "ENTITY":     { "name_contains": ["Model"] }
+    },
+    "rest_clients": {
+      "_comment": "http.NewRequest(method, url, ...) takes the method as its first argument and is handled in code, not here.",
+      "http": { "get": "GET", "head": "HEAD", "post": "POST", "postform": "POST" }
+    }
+  },
+
+  "csharp": {
+    "role_patterns": {
+      "CONTROLLER": { "annotations": ["ApiController"], "supertypes": ["ControllerBase", "Controller"], "name_contains": ["Controller"] },
+      "SERVICE":    { "name_contains": ["Service"] },
+      "REPOSITORY": { "name_contains": ["Repository"] },
+      "ENTITY":     { "annotations": ["Table"] }
+    },
+    "rest_clients": {
+      "_comment": "LaCIMET keys this by the declared type name (HttpClient), which never matches the call-site variable name it actually compares against. We don't have type resolution either, so we match the well-known *Async method names directly instead (see LanguageConfig.httpMethodForCSharp)."
+    }
+  }
+}

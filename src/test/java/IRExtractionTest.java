@@ -6,6 +6,7 @@ import edu.university.ecs.lab.common.services.GitService;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import org.eclipse.jgit.api.errors.GitAPIException;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +17,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Optional;
 
+@Tag("network")
 public class IRExtractionTest {
     @Test
     void testGenerateIR() throws IOException, InterruptedException, GitAPIException {

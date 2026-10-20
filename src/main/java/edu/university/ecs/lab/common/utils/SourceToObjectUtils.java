@@ -21,6 +21,7 @@ import edu.university.ecs.lab.common.models.ir.*;
 
 import java.io.File;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -36,26 +37,33 @@ public class SourceToObjectUtils {
 
 
     private static void generateStaticValues(File sourceFile, RepositoryConfig config) {
+        // Never let a malformed or package-less file inherit the preceding file's parse state.
+        cu = null;
+        path = null;
+        className = null;
+        packageName = "";
+        combinedTypeSolver = null;
         // Parse the highest level node being compilation unit
         try {
-            cu = StaticJavaParser.parse(sourceFile);
+            byte[] source = SourceFileReader.read(sourceFile.toPath());
+            TypeSolver reflectionTypeSolver = new ReflectionTypeSolver();
+            TypeSolver javaParserTypeSolver = new JavaParserTypeSolver(FileUtils.getRepositoryPath(config.getRepoName()));
+            combinedTypeSolver = new CombinedTypeSolver(reflectionTypeSolver, javaParserTypeSolver);
+            // Compilation units capture parser configuration: select this checkout's solver before parsing.
+            StaticJavaParser.getConfiguration().setSymbolResolver(new JavaSymbolSolver(combinedTypeSolver));
+            cu = StaticJavaParser.parse(new String(source, StandardCharsets.UTF_8));
+            cu.setStorage(sourceFile.toPath().toAbsolutePath());
         } catch (Exception e) {
-            return;
+            // JavaParser diagnostic text may contain source literals; expose only a bounded failure category.
+            String category = e instanceof java.io.IOException && e.getMessage() != null
+                    && e.getMessage().startsWith("SOURCE_FILE_TOO_LARGE") ? "SOURCE_FILE_TOO_LARGE" : e.getClass().getSimpleName();
+            throw new IllegalArgumentException("Could not parse Java source (" + category + ")");
         }
         if (!cu.findAll(PackageDeclaration.class).isEmpty()) {
             packageName = cu.findAll(PackageDeclaration.class).get(0).getNameAsString();
         }
         path = Path.of(FileUtils.localPathToGitPath(sourceFile.getPath(), config.getRepoName()));
 
-        TypeSolver reflectionTypeSolver = new ReflectionTypeSolver();
-        TypeSolver javaParserTypeSolver = new JavaParserTypeSolver(FileUtils.getRepositoryPath(config.getRepoName()));
-
-        combinedTypeSolver = new CombinedTypeSolver();
-        combinedTypeSolver.add(reflectionTypeSolver);
-        combinedTypeSolver.add(javaParserTypeSolver);
-
-        JavaSymbolSolver symbolSolver = new JavaSymbolSolver(combinedTypeSolver);
-        StaticJavaParser.getConfiguration().setSymbolResolver(symbolSolver);
         className = sourceFile.getName().replace(".java", "");
     }
 
@@ -65,7 +73,7 @@ public class SourceToObjectUtils {
      * @param sourceFile the file to parse
      * @return the AbstractClass object representing the file
      */
-    public static AbstractClass parseClass(Microservice microservice, File sourceFile, RepositoryConfig config, Boolean filterOutUnknownClassRoles) {
+    public static synchronized AbstractClass parseClass(Microservice microservice, File sourceFile, RepositoryConfig config, Boolean filterOutUnknownClassRoles) {
         // Guard condition
         if(Objects.isNull(sourceFile) || FileUtils.isConfigurationFile(sourceFile.getPath())) {
             return null;

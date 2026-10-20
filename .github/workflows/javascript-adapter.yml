@@ -1,0 +1,38 @@
+name: Polyglot extraction
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  adapter:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: adapter/javascript/package-lock.json
+      - name: Install parser dependencies only
+        run: npm --prefix adapter/javascript ci --ignore-scripts
+      - name: Parser tests
+        run: npm --prefix adapter/javascript test
+      - name: JVM integration and Java boundary regression tests
+        run: mvn --batch-mode clean verify
+      - name: Build executable
+        run: mvn --batch-mode -Pjavascript-cli -DskipTests package
+      - name: Study runner tests
+        run: node --test study/*.test.mjs
