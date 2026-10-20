@@ -8,6 +8,7 @@ import edu.university.ecs.lab.common.parsers.treesitter.FileFacts;
 
 import java.nio.file.Path;
 import java.util.*;
+import org.json.JSONObject;
 
 /**
  * Converts the flat, string-based facts produced by {@code PolyglotExtractor} (the tree-sitter
@@ -30,14 +31,13 @@ import java.util.*;
  *
  * <p><b>Path identity:</b> the first (or only) type in the file keeps the real file path, so the
  * common single-class-per-file case is unaffected; additional types in the same file get a
- * disambiguated path ({@code <path>::<TypeName>}), since two different {@link AbstractClass}es sharing
+ * disambiguated portable path ({@code <path>.__types__/<TypeName>-<hash>}), since two different {@link AbstractClass}es sharing
  * one path would otherwise collide with path-keyed matching elsewhere in the pipeline (e.g. delta
  * comparison, path-based test lookups like {@code TestUtilities.deepCompareSystems}).
  *
  * <p><b>Known gaps, still deliberately left out rather than modeled incorrectly:</b> parameter/field
  * types are the literal source text (e.g. "List&lt;string&gt;"), not resolved/simplified type names;
- * and the type an outgoing call's target object resolves to isn't tracked (Java's own tree-sitter
- * parser only gets this right ~75% of the time itself, see JavaParityRunner — not attempted here).
+ * and the type an outgoing call's target object resolves to isn't tracked.
  */
 public final class PolyglotFactsToIrConverter {
 
@@ -50,6 +50,15 @@ public final class PolyglotFactsToIrConverter {
 
     public static AbstractClass convert(Microservice microservice, Path gitPath, String fileBaseName, FileFacts facts,
                                          boolean filterOutUnknownClassRoles) {
+        List<AbstractClass> classes = convertAll(microservice, gitPath, fileBaseName, facts, filterOutUnknownClassRoles);
+        // Compatibility with the original one-result contract. New dispatch consumes convertAll.
+        classes.stream().skip(1).forEach(microservice::addAbstractClass);
+        return classes.isEmpty() ? null : classes.getFirst();
+    }
+
+    /** Converts every declared type without adding nodes to the supplied microservice. */
+    public static List<AbstractClass> convertAll(Microservice microservice, Path gitPath, String fileBaseName, FileFacts facts,
+                                                 boolean filterOutUnknownClassRoles) {
         List<String[]> types = parseTypes(facts); // {name, role}, in declaration order
         Map<String, ClassSlot> byName = new LinkedHashMap<>();
 
@@ -61,7 +70,7 @@ public final class PolyglotFactsToIrConverter {
         } else {
             boolean first = true;
             for (String[] type : types) {
-                Path path = first ? gitPath : Path.of(gitPath + "::" + type[0]);
+                Path path = first ? gitPath : typeIdentity(gitPath, type[0]);
                 byName.put(type[0], newSlot(microservice, path, type[0], roleOf(type[1])));
                 first = false;
             }
@@ -89,6 +98,7 @@ public final class PolyglotFactsToIrConverter {
             i++;
             EndpointFact ef = parseEndpointFact(endpointFact, i);
             AbstractClass target = resolve(byName, ownerOf(ef.name()), microservice, gitPath, fileBaseName);
+            if (target.getClassRole() == ClassRole.UNKNOWN) target.setClassRole(ClassRole.CONTROLLER);
             Method base = new Method(target, ef.name(), new Location());
             Endpoint endpoint = new Endpoint(base, ef.url(), ef.httpMethod());
             attachParameters(endpoint, ef.name(), paramSignatures);
@@ -114,27 +124,28 @@ public final class PolyglotFactsToIrConverter {
         attachRpcFacts(byName, methodsByQualifiedName, facts.get("rpcServers"), "grpc-server", microservice, gitPath, fileBaseName);
         attachRpcFacts(byName, methodsByQualifiedName, facts.get("rpcClients"), "grpc-client", microservice, gitPath, fileBaseName);
 
-        // Only one AbstractClass is returned (matching the LanguageParser contract, one return value per
-        // file); any additional real classes the file declared are added to the microservice directly
-        // here, since the caller (PolyglotLanguageParser) only ever adds the one it gets back.
-        // filterOutUnknownClassRoles applies uniformly to every class this file produced, not just the
-        // one returned - otherwise a filtered-out primary could still leave an UNKNOWN-role secondary
-        // class added on its behalf.
-        AbstractClass returned = null;
+        // Filtering applies uniformly before the caller attaches the complete physical-file result.
+        List<AbstractClass> converted = new ArrayList<>();
         for (ClassSlot slot : byName.values()) {
             AbstractClass ac = slot.abstractClass();
+            ac.setMetadata(new JSONObject().put("sourcePath", gitPath.toString().replace('\\', '/'))
+                    .put("declaredType", slot.name()).put("extractor", "cimet-tree-sitter")
+                    .put("roleResolution", "framework-and-name-heuristics"));
             if (filterOutUnknownClassRoles && ac.getClassRole() == ClassRole.UNKNOWN) continue;
-            if (returned == null) {
-                returned = ac;
-            } else {
-                microservice.addAbstractClass(ac);
-            }
+            converted.add(ac);
         }
-        return returned;
+        return List.copyOf(converted);
+    }
+
+    private static Path typeIdentity(Path source, String name) {
+        // No colons, angle brackets, or Windows device names. sourcePath metadata retains physical identity.
+        String safe = "_" + name.replaceAll("[^a-zA-Z0-9._-]", "_") + "-" + Integer.toUnsignedString(name.hashCode(), 16);
+        return Path.of(source + ".__types__").resolve(safe);
     }
 
     private static ClassSlot newSlot(Microservice microservice, Path path, String name, ClassRole role) {
         JClass abstractClass = new JClass(microservice, path, null, "", Set.of());
+        abstractClass.setName(name);
         abstractClass.setClassRole(role);
         return new ClassSlot(abstractClass, name);
     }
@@ -156,7 +167,7 @@ public final class PolyglotFactsToIrConverter {
         if (module == null) {
             // byName always already holds at least the file's first real class (or its single fallback
             // container) by the time this runs, so the module container never gets the bare file path.
-            module = newSlot(microservice, Path.of(gitPath + "::" + MODULE_CONTAINER), fileBaseName, ClassRole.UNKNOWN);
+            module = newSlot(microservice, typeIdentity(gitPath, MODULE_CONTAINER), fileBaseName, ClassRole.UNKNOWN);
             byName.put(MODULE_CONTAINER, module);
         }
         return module.abstractClass();

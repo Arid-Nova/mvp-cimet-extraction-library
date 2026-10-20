@@ -7,6 +7,7 @@ import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 
 import java.io.File;
 import java.util.Set;
+import org.json.JSONObject;
 
 /**
  * Wraps CIMET's existing Java parser (JavaParser + a symbol solver, in {@link SourceToObjectUtils})
@@ -40,6 +41,12 @@ public class JavaLanguageParser implements LanguageParser {
         try {
             // May legitimately return null: not a class/interface/enum/record, or filtered out by role.
             AbstractClass abstractClass = SourceToObjectUtils.parseClass(microservice, sourceFile, config, filterOutUnknownClassRoles);
+            if (abstractClass != null) {
+                JSONObject metadata = abstractClass.getMetadata() == null ? new JSONObject() : abstractClass.getMetadata();
+                metadata.put("sourcePath", abstractClass.getPath().toString().replace('\\', '/'));
+                metadata.put("language", "java");
+                abstractClass.setMetadata(metadata);
+            }
             return ParseResult.success(abstractClass);
         } catch (Exception e) {
             return ParseResult.failure("JavaParser failed on " + sourceFile.getPath() + ": " + e);

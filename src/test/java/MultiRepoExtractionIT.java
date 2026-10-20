@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
  */
 @Tag("integration")
 @Tag("multi-repo")
+@Tag("network")
 class MultiRepoExtractionIT {
 
     private static final Path CONFIG_PATH =

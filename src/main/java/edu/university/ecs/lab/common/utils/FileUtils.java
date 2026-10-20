@@ -12,6 +12,29 @@ import java.util.Set;
  * Manages all file paths and file path conversion functions.
  */
 public class FileUtils {
+    private static final ThreadLocal<java.util.Map<String, Path>> REPOSITORY_ROOTS =
+            ThreadLocal.withInitial(java.util.HashMap::new);
+
+    /** Registers an explicit local checkout root only for the duration of the calling thread's scan. */
+    public static RepositoryPathScope withRepositoryRoot(String repoName, Path root) {
+        java.util.Objects.requireNonNull(repoName);
+        Path previous = REPOSITORY_ROOTS.get().put(repoName, root.toAbsolutePath().normalize());
+        return new RepositoryPathScope(repoName, previous);
+    }
+
+    public static final class RepositoryPathScope implements AutoCloseable {
+        private final String name;
+        private final Path previous;
+        private boolean closed;
+        private RepositoryPathScope(String name, Path previous) { this.name = name; this.previous = previous; }
+        @Override public void close() {
+            if (closed) return;
+            closed = true;
+            if (previous == null) REPOSITORY_ROOTS.get().remove(name);
+            else REPOSITORY_ROOTS.get().put(name, previous);
+            if (REPOSITORY_ROOTS.get().isEmpty()) REPOSITORY_ROOTS.remove();
+        }
+    }
     public static final Set<String> VALID_FILES = Set.of(
             "pom.xml",
             ".java",
@@ -22,6 +45,10 @@ public class FileUtils {
             ".jsx",
             ".mjs",
             ".cjs",
+            ".ts",
+            ".tsx",
+            ".mts",
+            ".cts",
             ".yml",
             ".yaml",
             ".properties",
@@ -43,7 +70,7 @@ public class FileUtils {
      * VALID_FILES also contains non-extension config filenames (pom.xml, Dockerfile, ...).
      */
     private static final Set<String> SOURCE_FILE_EXTENSIONS = Set.of(
-            ".java", ".py", ".go", ".cs", ".js", ".jsx", ".mjs", ".cjs"
+            ".java", ".py", ".go", ".cs", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"
     );
     /**
      * Directory names never worth scanning as application source: dependency trees, build output, VCS
@@ -59,7 +86,7 @@ public class FileUtils {
             ".git", ".gradle", ".idea", ".mvn", "build", "node_modules", "out", "target",
             // ASP.NET Core's static web assets folder - always vendored frontend libraries (e.g. a
             // copy of Bootstrap complete with its own package.json), never backend/service code.
-            "wwwroot"
+            "wwwroot", ".venv", "venv", "__pycache__", "bin", "obj", "dist", "vendor", ".next", "coverage"
     );
     public static final String SYS_SEPARATOR = System.getProperty("file.separator");
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
@@ -82,6 +109,8 @@ public class FileUtils {
      * @return the relative path string where that repository is cloned to
      */
     public static String getRepositoryPath(String repoName) {
+        Path scoped = REPOSITORY_ROOTS.get().get(repoName);
+        if (scoped != null) return scoped.toString();
         return getClonePath() + SYS_SEPARATOR + repoName;
     }
 
@@ -161,6 +190,17 @@ public class FileUtils {
             return normalizedPath;
         }
 
+        Path scopedRoot = REPOSITORY_ROOTS.get().get(repoName);
+        if (scopedRoot != null) {
+            String root = normalizePathString(scopedRoot.toString());
+            boolean windows = SYS_SEPARATOR.equals("\\");
+            String candidate = windows ? normalizedPath.toLowerCase(java.util.Locale.ROOT) : normalizedPath;
+            String prefix = windows ? root.toLowerCase(java.util.Locale.ROOT) : root;
+            if (candidate.equals(prefix) || candidate.startsWith(prefix + GIT_SEPARATOR)) {
+                return ensureLeadingGitSeparator(normalizedPath.substring(root.length()));
+            }
+        }
+
         String cloneRepoMarker = GIT_SEPARATOR + DEFAULT_CLONE_PATH + GIT_SEPARATOR + repoName;
         int cloneRepoIndex = normalizedPath.indexOf(cloneRepoMarker);
         if (cloneRepoIndex >= 0) {
@@ -173,6 +213,19 @@ public class FileUtils {
         }
         if (normalizedPath.startsWith(relativeCloneRepoMarker + GIT_SEPARATOR)) {
             return ensureLeadingGitSeparator(normalizedPath.substring(relativeCloneRepoMarker.length()));
+        }
+
+        // Direct parser callers may supply an absolute checkout not located under clone/.
+        // Only strip a complete, explicitly named repository segment; never emit /C:/... as an IR path.
+        boolean absoluteSource;
+        try { absoluteSource = Path.of(path).isAbsolute(); }
+        catch (java.nio.file.InvalidPathException ignored) { absoluteSource = false; }
+        if (absoluteSource && repoName != null && !repoName.isBlank()) {
+            String repoMarker = GIT_SEPARATOR + repoName;
+            int repositoryIndex = normalizedPath.indexOf(repoMarker + GIT_SEPARATOR);
+            if (repositoryIndex >= 0) {
+                return ensureLeadingGitSeparator(normalizedPath.substring(repositoryIndex + repoMarker.length()));
+            }
         }
 
         return ensureLeadingGitSeparator(normalizedPath);

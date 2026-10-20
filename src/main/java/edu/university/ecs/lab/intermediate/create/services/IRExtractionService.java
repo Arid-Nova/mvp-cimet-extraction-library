@@ -8,11 +8,8 @@ import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
 import edu.university.ecs.lab.common.models.dto.PartialMicroserviceSystemDto;
-import edu.university.ecs.lab.common.parsers.JavaLanguageParser;
 import edu.university.ecs.lab.common.parsers.ParserRegistry;
 import edu.university.ecs.lab.common.parsers.ParseResult;
-import edu.university.ecs.lab.common.parsers.PolyglotLanguageParser;
-import edu.university.ecs.lab.common.parsers.treesitter.PolyglotExtractor;
 
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.json.JSONObject;
@@ -20,12 +17,20 @@ import org.json.JSONObject;
 import java.io.*;
 import java.util.*;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import org.json.JSONArray;
 
 /**
  * Top-level service for extracting intermediate representation from remote repositories. Methods
  * are allowed to exit the program with an error code if an error occurs.
  */
 public class IRExtractionService {
+    /** Explicit opt-in factory; existing Java repository extraction is unchanged. */
+    public static edu.university.ecs.lab.javascript.JavaScriptExtractionService createJavaScript(Path adapterDirectory) {
+        return new edu.university.ecs.lab.javascript.JavaScriptExtractionService(adapterDirectory);
+    }
+
     /**
      * Service to handle cloning from git
      */
@@ -37,9 +42,8 @@ public class IRExtractionService {
     private final Config config;
 
     /**
-     * Registry of per-language source file parsers. Only a Java parser is registered today (a thin
-     * wrapper around the existing {@link SourceToObjectUtils}, see {@link JavaLanguageParser}); this
-     * is the plug-in point additional languages will register into.
+     * Per-job registry of language-specific parsers. Repository context is prepared once,
+     * so JavaScript module resolution does not start a process for every source file.
      */
     private final ParserRegistry parserRegistry;
 
@@ -51,16 +55,10 @@ public class IRExtractionService {
      * @see GitService
      */
     public IRExtractionService(Config config) throws IOException, InterruptedException {
+        validateRepositoryCacheIdentities(config);
         gitService = new GitService(config);
         this.config = config;
-        this.parserRegistry = new ParserRegistry();
-        this.parserRegistry.register(new JavaLanguageParser());
-        // First-pass (#16): roles, imports, annotations, functions, and endpoints only - see
-        // PolyglotFactsToIrConverter's class comment for what's deliberately not mapped yet.
-        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.PYTHON));
-        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.GO));
-        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.CSHARP));
-        this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.JAVASCRIPT));
+        this.parserRegistry = ParserRegistry.createDefault();
     }
 
     /**
@@ -73,21 +71,12 @@ public class IRExtractionService {
                                                                  boolean writePartialIRs)
             throws IOException, InterruptedException, GitAPIException {
         for (RepositoryConfig rc : config.getSystemRepositories()) {
-            Set<Microservice> microservices;
-            File partialIR = new File(FileUtils.getPartialIRPath(rc).toString());
-            if (partialIR.exists() && !partialIR.isDirectory()) {
-                microservices = readPartial(FileUtils.getPartialIRPath(rc)).getMicroservices();
-                normalizeRepositoryPaths(microservices, rc);
-                if (writePartialIRs) {
-                    JsonReadWriteUtils.writeToJSON(FileUtils.getPartialIRPath(rc), new PartialMicroserviceSystemDto(microservices));
-                }
-            }
-            else {
-                microservices = cloneAndScanServices(microserviceSystem, rc);
-                normalizeRepositoryPaths(microservices, rc);
-                if (writePartialIRs) {
-                    JsonReadWriteUtils.writeToJSON(FileUtils.getPartialIRPath(rc), new PartialMicroserviceSystemDto(microservices));
-                }
+            // Saved partials may have been written by another parser version or configuration.
+            // Re-extract rather than silently returning stale Java-only/polyglot evidence.
+            Set<Microservice> microservices = cloneAndScanServices(microserviceSystem, rc);
+            normalizeRepositoryPaths(microservices, rc);
+            if (writePartialIRs) {
+                JsonReadWriteUtils.writeToJSON(FileUtils.getPartialIRPath(rc), new PartialMicroserviceSystemDto(microservices));
             }
 
             microserviceSystem.getMicroservices().addAll(microservices);
@@ -108,19 +97,15 @@ public class IRExtractionService {
         gitService.cloneRemote(rc);
         gitService.resetLocal(rc, rc.commitID());
 
-        ServiceBoundaryDetector detector = new ServiceBoundaryDetector();
-        List<ServiceBoundaryCandidate> candidates = detector.detect(FileUtils.getRepositoryPath(rc.getRepoName()), rc);
-
-        // Scan each root directory for microservices
-        for (ServiceBoundaryCandidate candidate : candidates) {
-            Microservice microservice = recursivelyScanFiles(
-                    microserviceSystem,
-                    candidate.rootPath().toString(),
-                    rc,
-                    candidate.serviceName()
-            );
-            if (microservice != null) {
-                microservices.add(microservice);
+        Path repositoryRoot = Path.of(FileUtils.getRepositoryPath(rc.getRepoName())).toAbsolutePath().normalize();
+        try (var paths = FileUtils.withRepositoryRoot(rc.getRepoName(), repositoryRoot)) {
+            parserRegistry.prepareRepository(repositoryRoot, rc);
+            ServiceBoundaryDetector detector = new ServiceBoundaryDetector();
+            List<ServiceBoundaryCandidate> candidates = detector.detect(repositoryRoot.toString(), rc);
+            for (ServiceBoundaryCandidate candidate : candidates) {
+                Microservice microservice = recursivelyScanFiles(microserviceSystem,
+                        candidate.rootPath().toString(), rc, candidate.serviceName());
+                if (microservice != null) microservices.add(microservice);
             }
         }
 
@@ -195,36 +180,150 @@ public class IRExtractionService {
             File directory,
             Microservice microservice,
             RepositoryConfig rc) {
+        if (Files.isSymbolicLink(directory.toPath())) {
+            diagnostic(microservice, directory, "SYMLINK_SKIPPED", "Symbolic directory links are not followed");
+            return;
+        }
         File[] files = directory.listFiles();
-
-        if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    // #16: dependency/build directories (node_modules, .venv-equivalents, bin/obj, ...)
-                    // must not be walked - they can hold thousands of real-looking source files.
-                    if (!FileUtils.IGNORED_DIRECTORY_NAMES.contains(file.getName())) {
-                        scanDirectory(file, microservice, rc);
+        if (files == null) {
+            diagnostic(microservice, directory, "UNREADABLE_DIRECTORY", "Source directory could not be read");
+            return;
+        }
+        Arrays.sort(files, Comparator.comparing(File::getName));
+        for (File file : files) {
+            if (Files.isSymbolicLink(file.toPath())) {
+                diagnostic(microservice, file, "SYMLINK_SKIPPED", "Symbolic links are not followed");
+            } else if (file.isDirectory()) {
+                if (!FileUtils.IGNORED_DIRECTORY_NAMES.contains(file.getName())) scanDirectory(file, microservice, rc);
+            } else if (parserRegistry.findParserFor(file).isPresent() || FileUtils.isValidFile(file.getPath())) {
+                if (parserRegistry.findParserFor(file).isEmpty() && FileUtils.isConfigurationFile(file.getPath())) {
+                    try {
+                        ConfigFile configuration = SourceToObjectUtils.parseConfigurationFile(file, rc, microservice);
+                        if (configuration != null) microservice.getFiles().add(configuration);
+                    } catch (RuntimeException failure) {
+                        diagnostic(microservice, file, "CONFIG_PARSE_FAILED", failure.getClass().getSimpleName());
                     }
-                } else if (FileUtils.isValidFile(file.getPath())) {
-                    if(FileUtils.isConfigurationFile(file.getPath())) {
-                        ConfigFile configFile = SourceToObjectUtils.parseConfigurationFile(file, rc, microservice);
-                        if(configFile != null) {
-                            microservice.getFiles().add(configFile);
-                        }
-                    } else {
-                        parserRegistry.findParserFor(file).ifPresent(parser -> {
-                            ParseResult result = parser.parse(microservice, file, rc, false);
-                            if (result.isSuccess() && result.getAbstractClass() != null) {
-                                microservice.addAbstractClass(result.getAbstractClass());
-                            }
-                            // A parse failure here means the parser itself errored (e.g. a JavaParser
-                            // exception); SourceToObjectUtils returning null for "not a class" or
-                            // "filtered by role" is still reported as success with no AbstractClass.
-                        });
+                } else {
+                    parserRegistry.findParserFor(file).ifPresent(parser -> {
+                        ParseResult result = parser.parse(microservice, file, rc, false);
+                        JSONObject metadata = metadata(microservice);
+                        JSONObject capabilities = metadata.optJSONObject("parsers");
+                        if (capabilities == null) { capabilities = new JSONObject(); metadata.put("parsers", capabilities); }
+                        capabilities.put(parser.getCapability().getLanguage(), new JSONObject()
+                                .put("extensions", parser.getCapability().getSupportedExtensions())
+                                .put("limitations", parser.getCapability().getLimitations()));
+                        if (result.isSuccess()) result.getClasses().forEach(microservice::addAbstractClass);
+                        else diagnostic(microservice, file, "SOURCE_PARSE_FAILED", result.getFailureReason());
+                    });
+                }
+            }
+        }
+
+    }
+
+    private static JSONObject metadata(Microservice service) {
+        if (service.getMetadata() == null) service.setMetadata(new JSONObject());
+        return service.getMetadata();
+    }
+
+    private static void diagnostic(Microservice service, File file, String code, String reason) {
+        JSONObject metadata = metadata(service);
+        JSONArray diagnostics = metadata.optJSONArray("diagnostics");
+        if (diagnostics == null) { diagnostics = new JSONArray(); metadata.put("diagnostics", diagnostics); }
+        diagnostics.put(new JSONObject().put("file", file.getName()).put("code", code)
+                .put("reason", reason == null ? "Parser did not return source evidence" : reason));
+        metadata.put("status", "partial");
+    }
+
+    private static void annotateCoverage(MicroserviceSystem system) {
+        Set<String> languages = new TreeSet<>();
+        boolean partial = false;
+        for (Microservice service : system.getMicroservices()) {
+            JSONObject data = metadata(service);
+            JSONObject parsers = data.optJSONObject("parsers");
+            if (parsers != null) languages.addAll(parsers.keySet());
+            partial |= "partial".equals(data.optString("status"));
+            for (AbstractClass module : service.getClasses()) {
+                if (module.getMetadata() != null) {
+                    String language = module.getMetadata().optString("language", "");
+                    if (!language.isBlank()) languages.add(language);
+                }
+            }
+        }
+        JSONObject data = system.getMetadata() == null ? new JSONObject() : system.getMetadata();
+        data.put("languages", new JSONArray(languages));
+        data.put("extraction", "deterministic-static-source");
+        data.put("status", partial ? "partial" : "complete-for-supported-source-patterns");
+        system.setMetadata(data);
+    }
+
+    private static void validateRepositoryCacheIdentities(Config config) {
+        Map<String, String> urls = new HashMap<>();
+        Set<String> repositories = new HashSet<>();
+        for (RepositoryConfig source : config.getSystemRepositories()) {
+            String url = source.repoBranchPair().repositoryURL();
+            if (!repositories.add(url)) throw new IllegalArgumentException(
+                    "Use one repository entry per source root; the parser registry detects its languages per file");
+            String previous = urls.putIfAbsent(source.getRepoName(), url);
+            if (previous != null && !previous.equals(url)) throw new IllegalArgumentException(
+                    "Repositories with the same basename need isolated extraction jobs because the legacy clone cache is basename-keyed");
+        }
+    }
+
+    private IRExtractionService(ParserRegistry registry) {
+        this.gitService = null;
+        this.config = null;
+        this.parserRegistry = Objects.requireNonNull(registry);
+    }
+
+    /** Immutable, administrator-resolved source input. A name declares one application boundary;
+     * a null name asks the boundary detector to discover applications from project metadata. */
+    public record LocalSource(Path root, RepositoryConfig repository, String componentName) {
+        public LocalSource { Objects.requireNonNull(root); Objects.requireNonNull(repository); }
+    }
+
+    /** Parse local source exports without Git, network access, target execution, or database services. */
+    public static MicroserviceSystem extractLocal(String systemName, Path root,
+            RepositoryConfig repository, String componentName) throws IOException {
+        return extractLocal(systemName, List.of(new LocalSource(root, repository, componentName)));
+    }
+
+    public static MicroserviceSystem extractLocal(String systemName, List<LocalSource> sources) throws IOException {
+        return extractLocal(systemName, sources, ParserRegistry.createDefault());
+    }
+
+    /** Registry injection is the extension point for additional languages and trusted parser profiles. */
+    public static MicroserviceSystem extractLocal(String systemName, List<LocalSource> sources,
+            ParserRegistry registry) throws IOException {
+        if (systemName == null || systemName.isBlank() || sources == null || sources.isEmpty())
+            throw new IllegalArgumentException("A system name and at least one local source are required");
+        IRExtractionService extraction = new IRExtractionService(registry);
+        MicroserviceSystem system = new MicroserviceSystem(systemName, new LinkedHashSet<>(), new LinkedHashSet<>());
+        Set<String> identities = new HashSet<>();
+        for (LocalSource source : sources) {
+            source.repository().validateConfig();
+            Path root = source.root().toAbsolutePath().normalize();
+            if (Files.isSymbolicLink(root) || !Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS))
+                throw new IOException("Source root must be an existing directory without a symbolic root link");
+            String identity = source.repository().repoBranchPair().repositoryURL();
+            if (!identities.add(identity)) throw new IllegalArgumentException(
+                    "Use one source root per repository; languages are discovered per file and service boundaries within that root");
+            try (var paths = FileUtils.withRepositoryRoot(source.repository().getRepoName(), root)) {
+                registry.prepareRepository(root, source.repository());
+                if (source.componentName() != null && !source.componentName().isBlank()) {
+                    system.getMicroservices().add(extraction.recursivelyScanFiles(system, root.toString(),
+                            source.repository(), source.componentName()));
+                } else {
+                    for (ServiceBoundaryCandidate candidate : new ServiceBoundaryDetector().detect(root.toString(), source.repository())) {
+                        system.getMicroservices().add(extraction.recursivelyScanFiles(system,
+                                candidate.rootPath().toString(), source.repository(), candidate.serviceName()));
                     }
                 }
             }
         }
+        MicroserviceSystem.setParentReferencesRecursively(system, null);
+        annotateCoverage(system);
+        return system;
     }
 
     /**
@@ -239,6 +338,7 @@ public class IRExtractionService {
 
         extractionService.cloneAndScanMultiRepositoryServices(microserviceSystem, false);
 
+        annotateCoverage(microserviceSystem);
         return microserviceSystem;
     }
 
@@ -257,6 +357,7 @@ public class IRExtractionService {
 
         extractionService.cloneAndScanMultiRepositoryServices(microserviceSystem, true);
 
+        annotateCoverage(microserviceSystem);
         JsonReadWriteUtils.writeToJSON(Path.of(FileUtils.getOutputPath() + File.separator + irName), microserviceSystem);
         return microserviceSystem;
     }

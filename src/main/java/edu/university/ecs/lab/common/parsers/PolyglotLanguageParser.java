@@ -4,6 +4,7 @@ import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.ir.AbstractClass;
 import edu.university.ecs.lab.common.models.ir.Microservice;
 import edu.university.ecs.lab.common.utils.FileUtils;
+import edu.university.ecs.lab.common.utils.SourceFileReader;
 import edu.university.ecs.lab.common.parsers.treesitter.FileFacts;
 import edu.university.ecs.lab.common.parsers.treesitter.PolyglotExtractor;
 
@@ -14,21 +15,19 @@ import java.util.Set;
 
 /**
  * Wraps the tree-sitter {@link PolyglotExtractor} behind the {@link LanguageParser} contract, for one
- * language at a time (see the four instances registered in {@code IRExtractionService}).
+ * language at a time (Python, Go and C# are registered by default in {@link ParserRegistry}).
  *
  * Maps roles, fields, parameters, imports, annotations, functions, endpoints, and outgoing REST/gRPC
  * calls (attributed to the function that makes each one) into the real IR object graph via
  * {@link PolyglotFactsToIrConverter} - including one real class per class/struct/interface a file
  * declares, not just the first. See that converter's class comment for what's still deliberately not
- * modeled (precise resolved types, mainly), and TreeSitterJavaExtractor/JavaParityRunner (in the
- * experiments package) for how much further Java's own tree-sitter parser already goes there.
+ * modeled, including precise resolved types.
  */
 public class PolyglotLanguageParser implements LanguageParser {
 
     private static final Set<String> LIMITATIONS = Set.of(
             "Field/parameter types are literal source text, not resolved or simplified.",
-            "The type an outgoing call's target resolves to isn't tracked (Java's own tree-sitter " +
-                    "parser only gets this right ~75% of the time itself; not attempted here).",
+            "The type an outgoing call's target resolves to isn't tracked.",
             "Role classification (CONTROLLER/SERVICE/REPOSITORY/ENTITY) is name/annotation-pattern " +
                     "based, not type resolution; it will misclassify unconventionally named code."
     );
@@ -55,20 +54,20 @@ public class PolyglotLanguageParser implements LanguageParser {
     @Override
     public ParseResult parse(Microservice microservice, File sourceFile, RepositoryConfig config, boolean filterOutUnknownClassRoles) {
         try {
-            byte[] bytes = Files.readAllBytes(sourceFile.toPath());
+            byte[] bytes = SourceFileReader.read(sourceFile.toPath());
             String gitPathString = FileUtils.localPathToGitPath(sourceFile.getPath(), config.getRepoName());
             PolyglotExtractor.Result result = extractor.extract(language, gitPathString, bytes);
+            if (result.syntaxErrors() > 0) {
+                return ParseResult.failure(language + " syntax errors in " + gitPathString + ": " + result.syntaxErrors());
+            }
 
             String baseName = sourceFile.getName();
             int dot = baseName.lastIndexOf('.');
             if (dot > 0) baseName = baseName.substring(0, dot);
 
-            // Filtering (when requested) is applied inside convert() to every class the file produces,
-            // not just the one returned here - a file with several classes could otherwise have an
-            // UNKNOWN-role secondary class added while an UNKNOWN-role primary gets correctly dropped.
-            AbstractClass abstractClass = PolyglotFactsToIrConverter.convert(
-                    microservice, Path.of(gitPathString), baseName, result.facts(), filterOutUnknownClassRoles);
-            return ParseResult.success(abstractClass);
+            // Return all containers without mutating the service; filtering applies to each one.
+            return ParseResult.success(PolyglotFactsToIrConverter.convertAll(
+                    microservice, Path.of(gitPathString), baseName, result.facts(), filterOutUnknownClassRoles));
         } catch (Exception e) {
             return ParseResult.failure(language + " parser failed on " + sourceFile.getPath() + ": " + e);
         }

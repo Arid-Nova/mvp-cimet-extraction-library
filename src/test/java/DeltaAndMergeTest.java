@@ -10,6 +10,7 @@ import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
 import edu.university.ecs.lab.intermediate.merge.services.MergeService;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.revwalk.RevCommit;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 
+@Tag("network")
 class DeltaAndMergeTest {
     private static List<RevCommit> list;
     private static List<RevCommit> list2;

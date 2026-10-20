@@ -9,6 +9,8 @@ output/
 clone/
 settings.xml
 
-# Spreadsheet deliverables (ground truth, etc.) - working documents, not source
+# Local deliverables and generated dependencies
 *.xlsx
 ~$*
+adapter/javascript/node_modules/
+study-output/

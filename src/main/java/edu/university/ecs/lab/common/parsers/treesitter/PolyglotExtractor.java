@@ -123,7 +123,7 @@ public class PolyglotExtractor {
             }
             case "identifier", "field_identifier" -> { return "{" + out.text(n) + "}"; }
             case "parenthesized_expression" -> { return n.namedChildCount() > 0 ? urlOf(n.namedChild(0), out) : "{?}"; }
-            case "argument" -> { return n.namedChildCount() > 0 ? urlOf(n.namedChild(n.namedChildCount() - 1), out) : "{?}"; }
+            case "argument", "attribute_argument" -> { return n.namedChildCount() > 0 ? urlOf(n.namedChild(n.namedChildCount() - 1), out) : "{?}"; }
             default -> { }
         }
         if (!STRING_TYPES.contains(n.type)) return "{?}";
@@ -707,8 +707,14 @@ public class PolyglotExtractor {
                     Matcher verb = CS_HTTP_ATTR.matcher(out.text(attr.field("name")));
                     if (!verb.matches()) continue;
                     String template = firstAttributeArg(attr, out);
-                    String url = "/" + String.join("/", java.util.stream.Stream.of(prefix, template)
-                            .filter(s -> s != null && !s.isEmpty()).map(s -> s.replaceAll("^/|/$", "")).toList());
+                    String url;
+                    if (template.startsWith("/") || template.startsWith("~/")) {
+                        // ASP.NET action templates beginning with / or ~/ override the controller prefix.
+                        url = template.startsWith("~/") ? template.substring(1) : template;
+                    } else {
+                        url = "/" + String.join("/", java.util.stream.Stream.of(prefix, template)
+                                .filter(s -> s != null && !s.isEmpty()).map(s -> s.replaceAll("^/|/$", "")).toList());
+                    }
                     out.add("endpoints", verb.group(1).toUpperCase() + " " + url + " -> " + className + "." + out.text(m.field("name")));
                 }
             }
