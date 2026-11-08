@@ -30,9 +30,10 @@ import java.util.*;
  *
  * <p><b>Path identity:</b> the first (or only) type in the file keeps the real file path, so the
  * common single-class-per-file case is unaffected; additional types in the same file get a
- * disambiguated path ({@code <path>::<TypeName>}), since two different {@link AbstractClass}es sharing
- * one path would otherwise collide with path-keyed matching elsewhere in the pipeline (e.g. delta
- * comparison, path-based test lookups like {@code TestUtilities.deepCompareSystems}).
+ * disambiguated path ({@code <path>##<TypeName>} - see {@link #PATH_DISAMBIGUATOR}, not a literal
+ * colon), since two different {@link AbstractClass}es sharing one path would otherwise collide with
+ * path-keyed matching elsewhere in the pipeline (e.g. delta comparison, path-based test lookups like
+ * {@code TestUtilities.deepCompareSystems}).
  *
  * <p><b>Known gaps, still deliberately left out rather than modeled incorrectly:</b> parameter/field
  * types are the literal source text (e.g. "List&lt;string&gt;"), not resolved/simplified type names;
@@ -42,6 +43,15 @@ import java.util.*;
 public final class PolyglotFactsToIrConverter {
 
     private static final String MODULE_CONTAINER = "<module>";
+    // A colon anywhere in a Path's string form makes Jackson's NioPathDeserializer try to read it back
+    // as a URI (not a plain filesystem path) - a real type name round-trips fine by luck (schemeless
+    // URI -> "Missing scheme"... except that one DOES fail too, see below), but MODULE_PATH_SUFFIX's
+    // own text plus a stray '<'/'>' made URI parsing itself throw outright. Both are really the same
+    // bug: "::" was never a safe disambiguator for a value that gets serialized then deserialized
+    // (e.g. any delta/merge run) - every multi-type-per-file case was affected, not just this one.
+    // Fixed by using a separator with no special meaning to java.net.URI at all (#16 follow-up).
+    private static final String PATH_DISAMBIGUATOR = "##";
+    private static final String MODULE_PATH_SUFFIX = "module";
 
     private PolyglotFactsToIrConverter() {}
 
@@ -61,7 +71,7 @@ public final class PolyglotFactsToIrConverter {
         } else {
             boolean first = true;
             for (String[] type : types) {
-                Path path = first ? gitPath : Path.of(gitPath + "::" + type[0]);
+                Path path = first ? gitPath : Path.of(gitPath + PATH_DISAMBIGUATOR + type[0]);
                 byName.put(type[0], newSlot(microservice, path, type[0], roleOf(type[1])));
                 first = false;
             }
@@ -156,7 +166,7 @@ public final class PolyglotFactsToIrConverter {
         if (module == null) {
             // byName always already holds at least the file's first real class (or its single fallback
             // container) by the time this runs, so the module container never gets the bare file path.
-            module = newSlot(microservice, Path.of(gitPath + "::" + MODULE_CONTAINER), fileBaseName, ClassRole.UNKNOWN);
+            module = newSlot(microservice, Path.of(gitPath + PATH_DISAMBIGUATOR + MODULE_PATH_SUFFIX), fileBaseName, ClassRole.UNKNOWN);
             byName.put(MODULE_CONTAINER, module);
         }
         return module.abstractClass();

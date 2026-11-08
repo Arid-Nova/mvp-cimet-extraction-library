@@ -59,7 +59,14 @@ public class FileUtils {
             ".git", ".gradle", ".idea", ".mvn", "build", "node_modules", "out", "target",
             // ASP.NET Core's static web assets folder - always vendored frontend libraries (e.g. a
             // copy of Bootstrap complete with its own package.json), never backend/service code.
-            "wwwroot"
+            "wwwroot",
+            // The same convention under other names: a server-rendered app's bundled frontend assets
+            // (vendored JS libraries, site scripts, images/CSS). Confirmed by reproduction: a Spring Boot
+            // repo's static/assets/js folder held a 1.2MB vendored angular.js among other vendored
+            // bundles, all newly matched once .js became a recognized source extension (#16) - these
+            // got tree-sitter-parsed as if they were application code, a ~4x slowdown on that one repo
+            // for zero useful IR. Never backend/service code in any of the frameworks we support.
+            "static", "assets", "Assets", "public"
     );
     public static final String SYS_SEPARATOR = System.getProperty("file.separator");
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");

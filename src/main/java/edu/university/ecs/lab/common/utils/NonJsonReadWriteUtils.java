@@ -104,7 +104,16 @@ public class NonJsonReadWriteUtils {
                     jsonStack.push(newObject);
                     currentKey = key;
                 } else if (line.equals("}")) {
-                    jsonStack.pop();
+                    // This is a line-based brace counter, not a real Groovy parser - a one-liner
+                    // closure, a brace inside a string/comment, or any other construct where a "}"
+                    // isn't paired with a "{" this reader tracked is expected on real-world build
+                    // scripts (openlmis-referencedata, ccpay-payment-app and others hit this). Treat
+                    // an unmatched close brace as a no-op rather than crashing the whole extraction
+                    // run over one best-effort config file - matches readFromPom/readFromProperties,
+                    // which already fail soft.
+                    if (jsonStack.size() > 1) {
+                        jsonStack.pop();
+                    }
                     currentKey = null;
                 } else if (line.contains("=")) {
                     String[] parts = line.split("=", 2);
@@ -121,7 +130,11 @@ public class NonJsonReadWriteUtils {
                     }
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
+            // Broad catch deliberate: this hand-rolled reader can throw more than IOException on
+            // unusual input (e.g. a ClassCastException if a key is reused as both a nested block and
+            // a plain value on different lines) - any failure here should drop this one config file,
+            // not the whole pipeline run.
             return null;
         }
         return new ConfigFile(microservice, Path.of(FileUtils.localPathToGitPath(path.toString(), config.getRepoName())), jsonObject);

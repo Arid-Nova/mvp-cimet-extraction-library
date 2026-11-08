@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
@@ -50,6 +51,22 @@ public class ServiceBoundaryDetector {
             "package.json", "go.mod", "requirements.txt", "pyproject.toml"
     );
     private static final List<String> JAVA_BUILD_FILES = List.of("pom.xml", "build.gradle", "build.gradle.kts");
+    // Fallback evidence a bare requirements.txt/pyproject.toml directory is a runnable app, not just a
+    // test harness, for the rare case it has no Dockerfile of its own.
+    private static final List<String> PYTHON_ENTRY_POINT_FILES = List.of(
+            "app.py", "main.py", "manage.py", "wsgi.py", "asgi.py", "run.py", "server.py"
+    );
+    // A Dockerized acceptance/integration-test harness (e.g. a polling script hitting well-known
+    // endpoints to wait for startup, geoserver-cloud's acceptance_tests/) has its own requirements.txt
+    // AND its own Dockerfile - the same two signals a real Python service has - so the Dockerfile
+    // fallback above doesn't catch it (#16 follow-up: a RestCall was wrongly attributed to this
+    // directory as if it were a real outbound call from a real service). Directory name is the only
+    // remaining signal: these conventional test-harness names are vanishingly unlikely to also be a
+    // real deployable service's directory name.
+    private static final Set<String> PYTHON_TEST_HARNESS_DIRECTORY_NAMES = Set.of(
+            "test", "tests", "acceptance_tests", "acceptance-tests", "e2e", "e2e_tests", "e2e-tests",
+            "integration_tests", "integration-tests"
+    );
     private static final List<String> DOCKER_FILES = List.of("Dockerfile", "DockerFile");
     private static final List<String> DOCKER_COMPOSE_FILES = List.of("docker-compose.yml", "docker-compose.yaml");
     private static final List<String> APPLICATION_CONFIG_FILES = List.of(
@@ -92,14 +109,19 @@ public class ServiceBoundaryDetector {
 
         RepositoryScanIndex scanIndex = scanRepository(repositoryRoot);
         List<ScoredServiceRoot> scoredRoots = new ArrayList<>();
+        Set<Path> weaklyQualifiedRoots = new HashSet<>();
         for (Path possibleRoot : scanIndex.possibleServiceRoots()) {
             ScoredServiceRoot scoredRoot = score(possibleRoot, rc, scanIndex);
-            if (qualifiesAsService(possibleRoot, scanIndex, scoredRoot)) {
+            Qualification qualification = qualification(possibleRoot, scanIndex, scoredRoot);
+            if (qualification.qualifies()) {
                 scoredRoots.add(scoredRoot);
+                if (qualification.weak()) {
+                    weaklyQualifiedRoots.add(normalized(possibleRoot));
+                }
             }
         }
 
-        return removeParentCandidates(scoredRoots).stream()
+        return removeParentCandidates(scoredRoots, weaklyQualifiedRoots).stream()
                 .sorted(Comparator.comparing(candidate -> candidate.rootPath().toString()))
                 .toList();
     }
@@ -205,6 +227,21 @@ public class ServiceBoundaryDetector {
      * all, where the original scored behavior is kept unchanged.
      */
     private boolean qualifiesAsService(Path possibleRoot, RepositoryScanIndex scanIndex, ScoredServiceRoot scoredRoot) {
+        return qualification(possibleRoot, scanIndex, scoredRoot).qualifies();
+    }
+
+    /**
+     * Same acceptance rules as before, but also reports whether the acceptance was on WEAK evidence -
+     * a Java root whose only sign of being its own deployable unit is a stray application.yml/.properties
+     * nearby (no Dockerfile, no @SpringBootApplication, no controller of its own), or a root accepted
+     * purely via the generic score fallback. Weak roots are exactly the "this is probably just an
+     * aggregator/parent POM, not a real service" case {@link #removeParentCandidates} should still
+     * suppress in favor of a qualifying child; a root with STRONG direct evidence (its own Dockerfile,
+     * @SpringBootApplication, controller, docker-compose/k8s/helm, or any of the other ecosystems' own
+     * entry-point rules) is independently deployable regardless of what's nested under it (#16 follow-up -
+     * see the openlmis-referencedata bug this distinction fixes).
+     */
+    private Qualification qualification(Path possibleRoot, RepositoryScanIndex scanIndex, ScoredServiceRoot scoredRoot) {
         // A directory can legitimately carry more than one manifest at once - e.g. an ASP.NET Core app
         // with a Vite/webpack frontend bundler has both its own .csproj AND its own package.json in the
         // same folder, and only one of them is the "real" backend entry point. Each manifest type found
@@ -216,15 +253,17 @@ public class ServiceBoundaryDetector {
         if (scanIndex.firstExistingFileName(possibleRoot, JAVA_BUILD_FILES).isPresent()) {
             hasAnyBuildFile = true;
             JavaEvidence javaEvidence = scanIndex.javaEvidence(possibleRoot);
-            boolean javaQualifies = javaEvidence.hasSpringBootApplication()
+            boolean strongJavaEvidence = javaEvidence.hasSpringBootApplication()
                     || javaEvidence.hasController()
-                    || scanIndex.firstApplicationConfig(possibleRoot).isPresent()
                     || scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES).isPresent()
                     || scanIndex.dockerComposeWithServices(possibleRoot).isPresent()
                     || scanIndex.findKubernetesDeployment(possibleRoot).isPresent()
                     || scanIndex.findHelmChart(possibleRoot).isPresent();
-            if (javaQualifies) {
-                return true;
+            if (strongJavaEvidence) {
+                return Qualification.strongMatch();
+            }
+            if (scanIndex.firstApplicationConfig(possibleRoot).isPresent()) {
+                return Qualification.weakMatch();
             }
         }
 
@@ -233,8 +272,12 @@ public class ServiceBoundaryDetector {
             // package.json is also used for pure config/workspace-root/tooling packages (or, as here, a
             // frontend asset bundler sitting next to a real backend) that are never run on their own -
             // require an actual entry point before treating it as its own deployable service.
-            if (hasNodeEntryPoint(possibleRoot.resolve("package.json"))) {
-                return true;
+            boolean hasDeploymentEvidence = scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES).isPresent()
+                    || scanIndex.dockerComposeWithServices(possibleRoot).isPresent()
+                    || scanIndex.findKubernetesDeployment(possibleRoot).isPresent()
+                    || scanIndex.findHelmChart(possibleRoot).isPresent();
+            if (hasNodeEntryPoint(possibleRoot.resolve("package.json"), hasDeploymentEvidence)) {
+                return Qualification.strongMatch();
             }
         }
 
@@ -248,39 +291,83 @@ public class ServiceBoundaryDetector {
             // console/worker) always has and these never do: an actual Program.cs entry point in the
             // project's own directory.
             if (scanIndex.hasOwnFile(possibleRoot, "Program.cs")) {
-                return true;
+                return Qualification.strongMatch();
             }
         }
 
-        if (scanIndex.hasOwnFile(possibleRoot, "go.mod")
-                || scanIndex.hasOwnFile(possibleRoot, "requirements.txt")
-                || scanIndex.hasOwnFile(possibleRoot, "pyproject.toml")) {
-            // Each already is, definitionally, one buildable/deployable unit in its own ecosystem's
-            // tooling - no multi-module ambiguity to guard against the way Java's convention requires.
-            return true;
+        if (scanIndex.hasOwnFile(possibleRoot, "go.mod")) {
+            // A Go module is already, definitionally, one buildable/deployable unit - no multi-module
+            // ambiguity to guard against the way Java's convention requires.
+            return Qualification.strongMatch();
+        }
+
+        if (scanIndex.hasOwnFile(possibleRoot, "requirements.txt") || scanIndex.hasOwnFile(possibleRoot, "pyproject.toml")) {
+            hasAnyBuildFile = true;
+            // Unlike go.mod/.csproj, a bare requirements.txt/pyproject.toml is NOT a reliable sign of a
+            // runnable service by itself - a plain test-harness directory (pytest + its own
+            // requirements.txt, no application code at all) looks identical by that measure alone. Every
+            // real Python service actually observed across our ground-truth repos has its own Dockerfile;
+            // fall back to a recognizable entry-point filename for the rarer undockerized case.
+            boolean isTestHarnessDirectory = Optional.ofNullable(possibleRoot.getFileName())
+                    .map(Path::toString)
+                    .map(name -> name.toLowerCase(Locale.ROOT))
+                    .filter(PYTHON_TEST_HARNESS_DIRECTORY_NAMES::contains)
+                    .isPresent();
+            if (!isTestHarnessDirectory
+                    && (scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES).isPresent()
+                        || scanIndex.firstExistingFileName(possibleRoot, PYTHON_ENTRY_POINT_FILES).isPresent())) {
+                return Qualification.strongMatch();
+            }
         }
 
         if (hasAnyBuildFile) {
             // Every manifest actually present was checked above and none qualified (e.g. only a Java
             // shared-library pom.xml, or only a Node tooling-only package.json).
-            return false;
+            return Qualification.noMatch();
         }
 
         // No recognized manifest at all - e.g. a Java module directory inferred purely from its
         // src/main/java tree, a deployment-directory-only root, etc. Keep the original scored behavior
         // for these less common, already-tested paths rather than re-deriving new rules for cases this
         // refactor wasn't specifically built to fix.
-        return scoredRoot.score() >= MINIMUM_SERVICE_SCORE;
+        return scoredRoot.score() >= MINIMUM_SERVICE_SCORE ? Qualification.weakMatch() : Qualification.noMatch();
     }
 
-    private boolean hasNodeEntryPoint(Path packageJsonPath) {
+    private record Qualification(boolean qualifies, boolean weak) {
+        private static Qualification strongMatch() {
+            return new Qualification(true, false);
+        }
+
+        private static Qualification weakMatch() {
+            return new Qualification(true, true);
+        }
+
+        private static Qualification noMatch() {
+            return new Qualification(false, false);
+        }
+    }
+
+    /**
+     * A "bin" entry or an npm-convention "start"/"server" script is strong evidence on its own - both
+     * are an explicit "this is meant to be run" declaration. A bare "main" field is NOT - every Node
+     * package has one, libraries and one-shot CLI helpers included (e.g. OpenLMIS's `consul/`
+     * registration script, which has only "main": "registration.js" and no scripts/Dockerfile at all -
+     * the false-positive this guard fixes, #16 follow-up). "main" alone only counts when corroborated
+     * by independent deployability evidence (a Dockerfile, docker-compose service, or k8s/helm chart) -
+     * exactly the real services observed in the ground-truth repos that rely on bare "main" (robot-shop's
+     * cart/user, sock-shop's front-end) all have one of these.
+     */
+    private boolean hasNodeEntryPoint(Path packageJsonPath, boolean hasDeploymentEvidence) {
         try (InputStream inputStream = Files.newInputStream(packageJsonPath)) {
             JsonNode root = new ObjectMapper().readTree(inputStream);
-            if (isNonBlankText(root.get("main")) || hasAnyBin(root.get("bin"))) {
+            if (hasAnyBin(root.get("bin"))) {
                 return true;
             }
             JsonNode scripts = root.get("scripts");
-            return scripts != null && (isNonBlankText(scripts.get("start")) || isNonBlankText(scripts.get("server")));
+            if (scripts != null && (isNonBlankText(scripts.get("start")) || isNonBlankText(scripts.get("server")))) {
+                return true;
+            }
+            return isNonBlankText(root.get("main")) && hasDeploymentEvidence;
         } catch (IOException e) {
             return false;
         }
@@ -300,7 +387,18 @@ public class ServiceBoundaryDetector {
         return bin.isObject() && bin.size() > 0;
     }
 
-    private List<ServiceBoundaryCandidate> removeParentCandidates(List<ScoredServiceRoot> scoredRoots) {
+    /**
+     * Suppresses a parent candidate in favor of its children, but ONLY when the parent's own
+     * qualification was WEAK (see {@link #qualification} - a stray application.yml/.properties or
+     * the generic score fallback, no Dockerfile/@SpringBootApplication/controller of its own): the
+     * real "aggregator/parent-POM root with no app code of its own, real services are nested under
+     * it" case. A STRONGLY-qualified root (its own Dockerfile, @SpringBootApplication, controller,
+     * etc.) is independently deployable regardless of what else happens to be nested under it - e.g.
+     * a `consul/` helper script sitting next to a Gradle service's own build.gradle+Dockerfile in
+     * openlmis-referencedata is an unrelated sibling folder, not a submodule, and suppressing the
+     * real service there because that sibling also qualified was a bug (#16 follow-up).
+     */
+    private List<ServiceBoundaryCandidate> removeParentCandidates(List<ScoredServiceRoot> scoredRoots, Set<Path> weaklyQualifiedRoots) {
         List<ServiceBoundaryCandidate> candidatesByDepth = scoredRoots.stream()
                 .map(ScoredServiceRoot::candidate)
                 .sorted(Comparator.comparingInt(candidate -> -normalized(candidate.rootPath()).getNameCount()))
@@ -318,7 +416,9 @@ public class ServiceBoundaryDetector {
 
             Path parent = normalizedRoot.getParent();
             while (parent != null) {
-                rootsWithAcceptedChildren.add(parent);
+                if (weaklyQualifiedRoots.contains(parent)) {
+                    rootsWithAcceptedChildren.add(parent);
+                }
                 parent = parent.getParent();
             }
         }

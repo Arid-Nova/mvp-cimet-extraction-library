@@ -1,5 +1,6 @@
 package edu.university.ecs.lab.common.models.enums;
 
+import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.*;
 import edu.university.ecs.lab.common.utils.StringUtils;
 import lombok.Getter;
@@ -26,11 +27,11 @@ public class EndpointTemplate {
                 NormalAnnotationExpr nae = (NormalAnnotationExpr) requestMapping;
                 for (MemberValuePair pair : nae.getPairs()) {
                     if (pair.getNameAsString().equals("value")) {
-                        preUrl = pair.getValue().toString().replaceAll("\"", "");
+                        preUrl = firstPathValue(pair.getValue()).replaceAll("\"", "");
                     }
                 }
             } else if (requestMapping instanceof SingleMemberAnnotationExpr) {
-                preUrl = requestMapping.asSingleMemberAnnotationExpr().getMemberValue().toString().replaceAll("\"", "");
+                preUrl = firstPathValue(requestMapping.asSingleMemberAnnotationExpr().getMemberValue()).replaceAll("\"", "");
             }
         }
 
@@ -42,11 +43,11 @@ public class EndpointTemplate {
                     String methodValue = pair.getValue().toString();
                     finalHttpMethod = httpFromMapping(methodValue);
                 } else if(pair.getNameAsString().equals("path") || pair.getNameAsString().equals("value")) {
-                    url = pair.getValue().toString().replaceAll("\"", "");
+                    url = firstPathValue(pair.getValue()).replaceAll("\"", "");
                 }
             }
         } else if (endpointMapping instanceof SingleMemberAnnotationExpr) {
-            url = endpointMapping.asSingleMemberAnnotationExpr().getMemberValue().toString().replaceAll("\"", "");
+            url = firstPathValue(endpointMapping.asSingleMemberAnnotationExpr().getMemberValue()).replaceAll("\"", "");
         } else if(endpointMapping instanceof MarkerAnnotationExpr) {
             if(preUrl.isEmpty()) {
                 url = "/";
@@ -117,7 +118,7 @@ public class EndpointTemplate {
 
     /**
      * Method to get endpoint path from annotations
-     * 
+     *
      * @param ae annotation expression from method
      * @param url string formatted as a url
      * @return endpoint path/url from annotation expression
@@ -127,7 +128,7 @@ public class EndpointTemplate {
         if (ae.isSingleMemberAnnotationExpr()) {
             url = url + StringUtils.simplifyEndpointURL(
                     StringUtils.removeOuterQuotations(
-                            ae.asSingleMemberAnnotationExpr().getMemberValue().toString()));
+                            firstPathValue(ae.asSingleMemberAnnotationExpr().getMemberValue())));
         }
 
         // Annotations of type @Mapping(path="/endpoint")
@@ -135,12 +136,30 @@ public class EndpointTemplate {
             for (MemberValuePair mvp : ae.asNormalAnnotationExpr().getPairs()) {
                 if (mvp.getName().toString().equals("path") || mvp.getName().toString().equals("value")) {
                     url = url + StringUtils.simplifyEndpointURL(
-                            StringUtils.removeOuterQuotations(mvp.getValue().toString()));
+                            StringUtils.removeOuterQuotations(firstPathValue(mvp.getValue())));
                     break;
                 }
             }
         }
         return url;
+    }
+
+    /**
+     * A Spring mapping annotation's path/value member is usually a single string
+     * ({@code @GetMapping("/foo")}), but can legally be an array of several
+     * ({@code @GetMapping({"/foo", "/{workspace}/foo"})}, seen in real code, e.g. geoserver-cloud's
+     * KMLReflectorController - #16 follow-up). Calling {@code toString()} directly on the array
+     * expression returns JavaParser's literal array-initializer text (braces, comma, nested quotes),
+     * which corrupts the URL once {@link #simplifyEndpointURL} runs its placeholder regex over it. We
+     * don't yet model one method mapping to several routes, so take the first path - better than the
+     * previous garbled output, not a claim that the other paths don't exist.
+     */
+    private static String firstPathValue(Expression value) {
+        if (value.isArrayInitializerExpr()) {
+            NodeList<Expression> values = value.asArrayInitializerExpr().getValues();
+            return values.isEmpty() ? "" : values.get(0).toString();
+        }
+        return value.toString();
     }
 
     /**
