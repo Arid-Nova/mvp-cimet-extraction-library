@@ -28,6 +28,21 @@ portable synthetic identities; every resulting container records its physical
 `metadata.sourcePath`. Multiple classes from one physical source file are
 returned together in `ParseResult.getClasses()` without implicit service mutation.
 
+Java now returns named top-level and member classes, interfaces, enums and records
+with members scoped to their declaration. The primary type keeps its physical file
+identity; additional types use portable identities and retain `sourcePath` and
+`declaredType` metadata. Local/anonymous declarations remain out of scope. Parser,
+compilation-unit and symbol-solver state belongs to one file rather than static
+fields. Resolved method-call types retain their fully qualified identity in
+`metadata.qualifiedObjectType`, with `objectTypeResolution`; the compatibility
+`objectType` field stays short. Consumers that disambiguate names must use the
+qualified metadata. Unresolved symbols never receive an invented namespace.
+
+Literal Feign path prefixes and repository class/method path/export attributes are
+read structurally. Dynamic or multiple mappings and inherited Spring behavior
+remain limited; default repository naming is an unverified source convention,
+not a claim about the deployed Spring application.
+
 JavaScript native `JSModule` metadata records `architectureEvidence`: module
 dependencies, functions, resolved local calls, endpoint-handler links, operation
 contracts, and supported semantic evidence. Completeness flags and limitations
@@ -66,6 +81,21 @@ Java and tree-sitter source reads enforce the same per-file 5 MiB bound as the
 JavaScript adapter. Oversized files produce explicit failures rather than
 successful empty results. The bound covers the read itself as well as the file
 size check, including files that grow during analysis.
+
+The JavaScript adapter preflights aggregate source admission before AST creation.
+Defaults are 20,000 files, 100,000 directory entries, 16 MiB aggregate source,
+500,000 compiler nodes, 10 million work operations and 100,000 evidence records.
+The adapter README documents configurable hard caps and fixed resource-error codes.
+The child process additionally has a V8 old-space cap and timeout; these do not
+bound total process RSS or guarantee completion for 20,000 files. Naive independent
+file batches would lose cross-file import, router and call resolution. Current
+analysis keeps those semantics within explicit budgets and fails rather than
+presenting a truncated corpus as complete.
+
+One immutable snapshot index groups diagnostics, module inventory, endpoints,
+calls, bindings, contracts and semantic evidence by file/endpoint ownership.
+Repository preparation discards that index. File projection therefore visits its
+own records rather than scanning every repository array for each file.
 
 ```java
 var repo = new RepositoryConfig(
@@ -127,6 +157,12 @@ delta payload size; this is a correctness tradeoff, not an incremental performan
 claim. Partial snapshots must be repaired before authoritative delta comparison;
 an extraction failure does not establish that source was deleted.
 
+Current snapshot bindings use `cimet-snapshot-v2:` followed by SHA-256. Native
+IR Set-valued collections are normalized; method-call lists, source metadata and
+configuration arrays retain their order. Older full-target deltas with bare,
+order-insensitive fingerprints must be regenerated; no unsafe compatibility
+fallback accepts them. Existing saved base IRs remain usable for new comparisons.
+
 ## Adding a language
 
 1. Implement `LanguageParser`: extension selection, immutable capability and
@@ -155,6 +191,12 @@ scopes. They let the existing Java symbol solver and file parsers operate on loc
 source exports while preserving historical `clone/<repo>` behavior for existing
 callers.
 
+Repositories within one extraction run are still processed sequentially. A
+registry owns one active prepared checkout and must not be shared between
+parallel workers. Independent workers require separate registries, isolated or
+immutable checkouts, and a shared resource budget. This does not make the legacy
+shared Git clone cache concurrency-safe or introduce automatic parallelism.
+
 ## Validation included
 
 `PolyglotRegistryIntegrationTest` exercises per-file language dispatch, native
@@ -169,3 +211,34 @@ and deterministic repeatability.
 These are synthetic regression checks. They are not an independently labeled
 accuracy study or proof of complete framework, runtime, or cross-language
 behavior.
+
+## Review regression validation
+
+On 2026-11-16, `mvn clean verify` passed 180 local tests; the parser's 52 Node
+tests and 12 study-runner tests passed. New Java fixtures cover multiple/member
+declarations, role filtering, qualified identities, annotation semantics and 24
+concurrent parses over independent scoped roots. Offline Git fixtures cover
+Java-only and mixed-language snapshot/delta/merge behavior. Public-repository
+network tests remain opt-in; this is not exhaustive historical Java parity.
+
+The JavaScript refactor was compared with pre-refactor `ea93f9a` across 53
+successful snapshots from the original fixture suite. Outputs matched after
+excluding existing elapsed/RSS measurements and additive resource counters.
+Tree-sitter fact goldens cover all four experimental language visitors. Native
+JavaScript projection also matches a captured pre-index output, including record
+ordering and cross-file evidence selection. These checks are authored regression
+evidence, not a labeled extraction-accuracy study.
+
+Bounded router smoke probes at 101, 501 and 1,001 files observed approximately
+97, 312 and 503 ms and peak RSS of 77,268, 107,400 and 120,908 KiB on one host.
+They are not production capacity or speedup guarantees. An indexed projection
+probe also checked 100, 1,000 and 5,000 modules with exact output counts; no timing
+threshold or asymptotic claim is inferred from those measurements alone.
+
+Quality checks are `npm --prefix adapter/javascript run lint`,
+`npm --prefix adapter/javascript run format:check`, and
+`python scripts/check_java_format.py`. The Java check uses a version- and
+checksum-pinned formatter over `.java-format-files`; `--apply` formats that list.
+Node quality tooling needs Node 22.13+; the runtime adapter needs Node 22+.
+The manual experiments and their input/measurement limitations are documented in
+`src/main/java/edu/university/ecs/lab/experiments/README.md`.

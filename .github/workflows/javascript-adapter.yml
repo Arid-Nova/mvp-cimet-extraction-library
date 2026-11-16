@@ -26,8 +26,17 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: adapter/javascript/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
       - name: Install parser dependencies only
         run: npm --prefix adapter/javascript ci --ignore-scripts
+      - name: JavaScript lint
+        run: npm --prefix adapter/javascript run lint
+      - name: JavaScript formatting
+        run: npm --prefix adapter/javascript run format:check
+      - name: Java formatting
+        run: python scripts/check_java_format.py
       - name: Parser tests
         run: npm --prefix adapter/javascript test
       - name: JVM integration and Java boundary regression tests
