@@ -10,11 +10,15 @@ for mixed-language integration, neutral profiles, and extension contracts.
 
 ## Install and run
 
-Requires Node 22 or newer. Install only the adapter's parser dependency:
+The analyzer runtime requires Node 22 or newer. Contributor lint/format checks
+require Node 22.13+ because their pinned ESLint 10 toolchain has that minimum.
+Install the parser and contributor tools without lifecycle scripts:
 
 ```sh
 npm ci --prefix adapter/javascript --ignore-scripts
 npm test --prefix adapter/javascript
+npm run --prefix adapter/javascript lint
+npm run --prefix adapter/javascript format:check
 node --max-old-space-size=256 adapter/javascript/analyzer.cjs --root /absolute/checkout --kind backend --name example-api
 node --max-old-space-size=256 adapter/javascript/analyzer.cjs --root /absolute/checkout --kind frontend --name example-web --config /absolute/adapter-config.json
 ```
@@ -23,6 +27,80 @@ Successful CLI output is one JSON object on stdout. Failures emit a generic
 message on stderr and a nonzero exit status. Windows absolute paths also work.
 The adapter does not clone repositories or switch revisions; its caller supplies
 an existing snapshot. It does not install or load dependencies from that snapshot.
+
+For trusted production adapter assets, `npm ci --prefix adapter/javascript
+--omit=dev --ignore-scripts` installs only the pinned TypeScript parser. ESLint and
+Prettier are development dependencies and are never loaded by the analyzer.
+
+## Internal passes and module boundaries
+
+`analyzer.cjs` retains the CLI and `module.exports.analyze` entry points. Each
+invocation creates its own context and executes these passes in order:
+
+1. `lib/source`: inventory and admit source files before creating ASTs; bound
+   reads, compiler-node retention, repository work and evidence allocations.
+2. `lib/bindings`: create lexical scopes, declarations, exports, mutation markers
+   and confined relative-module lookup.
+3. `lib/provenance`: establish Express, Axios and trusted-wrapper roles; then bind
+   only registration functions reached through proven loader/application values.
+4. `lib/http`: resolve conservative symbolic URLs and handlers, observe supported
+   registrations/requests, then compose router mounts after all files are known.
+5. `lib/architecture`: build inventories, resolve local exports/values and emit
+   ordered dependency, local-call and endpoint-handler graphs. `architecture.cjs`
+   orchestrates those builders with the contract and semantic-evidence passes.
+6. `lib/output`: assign the existing stable identities and order diagnostics.
+
+`lib/common/ast.cjs` contains pure syntax/hash/location helpers; repeated semantic
+hashes share an invocation-local weak cache. Contracts and semantic evidence keep
+their own documented conservative inference bounds. None of these passes imports
+target modules, executes project code or loads project configuration plugins.
+
+Cross-file bindings, router mounts and local-call resolution need shared source
+evidence. This is a bounded repository-wide AST phase, not independent file
+batches or a streaming topology extractor. A future bounded-memory multi-pass
+implementation would need compact cross-module summaries; simply releasing each
+AST before resolving its imports would change the analysis contract.
+
+## Repository admission and resource failures
+
+The old 20,000-file count alone was not a memory guarantee. Discovery now checks
+the aggregate source-byte budget for the full inventory before reading/parsing
+source files. Directory inventory and each file read are bounded as well, including
+files that grow after the size check. Parsed compiler nodes (including attached
+JSDoc) are counted before retaining a file's binding graph. Work and intermediate/
+output records share per-invocation counters.
+
+Trusted JSON configuration may choose positive integer limits within these caps:
+
+| Setting               |    Default | Maximum allowed |
+| --------------------- | ---------: | --------------: |
+| `maxFiles`            |     20,000 |          20,000 |
+| `maxDirectoryEntries` |    100,000 |       1,000,000 |
+| `maxSourceBytes`      |     16 MiB |          64 MiB |
+| `maxAstNodes`         |    500,000 |       2,000,000 |
+| `maxWorkOperations`   | 10,000,000 |     100,000,000 |
+| `maxRecords`          |    100,000 |       1,000,000 |
+
+The existing 5 MiB individual-file exclusion remains. The aggregate budgets are
+admission/operation controls, not an estimate of heap amplification or a promise
+that every 20,000-file repository can be extracted. The Java bridge separately
+isolates Node with a 384 MiB default V8 old-space cap, 120-second timeout and bounded
+output. A V8 old-space cap is not a total-process RSS cap, and the parser must
+allocate the current file's AST before its structural nodes can be counted.
+
+Budget exhaustion aborts the snapshot with a nonzero exit; it never publishes a
+successful prefix as complete. The CLI emits a fixed safe code such as
+`JavaScript analysis failed [SOURCE_BYTE_LIMIT]: The analysis exceeded its
+aggregate source-byte limit.` Other codes are `SOURCE_FILE_LIMIT`,
+`SOURCE_ENTRY_LIMIT`, `AST_NODE_LIMIT`, `ANALYSIS_WORK_LIMIT` and
+`ANALYSIS_RECORD_LIMIT`. No source snippets, paths or secret values are included.
+Successful snapshots add `stats.resourceUsage` and `stats.resourceLimits`; existing
+schema versions, semantic IDs, contracts and graph records retain their meaning.
+
+The resource tests cover pre-parse rejection, AST/work/record bounds, growing files,
+sanitized CLI failure/non-execution, recovery after failure and 10/100/300-router
+cross-file smoke fixtures. Such fixtures demonstrate regression behavior, not a
+production capacity benchmark or measured extraction precision/recall.
 
 ## Supported evidence
 
@@ -53,9 +131,14 @@ mapping, not automatic inference of arbitrary wrapper implementations:
   "backendEnv": ["VITE_NUTROSAL_BE", "VITE_LOCAL_URL"],
   "backendOrigins": [],
   "wrappers": [
-    {"module": "server_requests", "kind": "server"},
-    {"module": "dataUtility", "kind": "method-first", "relativeTarget": "backend", "methodPolicy": "get-or-post"},
-    {"module": "dataUtilityImage", "kind": "method-first"}
+    { "module": "server_requests", "kind": "server" },
+    {
+      "module": "dataUtility",
+      "kind": "method-first",
+      "relativeTarget": "backend",
+      "methodPolicy": "get-or-post"
+    },
+    { "module": "dataUtilityImage", "kind": "method-first" }
   ],
   "maxFiles": 20000,
   "excludeDirectories": []
