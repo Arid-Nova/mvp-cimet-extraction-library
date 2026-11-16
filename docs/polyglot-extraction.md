@@ -214,10 +214,12 @@ behavior.
 
 ## Review regression validation
 
-On 2026-11-16, `mvn clean verify` passed 180 local tests; the parser's 52 Node
+On 2026-11-16, `mvn clean verify` passed 182 local tests; the parser's 52 Node
 tests and 12 study-runner tests passed. New Java fixtures cover multiple/member
 declarations, role filtering, qualified identities, annotation semantics and 24
-concurrent parses over independent scoped roots. Offline Git fixtures cover
+concurrent parses over independent scoped roots. Repeated nested short names
+retain distinct native component prefixes through JSON and merge, while legacy
+primary and non-Java prefixes remain unchanged. Offline Git fixtures cover
 Java-only and mixed-language snapshot/delta/merge behavior. Public-repository
 network tests remain opt-in; this is not exhaustive historical Java parity.
 

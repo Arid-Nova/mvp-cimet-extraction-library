@@ -8,11 +8,16 @@ import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.utils.FileUtils;
+import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
+import edu.university.ecs.lab.delta.models.SystemChange;
+import edu.university.ecs.lab.delta.services.SnapshotDeltaService;
+import edu.university.ecs.lab.intermediate.merge.services.MergeService;
 import java.nio.file.*;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
+import org.json.JSONObject;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -139,6 +144,102 @@ class JavaParserContextTest {
             .orElseThrow();
     assertEquals("unresolved", unknown.getMetadata().getString("objectTypeResolution"));
     assertFalse(unknown.getMetadata().has("qualifiedObjectType"));
+  }
+
+  @Test
+  void repeatedNestedShortNamesKeepDistinctComponentIdsAcrossCopiesAndBothMergeForms()
+      throws Exception {
+    Path root = Files.createDirectory(temporary.resolve("nested-component-identities"));
+    Path source =
+        write(
+            root,
+            "Owners.java",
+            """
+package sample;
+class OuterA { static class Worker { int value; void run(String input){input.length();} } }
+class OuterB { static class Worker { int value; void run(String input){input.length();} } }
+""");
+    List<AbstractClass> types = parse(root, source, false);
+    List<AbstractClass> workers =
+        types.stream().filter(type -> type.getName().equals("Worker")).toList();
+    assertEquals(2, workers.size());
+    assertEquals(
+        Set.of("sample.OuterA.Worker", "sample.OuterB.Worker"),
+        workers.stream().map(AbstractClass::getComponentPrefix).collect(Collectors.toSet()));
+    List<String> ids =
+        workers.stream()
+            .flatMap(type -> type.getDescendants().stream())
+            .map(Component::getID)
+            .toList();
+    assertEquals(ids.size(), new HashSet<>(ids).size());
+    assertTrue(
+        ids.containsAll(
+            Set.of(
+                "sample.OuterA.Worker&value",
+                "sample.OuterB.Worker&value",
+                "sample.OuterA.Worker&run",
+                "sample.OuterB.Worker&run")));
+
+    MicroserviceSystem system =
+        new MicroserviceSystem("nested-identities", new LinkedHashSet<>(), new LinkedHashSet<>());
+    Microservice host =
+        new Microservice(
+            system,
+            "fixture",
+            "https://github.com/example/java-context.git",
+            "a".repeat(40),
+            Path.of("/"));
+    types.forEach(host::addAbstractClass);
+    system.getMicroservices().add(host);
+    MicroserviceSystem copy = SnapshotDeltaService.copy(system);
+    assertFalse(
+        JsonReadWriteUtils.setupObjectWriter()
+            .writeValueAsString(system)
+            .contains("\"componentPrefix\""));
+    assertEquals(allComponentIds(system), allComponentIds(copy));
+    assertEquals(
+        allComponentIds(system),
+        allComponentIds(
+            MergeService.create(
+                SnapshotDeltaService.copy(system), SnapshotDeltaService.compare(system, copy))));
+
+    // Exercise the existing fine-grained delta reattachment routine with genuinely flattened
+    // parsed components. Snapshot merges bypass this routine, so test both identity consumers.
+    java.lang.reflect.Method attach =
+        MergeService.class.getDeclaredMethod("recursiveAddDescendants", List.class, Node.class);
+    attach.setAccessible(true);
+    MergeService legacy = new MergeService(copy, new SystemChange());
+    for (AbstractClass worker : copy.getMicroservices().iterator().next().getClasses()) {
+      if (!worker.getName().equals("Worker")) continue;
+      List<Component> flattened = new ArrayList<>(worker.getDescendants());
+      Set<String> expected = flattened.stream().map(Component::getID).collect(Collectors.toSet());
+      flattened.forEach(Component::clearDescendants);
+      worker.clearDescendants();
+      attach.invoke(legacy, flattened, worker);
+      assertEquals(
+          expected,
+          worker.getDescendants().stream().map(Component::getID).collect(Collectors.toSet()));
+      assertTrue(flattened.isEmpty());
+    }
+  }
+
+  @Test
+  void componentPrefixesKeepLegacyPrimaryAndNonJavaIdentityContracts() {
+    JClass type = new JClass(null, Path.of("/Worker.java"), "sample", "", Set.of());
+    assertEquals("sample.Worker", type.getComponentPrefix());
+    type.setMetadata(new JSONObject().put("language", "java").put("declaredType", "Worker"));
+    assertEquals("sample.Worker", type.getComponentPrefix());
+    type.setMetadata(
+        new JSONObject().put("language", "python").put("declaredType", "Outer.Worker"));
+    assertEquals("sample.Worker", type.getComponentPrefix());
+  }
+
+  private static Set<String> allComponentIds(MicroserviceSystem system) {
+    return system.getMicroservices().stream()
+        .flatMap(service -> service.getClasses().stream())
+        .flatMap(type -> type.getDescendants().stream())
+        .map(Component::getID)
+        .collect(Collectors.toSet());
   }
 
   @Test

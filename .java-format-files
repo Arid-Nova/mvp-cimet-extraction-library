@@ -28,3 +28,6 @@ src/test/java/edu/university/ecs/lab/delta/services/SnapshotDeltaOrderingTest.ja
 src/test/java/edu/university/ecs/lab/javascript/JavaScriptExtractionTest.java
 src/test/java/edu/university/ecs/lab/javascript/JavaScriptParserIndexIsolationTest.java
 src/test/java/edu/university/ecs/lab/javascript/JavaScriptSnapshotIndexTest.java
+src/main/java/edu/university/ecs/lab/common/models/ir/AbstractClass.java
+src/main/java/edu/university/ecs/lab/common/models/ir/Component.java
+src/main/java/edu/university/ecs/lab/intermediate/merge/services/MergeService.java
