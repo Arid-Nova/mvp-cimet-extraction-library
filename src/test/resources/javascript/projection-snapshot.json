@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "component": {"name": "api", "kind": "backend", "repositoryURL": "https://github.com/example/api.git", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+  "endpoints": [
+    {"id": "endpoint-b", "file": "b.js", "method": "GET", "normalizedPath": "/b", "line": 2},
+    {"id": "endpoint-a", "file": "a.js", "method": "GET", "normalizedPath": "/a", "line": 3},
+    {"id": "endpoint-a2", "file": "a.js", "method": "POST", "normalizedPath": null, "line": 4}
+  ],
+  "calls": [
+    {"id": "call-b", "file": "b.js", "method": "GET", "normalizedPath": "/a", "caller": "loadB", "line": 5},
+    {"id": "call-a", "file": "a.js", "method": "POST", "normalizedPath": "/b", "caller": "loadA", "line": 6}
+  ],
+  "diagnostics": [
+    {"file": "broken.js", "code": "PARSE_1005"},
+    {"file": "broken.js", "code": "PARSE_1109"},
+    {"file": "huge.js", "code": "FILE_TOO_LARGE"}
+  ],
+  "architecture": {
+    "schemaVersion": 1,
+    "modules": [{"id": "module-b", "file": "b.js"}, {"id": "module-a", "file": "a.js"}],
+    "dependencies": [{"id": "dependency-a", "source": "a.js", "target": "b.js", "kind": "import", "resolution": "resolved"}],
+    "functions": [{"id": "function-b", "file": "b.js"}, {"id": "function-a", "file": "a.js"}],
+    "calls": [{"id": "local-a", "file": "a.js", "callerId": "function-a", "targetId": "function-b"}],
+    "endpointHandlers": [
+      {"endpointId": "endpoint-a2", "functionId": "function-a"},
+      {"endpointId": "endpoint-b", "functionId": "function-b"},
+      {"endpointId": "endpoint-a", "functionId": "function-a"}
+    ],
+    "contracts": {"schemaVersion": 1, "operations": [{"endpointId": "endpoint-b"}, {"endpointId": "endpoint-a"}]},
+    "semanticEvidence": {
+      "schemaVersion": 1,
+      "dataAccess": [{"id": "data-a", "file": "a.js", "endpointId": "endpoint-a"}, {"id": "data-b", "endpointId": "endpoint-b"}],
+      "entities": [{"id": "entity-a", "file": "a.js"}],
+      "proxies": [{"id": "proxy-shared", "file": "b.js", "endpointId": "endpoint-a"}],
+      "resilience": [],
+      "healthEndpoints": [{"id": "health-a", "endpointId": "endpoint-a"}],
+      "summary": {"sourceInspectionComplete": true},
+      "limitations": ["Authored regression fixture"]
+    },
+    "limitations": ["Static source observations"]
+  }
+}
