@@ -80,9 +80,6 @@ public class ServiceBoundaryDetector {
             "build.gradle",
             "build.gradle.kts"
     );
-    // Shared with IRExtractionService.scanDirectory (edu.university.ecs.lab.common.utils.FileUtils),
-    // so the same folders are excluded from both "where can a microservice live" and the actual scan.
-    private static final Set<String> IGNORED_DIRECTORIES = edu.university.ecs.lab.common.utils.FileUtils.IGNORED_DIRECTORY_NAMES;
     private static final Set<String> DEPLOYMENT_DIRECTORIES = Set.of(
             "chart",
             "charts",
@@ -99,6 +96,15 @@ public class ServiceBoundaryDetector {
     private static final Pattern KUBERNETES_DEPLOYMENT_KIND = Pattern.compile(
             "(?m)^\\s*kind\\s*:\\s*Deployment\\s*$"
     );
+    // A flat multi-module Gradle build (one root build.gradle/settings.gradle, no build.gradle in any
+    // individual module directory - e.g. pravega) declares its modules only in settings.gradle's
+    // include(...) call, as colon-separated paths ('shared:rest' -> shared/rest). Matches any quoted,
+    // dot-free, slash-free identifier path; harmless over-matching (e.g. a plugin id string elsewhere in
+    // the file) is inert since it's only ever checked against paths that independently already exist.
+    private static final Pattern GRADLE_INCLUDED_MODULE = Pattern.compile(
+            "['\"](:?[A-Za-z0-9_][A-Za-z0-9_-]*(?::[A-Za-z0-9_][A-Za-z0-9_-]*)*)['\"]"
+    );
+    private static final List<String> SETTINGS_GRADLE_FILES = List.of("settings.gradle", "settings.gradle.kts");
 
     public List<ServiceBoundaryCandidate> detect(String repositoryPath, RepositoryConfig rc) throws IOException {
         Path repositoryRoot = Path.of(repositoryPath);
@@ -110,8 +116,14 @@ public class ServiceBoundaryDetector {
         RepositoryScanIndex scanIndex = scanRepository(repositoryRoot);
         List<ScoredServiceRoot> scoredRoots = new ArrayList<>();
         Set<Path> weaklyQualifiedRoots = new HashSet<>();
+        Set<Path> imageBuildRoots = new HashSet<>();
         for (Path possibleRoot : scanIndex.possibleServiceRoots()) {
             ScoredServiceRoot scoredRoot = score(possibleRoot, rc, scanIndex);
+            if (isNestedImageBuild(possibleRoot, repositoryRoot, scanIndex)) {
+                scoredRoots.add(scoredRoot);
+                imageBuildRoots.add(normalized(possibleRoot));
+                continue;
+            }
             Qualification qualification = qualification(possibleRoot, scanIndex, scoredRoot);
             if (qualification.qualifies()) {
                 scoredRoots.add(scoredRoot);
@@ -122,6 +134,7 @@ public class ServiceBoundaryDetector {
         }
 
         return removeParentCandidates(scoredRoots, weaklyQualifiedRoots).stream()
+                .filter(candidate -> !isInsideAnother(normalized(candidate.rootPath()), imageBuildRoots))
                 .sorted(Comparator.comparing(candidate -> candidate.rootPath().toString()))
                 .toList();
     }
@@ -148,7 +161,65 @@ public class ServiceBoundaryDetector {
             }
         });
         scanIndex.sortEvidence();
+        scanIndex.recordGradleIncludedModules(parseGradleIncludedModulePaths(repositoryRoot));
         return scanIndex;
+    }
+
+    /**
+     * Parses the repository root's settings.gradle(.kts), if any, for every module path given to
+     * {@code include(...)} (e.g. {@code include 'shared:rest', 'controller'}), converting each
+     * colon-separated Gradle path into the filesystem path it designates ('shared:rest' -> shared/rest).
+     */
+    private Set<Path> parseGradleIncludedModulePaths(Path repositoryRoot) {
+        Set<Path> modulePaths = new HashSet<>();
+        for (String fileName : SETTINGS_GRADLE_FILES) {
+            Path settingsFile = repositoryRoot.resolve(fileName);
+            if (!Files.isRegularFile(settingsFile)) {
+                continue;
+            }
+            try {
+                String content = Files.readString(settingsFile);
+                Matcher matcher = GRADLE_INCLUDED_MODULE.matcher(content);
+                while (matcher.find()) {
+                    String modulePath = matcher.group(1);
+                    if (modulePath.startsWith(":")) {
+                        modulePath = modulePath.substring(1);
+                    }
+                    Path resolved = repositoryRoot;
+                    for (String segment : modulePath.split(":")) {
+                        resolved = resolved.resolve(segment);
+                    }
+                    modulePaths.add(resolved.normalize());
+                }
+            } catch (IOException e) {
+                // Best effort - an unreadable settings.gradle just contributes no extra module paths.
+            }
+        }
+        return modulePaths;
+    }
+
+    /**
+     * A monorepo product directory that is its own Gradle build (its own settings.gradle) and builds its
+     * own container image (any Dockerfile variant - spinnaker ships Dockerfile.slim/.ubuntu/.compile) is
+     * one deployable service; the modules its settings.gradle includes (gate-web, gate-core, ...) are
+     * its internals, not separate services. The repository root is excluded: a root build is already
+     * judged by the ordinary rules, which handle both single-service repos and multi-module aggregators.
+     */
+    private boolean isNestedImageBuild(Path possibleRoot, Path repositoryRoot, RepositoryScanIndex scanIndex) {
+        if (normalized(possibleRoot).equals(normalized(repositoryRoot))) {
+            return false;
+        }
+        return (scanIndex.hasOwnFile(possibleRoot, "settings.gradle") || scanIndex.hasOwnFile(possibleRoot, "settings.gradle.kts"))
+                && scanIndex.hasOwnFileStartingWith(possibleRoot, "dockerfile");
+    }
+
+    private static boolean isInsideAnother(Path root, Set<Path> containers) {
+        for (Path container : containers) {
+            if (!root.equals(container) && root.startsWith(container)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ScoredServiceRoot score(Path possibleRoot, RepositoryConfig rc, RepositoryScanIndex scanIndex) {
@@ -208,6 +279,14 @@ public class ServiceBoundaryDetector {
         if (javaEvidence.hasRequestMapping()) {
             evidence.add("RequestMapping: " + displayPath(possibleRoot, javaEvidence.requestMappingPath()));
         }
+        if (javaEvidence.hasJaxRsResource()) {
+            score += CONTROLLER_SCORE;
+            evidence.add("JAX-RS @Path resource: " + displayPath(possibleRoot, javaEvidence.jaxRsPath()));
+        }
+        if (javaEvidence.hasProgrammaticRoute()) {
+            score += CONTROLLER_SCORE;
+            evidence.add("programmatic route mapping: " + displayPath(possibleRoot, javaEvidence.programmaticRoutePath()));
+        }
 
         String serviceName = inferServiceName(possibleRoot, rc);
         return new ScoredServiceRoot(new ServiceBoundaryCandidate(possibleRoot, serviceName, score, evidence), score);
@@ -250,16 +329,37 @@ public class ServiceBoundaryDetector {
         // buggy version of this method) wrongly rejects that kind of directory.
         boolean hasAnyBuildFile = false;
 
-        if (scanIndex.firstExistingFileName(possibleRoot, JAVA_BUILD_FILES).isPresent()) {
+        // A module declared in the repo root's settings.gradle include(...) list is just as much "one
+        // buildable unit" as a directory with its own build.gradle/pom.xml - the flat multi-module Gradle
+        // convention (one root build.gradle, no per-module manifest - e.g. pravega) just defines modules
+        // differently. Still requires the same strong-evidence corroboration below, same as any other
+        // Java root, to keep rejecting plain shared libraries that happen to be registered modules too.
+        if (scanIndex.firstExistingFileName(possibleRoot, JAVA_BUILD_FILES).isPresent()
+                || scanIndex.isDeclaredGradleModule(possibleRoot)) {
             hasAnyBuildFile = true;
             JavaEvidence javaEvidence = scanIndex.javaEvidence(possibleRoot);
-            boolean strongJavaEvidence = javaEvidence.hasSpringBootApplication()
+            boolean hasOwnCodeEvidence = javaEvidence.hasSpringBootApplication()
                     || javaEvidence.hasController()
-                    || scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES).isPresent()
+                    || javaEvidence.hasJaxRsResource()
+                    || javaEvidence.hasProgrammaticRoute();
+            // Infra evidence (Dockerfile/docker-compose/k8s/helm) alone is strong ONLY when this root
+            // also has its own src/main/java - otherwise this is routinely just a multi-module
+            // aggregator's root docker-compose.yml bringing up every submodule for local dev (xs2a,
+            // ccpay-payment-app: a bare pom-packaging/no-source root whose own docker-compose.yml lists
+            // every submodule's service). Without this guard such a root both qualifies AND, since its
+            // file walk covers the whole repo, produces a near-duplicate of every submodule's endpoints
+            // under the wrong (repo-root) service name - a real double-counting bug, not a different
+            // deployable unit. A root that legitimately pairs infra evidence with no Java code of its
+            // own (a pure Docker/k8s wrapper with a Dockerfile but no src/main/java) still correctly
+            // fails to qualify here - it has nothing to extract anyway.
+            boolean hasOwnSourceTree = scanIndex.hasDirectory(
+                    possibleRoot.resolve("src").resolve("main").resolve("java"));
+            boolean hasInfraEvidence = hasOwnSourceTree && (
+                    scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES).isPresent()
                     || scanIndex.dockerComposeWithServices(possibleRoot).isPresent()
                     || scanIndex.findKubernetesDeployment(possibleRoot).isPresent()
-                    || scanIndex.findHelmChart(possibleRoot).isPresent();
-            if (strongJavaEvidence) {
+                    || scanIndex.findHelmChart(possibleRoot).isPresent());
+            if (hasOwnCodeEvidence || hasInfraEvidence) {
                 return Qualification.strongMatch();
             }
             if (scanIndex.firstApplicationConfig(possibleRoot).isPresent()) {
@@ -299,6 +399,19 @@ public class ServiceBoundaryDetector {
             // A Go module is already, definitionally, one buildable/deployable unit - no multi-module
             // ambiguity to guard against the way Java's convention requires.
             return Qualification.strongMatch();
+        }
+
+        if (scanIndex.firstFileWithExtension(possibleRoot, ".go").isPresent()) {
+            hasAnyBuildFile = true;
+            // Pre-Go-modules repos (GOPATH era, predating go.mod - e.g. sock-shop's catalogue/payment/user,
+            // all from 2017) have no reliable manifest file at all: some vendor a glide.yaml/Gopkg.toml,
+            // some have neither. The one thing every real instance actually observed has in common is its
+            // own Dockerfile (directly, or via a docker-compose service pointing at one) - the same
+            // fallback signal Python already uses for its own "no go.mod equivalent" case (#16 follow-up).
+            if (scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES).isPresent()
+                    || scanIndex.dockerComposeWithServices(possibleRoot).isPresent()) {
+                return Qualification.strongMatch();
+            }
         }
 
         if (scanIndex.hasOwnFile(possibleRoot, "requirements.txt") || scanIndex.hasOwnFile(possibleRoot, "pyproject.toml")) {
@@ -431,9 +544,80 @@ public class ServiceBoundaryDetector {
                 .or(() -> readMavenArtifactId(possibleRoot.resolve("pom.xml")))
                 .or(() -> readGradleRootProjectName(possibleRoot))
                 .or(() -> readCsprojServiceName(possibleRoot))
+                .or(() -> readNodeEntryPointDirectoryName(possibleRoot))
+                .or(() -> readPythonPackageDirectoryName(possibleRoot))
                 .or(() -> Optional.ofNullable(possibleRoot.getFileName()).map(Path::toString))
                 .filter(name -> !name.isBlank())
                 .orElse(rc.getRepoName());
+    }
+
+    /**
+     * Same idea as the Node entry-point heuristic above, for Python: a repo's pyproject.toml/setup.py
+     * "name" (usually the PyPI distribution name, e.g. "rasa-sdk") is routinely different from the
+     * importable package directory the real code actually lives in and runs as (e.g. "rasa_sdk", run via
+     * `python -m rasa_sdk`) - the latter is what an external ground truth called this service, not the
+     * repo name (#16 follow-up). __main__.py is the standard, unambiguous Python signal for "this
+     * directory is a runnable package" - only acts when exactly one direct subdirectory has one, since
+     * more than one makes the "real" one ambiguous and not worth guessing at.
+     */
+    private Optional<String> readPythonPackageDirectoryName(Path possibleRoot) {
+        try (var entries = Files.list(possibleRoot)) {
+            List<Path> runnablePackages = entries
+                    .filter(Files::isDirectory)
+                    .filter(dir -> Files.isRegularFile(dir.resolve("__main__.py")))
+                    .toList();
+            return runnablePackages.size() == 1
+                    ? Optional.ofNullable(runnablePackages.get(0).getFileName()).map(Path::toString)
+                    : Optional.empty();
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * A Node service's package.json (and the Dockerfile/README next to it) often sit at the repo root
+     * while the actual Express app one level down in a subdirectory the start script names - naming the
+     * service after that subdirectory better reflects where the real code lives than the directory the
+     * manifest happens to sit in, and matches an external ground truth's own choice of name for exactly
+     * this layout (node-js-restful-api-example: root package.json, app in "server/", "scripts.start":
+     * "node server/server.js" - labelled "server", not the repo name; #16 follow-up). package.json's own
+     * "name" field isn't a safe substitute here - it's the npm package name, which is routinely unrelated
+     * to either the repo or the subdirectory (this repo's is "node-js-rest-api", neither of the other two).
+     */
+    private Optional<String> readNodeEntryPointDirectoryName(Path possibleRoot) {
+        Path packageJsonPath = possibleRoot.resolve("package.json");
+        if (!Files.isRegularFile(packageJsonPath)) {
+            return Optional.empty();
+        }
+        try (InputStream inputStream = Files.newInputStream(packageJsonPath)) {
+            JsonNode root = new ObjectMapper().readTree(inputStream);
+            JsonNode scripts = root.get("scripts");
+            String entry = firstNonBlank(
+                    scripts == null ? null : textOrNull(scripts.get("start")),
+                    scripts == null ? null : textOrNull(scripts.get("server")),
+                    textOrNull(root.get("main")));
+            if (entry == null) {
+                return Optional.empty();
+            }
+            String pathPart = entry.replaceFirst("^(node|nodemon|ts-node)\\s+", "").trim();
+            int slash = pathPart.indexOf('/');
+            return slash > 0 ? Optional.of(pathPart.substring(0, slash)) : Optional.empty();
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private static String textOrNull(JsonNode node) {
+        return node != null && node.isTextual() ? node.asText() : null;
     }
 
     /**
@@ -612,10 +796,7 @@ public class ServiceBoundaryDetector {
     }
 
     private boolean isIgnoredDirectory(Path dir) {
-        return Optional.ofNullable(dir.getFileName())
-                .map(Path::toString)
-                .filter(IGNORED_DIRECTORIES::contains)
-                .isPresent();
+        return edu.university.ecs.lab.common.utils.FileUtils.isIgnoredDirectory(dir);
     }
 
     private Path normalized(Path path) {
@@ -770,6 +951,15 @@ public class ServiceBoundaryDetector {
         private final List<Path> deploymentManifests = new ArrayList<>();
         private final List<Path> helmCharts = new ArrayList<>();
         private final Map<Path, JavaEvidence> javaEvidenceByRoot = new HashMap<>();
+        private Set<Path> gradleIncludedModules = Set.of();
+
+        private void recordGradleIncludedModules(Set<Path> modulePaths) {
+            this.gradleIncludedModules = modulePaths;
+        }
+
+        private boolean isDeclaredGradleModule(Path possibleRoot) {
+            return gradleIncludedModules.contains(key(possibleRoot));
+        }
 
         private void recordDirectory(Path dir) {
             directories.add(key(dir));
@@ -830,9 +1020,16 @@ public class ServiceBoundaryDetector {
 
         private JavaEvidence scanJavaFile(Path file, JavaEvidence evidence) {
             JavaEvidence currentEvidence = evidence;
+            // @Path is also Retrofit's path-parameter annotation on outbound client interfaces; it only
+            // means a JAX-RS resource when the file imports JAX-RS.
+            boolean importsJaxRs = false;
             try (var reader = Files.newBufferedReader(file)) {
                 String line;
                 while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (trimmed.startsWith("import javax.ws.rs") || trimmed.startsWith("import jakarta.ws.rs")) {
+                        importsJaxRs = true;
+                    }
                     if (!currentEvidence.hasSpringBootApplication() && line.contains("@SpringBootApplication")) {
                         currentEvidence = currentEvidence.withSpringBootApplication(file);
                     }
@@ -842,6 +1039,12 @@ public class ServiceBoundaryDetector {
                     }
                     if (!currentEvidence.hasRequestMapping() && line.contains("@RequestMapping")) {
                         currentEvidence = currentEvidence.withRequestMapping(file);
+                    }
+                    if (!currentEvidence.hasJaxRsResource() && importsJaxRs && line.contains("@Path(")) {
+                        currentEvidence = currentEvidence.withJaxRsResource(file);
+                    }
+                    if (!currentEvidence.hasProgrammaticRoute() && line.contains("new SimpleUrlHandlerMapping(")) {
+                        currentEvidence = currentEvidence.withProgrammaticRoute(file);
                     }
 
                     if (currentEvidence.isComplete()) {
@@ -942,6 +1145,12 @@ public class ServiceBoundaryDetector {
             return regularFiles.contains(key(path));
         }
 
+        /** Whether {@code dir} itself contains a file whose name starts with {@code prefix}, ignoring case. */
+        private boolean hasOwnFileStartingWith(Path dir, String prefix) {
+            return fileNamesByDirectory.getOrDefault(key(dir), List.of()).stream()
+                    .anyMatch(name -> name.toLowerCase(Locale.ROOT).startsWith(prefix));
+        }
+
         /** Whether {@code dir} itself (not a subdirectory) contains a file named exactly {@code fileName}. */
         private boolean hasOwnFile(Path dir, String fileName) {
             return fileNamesByDirectory.getOrDefault(key(dir), List.of()).contains(fileName);
@@ -958,22 +1167,36 @@ public class ServiceBoundaryDetector {
     private record JavaEvidence(
             Path springBootApplicationPath,
             Path controllerPath,
-            Path requestMappingPath
+            Path requestMappingPath,
+            Path jaxRsPath,
+            Path programmaticRoutePath
     ) {
         private static JavaEvidence empty() {
-            return new JavaEvidence(null, null, null);
+            return new JavaEvidence(null, null, null, null, null);
         }
 
         private JavaEvidence withSpringBootApplication(Path path) {
-            return new JavaEvidence(path, controllerPath, requestMappingPath);
+            return new JavaEvidence(path, controllerPath, requestMappingPath, jaxRsPath, programmaticRoutePath);
         }
 
         private JavaEvidence withController(Path path) {
-            return new JavaEvidence(springBootApplicationPath, path, requestMappingPath);
+            return new JavaEvidence(springBootApplicationPath, path, requestMappingPath, jaxRsPath, programmaticRoutePath);
         }
 
         private JavaEvidence withRequestMapping(Path path) {
-            return new JavaEvidence(springBootApplicationPath, controllerPath, path);
+            return new JavaEvidence(springBootApplicationPath, controllerPath, path, jaxRsPath, programmaticRoutePath);
+        }
+
+        private JavaEvidence withJaxRsResource(Path path) {
+            return new JavaEvidence(springBootApplicationPath, controllerPath, requestMappingPath, path, programmaticRoutePath);
+        }
+
+        private JavaEvidence withProgrammaticRoute(Path path) {
+            return new JavaEvidence(springBootApplicationPath, controllerPath, requestMappingPath, jaxRsPath, path);
+        }
+
+        private boolean hasProgrammaticRoute() {
+            return programmaticRoutePath != null;
         }
 
         private boolean hasSpringBootApplication() {
@@ -988,8 +1211,13 @@ public class ServiceBoundaryDetector {
             return requestMappingPath != null;
         }
 
+        private boolean hasJaxRsResource() {
+            return jaxRsPath != null;
+        }
+
         private boolean isComplete() {
-            return hasSpringBootApplication() && hasController() && hasRequestMapping();
+            return hasSpringBootApplication() && hasController() && hasRequestMapping() && hasJaxRsResource()
+                    && hasProgrammaticRoute();
         }
     }
 }

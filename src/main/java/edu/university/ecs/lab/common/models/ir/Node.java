@@ -42,6 +42,12 @@ public abstract class Node {
      * Various optional metadata that can be attached to Nodes.
      */
     @Getter
+    // org.json.JSONObject does not override equals()/hashCode() - it compares by identity, so two
+    // independently-built nodes with byte-for-byte identical metadata (e.g. a freshly-extracted IR vs
+    // the same IR read back from its own JSON) would never be .equals() otherwise. Metadata is
+    // supplementary ("various optional metadata"), not part of a node's identity - same rationale as
+    // excluding parent above.
+    @EqualsAndHashCode.Exclude
     protected JSONObject metadata;
 
     /**
@@ -49,6 +55,7 @@ public abstract class Node {
      */
     @JsonIgnore
     @Getter
+    @EqualsAndHashCode.Exclude
     private transient String originalDeserializedID;
 
 

@@ -22,6 +22,8 @@ public class FileUtils {
             ".jsx",
             ".mjs",
             ".cjs",
+            ".groovy",
+            ".kt",
             ".yml",
             ".yaml",
             ".properties",
@@ -43,7 +45,7 @@ public class FileUtils {
      * VALID_FILES also contains non-extension config filenames (pom.xml, Dockerfile, ...).
      */
     private static final Set<String> SOURCE_FILE_EXTENSIONS = Set.of(
-            ".java", ".py", ".go", ".cs", ".js", ".jsx", ".mjs", ".cjs"
+            ".java", ".py", ".go", ".cs", ".js", ".jsx", ".mjs", ".cjs", ".groovy", ".kt"
     );
     /**
      * Directory names never worth scanning as application source: dependency trees, build output, VCS
@@ -66,8 +68,47 @@ public class FileUtils {
             // bundles, all newly matched once .js became a recognized source extension (#16) - these
             // got tree-sitter-parsed as if they were application code, a ~4x slowdown on that one repo
             // for zero useful IR. Never backend/service code in any of the frameworks we support.
-            "static", "assets", "Assets", "public"
+            "static", "assets", "Assets", "public",
+            // Test code routinely builds its own mock app/server with its own real route decorators to
+            // exercise a framework feature in isolation (confirmed by reproduction: rasa-sdk's
+            // tests/test_cors.py defines a full Sanic app with @app.get("/read")/@app.get("/boom") routes
+            // purely to test CORS handling, plus its own duplicate @app.post("/webhook") - three false
+            // positives this pipeline had no way to distinguish from the real production endpoints in
+            // rasa_sdk/endpoint.py, #16 follow-up). Also correctly excludes Java's own src/test/java from
+            // being scanned as application code, which nothing previously did on purpose.
+            "test", "tests",
+            // Demonstration/sample apps shipped alongside a system (e.g. spinnaker's examples/codelabs/*
+            // workshop backends) - not part of the system itself, for the same reason as test code.
+            "examples", "samples"
     );
+    /** Build-tool output folder names - which are also perfectly ordinary source package names. */
+    private static final Set<String> BUILD_OUTPUT_DIRECTORY_NAMES = Set.of("build", "out", "target");
+
+    /**
+     * Whether a directory should be skipped. Build-output names (build/out/target) are only skipped
+     * outside a src/main/ source tree: inside one they're source packages (spinnaker igor's com.netflix.spinnaker
+     * .igor.build holds its BuildController), and skipping them silently dropped that code.
+     */
+    public static boolean isIgnoredDirectory(Path dir) {
+        Path name = dir.getFileName();
+        if (name == null || !IGNORED_DIRECTORY_NAMES.contains(name.toString())) {
+            return false;
+        }
+        if (!BUILD_OUTPUT_DIRECTORY_NAMES.contains(name.toString())) {
+            return true;
+        }
+        Path parent = dir.getParent();
+        if (parent == null) {
+            return true;
+        }
+        for (int i = 0; i + 1 < parent.getNameCount(); i++) {
+            if (parent.getName(i).toString().equals("src") && parent.getName(i + 1).toString().equals("main")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public static final String SYS_SEPARATOR = System.getProperty("file.separator");
     public static final String SPECIAL_SEPARATOR = SYS_SEPARATOR.replace("\\", "\\\\");
     private static final String DEFAULT_OUTPUT_PATH = "output";
@@ -367,9 +408,26 @@ public class FileUtils {
      * @param path the file for checking
      * @return boolean true if it belongs in the project
      */
+    /**
+     * Test sources identified by their language's own file-naming convention rather than by directory:
+     * Go's compiler-enforced *_test.go (spinnaker's spin CLI tests stand up httptest servers whose
+     * handler routes were read as real endpoints), JS *.test.js / *.spec.js, and pytest's test_*.py /
+     * *_test.py.
+     */
+    private static boolean isTestSourceFile(String path) {
+        String name = Path.of(path).getFileName().toString();
+        return name.endsWith("_test.go")
+                || name.matches(".*\\.(test|spec)\\.(js|jsx|mjs|cjs)$")
+                || (name.endsWith(".py") && (name.startsWith("test_") || name.endsWith("_test.py")));
+    }
+
     public static boolean isValidFile(String path) {
         // Special check for github metadata files
         if(path.contains(".github")) {
+            return false;
+        }
+
+        if (isTestSourceFile(path)) {
             return false;
         }
 

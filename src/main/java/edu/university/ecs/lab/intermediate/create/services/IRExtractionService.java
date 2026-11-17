@@ -12,6 +12,7 @@ import edu.university.ecs.lab.common.parsers.JavaLanguageParser;
 import edu.university.ecs.lab.common.parsers.ParserRegistry;
 import edu.university.ecs.lab.common.parsers.ParseResult;
 import edu.university.ecs.lab.common.parsers.PolyglotLanguageParser;
+import edu.university.ecs.lab.common.parsers.SpringAnnotationSourceParser;
 import edu.university.ecs.lab.common.parsers.treesitter.PolyglotExtractor;
 
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -20,6 +21,8 @@ import org.json.JSONObject;
 import java.io.*;
 import java.util.*;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Top-level service for extracting intermediate representation from remote repositories. Methods
@@ -61,6 +64,7 @@ public class IRExtractionService {
         this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.GO));
         this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.CSHARP));
         this.parserRegistry.register(new PolyglotLanguageParser(PolyglotExtractor.Language.JAVASCRIPT));
+        this.parserRegistry.register(new SpringAnnotationSourceParser());
     }
 
     /**
@@ -120,6 +124,8 @@ public class IRExtractionService {
                     candidate.serviceName()
             );
             if (microservice != null) {
+                RouteMountResolver.apply(microservice);
+                AbstractControllerRouteResolver.apply(microservice);
                 microservices.add(microservice);
             }
         }
@@ -181,9 +187,31 @@ public class IRExtractionService {
         metadata.put("branch", rc.repoBranchPair().branchName());
         model.setMetadata(metadata);
 
-        scanDirectory(localDir, model, rc);
+        scanDirectory(localDir, model, rc, modulesLeftOutOfBuild(localDir));
+        addEndpointDeclaringInterfaces(localDir, model, rc);
 
         return model;
+    }
+
+    /**
+     * Adds to the microservice the API interfaces its controllers implement that declare the endpoints
+     * (see SourceToObjectUtils#recordEndpointDeclaringInterfaces) but live outside its own directory -
+     * e.g. xs2a's generated xs2a-server-api module, served by xs2a-impl. Ones inside the directory were
+     * already picked up by the scan.
+     */
+    private void addEndpointDeclaringInterfaces(File serviceRoot, Microservice microservice, RepositoryConfig rc) {
+        Path root = serviceRoot.toPath().toAbsolutePath().normalize();
+        for (File iface : SourceToObjectUtils.takeEndpointDeclaringInterfaces(microservice)) {
+            if (iface.toPath().toAbsolutePath().normalize().startsWith(root)) {
+                continue;
+            }
+            parserRegistry.findParserFor(iface).ifPresent(parser -> {
+                ParseResult result = parser.parse(microservice, iface, rc, false);
+                if (result.isSuccess() && result.getAbstractClass() != null) {
+                    microservice.addAbstractClass(result.getAbstractClass());
+                }
+            });
+        }
     }
 
     /**
@@ -195,6 +223,53 @@ public class IRExtractionService {
             File directory,
             Microservice microservice,
             RepositoryConfig rc) {
+        scanDirectory(directory, microservice, rc, Set.of());
+    }
+
+    private static final Pattern GRADLE_MODULE_REFERENCE = Pattern.compile(
+            "['\"]:?([A-Za-z0-9_][A-Za-z0-9_.-]*)(?::[A-Za-z0-9_][A-Za-z0-9_.-]*)*['\"]");
+
+    /**
+     * Subproject directories of a Gradle build that its settings.gradle doesn't include - e.g.
+     * spinnaker clouddriver's clouddriver-alicloud, commented out of settings.gradle, so the service is
+     * built and shipped without it. A directory counts as a subproject when it holds a Gradle build
+     * script; it counts as included when its name appears in a (non-commented) module reference.
+     */
+    private static Set<File> modulesLeftOutOfBuild(File root) {
+        Set<String> referenced = new HashSet<>();
+        for (String settingsName : List.of("settings.gradle", "settings.gradle.kts")) {
+            File settings = new File(root, settingsName);
+            if (!settings.isFile()) continue;
+            try {
+                String text = java.nio.file.Files.readString(settings.toPath())
+                        .replaceAll("(?s)/\\*.*?\\*/", "")
+                        .replaceAll("(?m)^\\s*//.*$", "")
+                        .replaceAll("\\s//[^\\n]*", "");
+                Matcher m = GRADLE_MODULE_REFERENCE.matcher(text);
+                while (m.find()) referenced.add(m.group(1));
+            } catch (IOException e) {
+                return Set.of();
+            }
+        }
+        if (referenced.isEmpty()) return Set.of();
+
+        Set<File> leftOut = new HashSet<>();
+        File[] children = root.listFiles(File::isDirectory);
+        if (children == null) return leftOut;
+        for (File child : children) {
+            File[] buildScripts = child.listFiles(f -> f.isFile() && (f.getName().endsWith(".gradle") || f.getName().endsWith(".gradle.kts")));
+            if (buildScripts != null && buildScripts.length > 0 && !referenced.contains(child.getName())) {
+                leftOut.add(child);
+            }
+        }
+        return leftOut;
+    }
+
+    private void scanDirectory(
+            File directory,
+            Microservice microservice,
+            RepositoryConfig rc,
+            Set<File> skipped) {
         File[] files = directory.listFiles();
 
         if (files != null) {
@@ -202,8 +277,8 @@ public class IRExtractionService {
                 if (file.isDirectory()) {
                     // #16: dependency/build directories (node_modules, .venv-equivalents, bin/obj, ...)
                     // must not be walked - they can hold thousands of real-looking source files.
-                    if (!FileUtils.IGNORED_DIRECTORY_NAMES.contains(file.getName())) {
-                        scanDirectory(file, microservice, rc);
+                    if (!FileUtils.isIgnoredDirectory(file.toPath()) && !skipped.contains(file)) {
+                        scanDirectory(file, microservice, rc, skipped);
                     }
                 } else if (FileUtils.isValidFile(file.getPath())) {
                     if(FileUtils.isConfigurationFile(file.getPath())) {

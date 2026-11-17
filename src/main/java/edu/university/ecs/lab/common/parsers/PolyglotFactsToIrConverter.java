@@ -83,6 +83,26 @@ public final class PolyglotFactsToIrConverter {
         for (String imp : facts.get("imports")) addImport(primary, imp);
         for (String ann : facts.get("annotations")) addAnnotation(primary, ann);
 
+        // Stashed in metadata (free-form, excluded from equals/hashCode) rather than a new IR field - a
+        // route mount only matters to resolveRouteMounts()'s cross-file post-processing pass once every
+        // file in the microservice has been parsed, which this per-file converter has no visibility into
+        // (#16 follow-up - see PolyglotExtractor's "routeMounts" dimension for how these are produced).
+        List<String> mounts = facts.get("routeMounts");
+        if (!mounts.isEmpty()) {
+            org.json.JSONArray arr = new org.json.JSONArray();
+            for (String mount : mounts) {
+                int sep = mount.indexOf("|||");
+                if (sep < 0) continue;
+                org.json.JSONObject entry = new org.json.JSONObject();
+                entry.put("prefix", mount.substring(0, sep));
+                entry.put("target", mount.substring(sep + 3));
+                arr.put(entry);
+            }
+            org.json.JSONObject meta = primary.getMetadata() == null ? new org.json.JSONObject() : primary.getMetadata();
+            meta.put("routeMounts", arr);
+            primary.setMetadata(meta);
+        }
+
         for (String f : facts.get("fields")) {
             int dot = f.indexOf('.');
             String owner = dot < 0 ? null : f.substring(0, dot);
@@ -99,7 +119,7 @@ public final class PolyglotFactsToIrConverter {
             i++;
             EndpointFact ef = parseEndpointFact(endpointFact, i);
             AbstractClass target = resolve(byName, ownerOf(ef.name()), microservice, gitPath, fileBaseName);
-            Method base = new Method(target, ef.name(), new Location());
+            Method base = new Method(target, memberName(byName, ef.name()), new Location());
             Endpoint endpoint = new Endpoint(base, ef.url(), ef.httpMethod());
             attachParameters(endpoint, ef.name(), paramSignatures);
             target.getMethods().add(endpoint);
@@ -114,7 +134,7 @@ public final class PolyglotFactsToIrConverter {
         for (String fn : facts.get("functions")) {
             if (endpointNames.contains(fn)) continue;
             AbstractClass target = resolve(byName, ownerOf(fn), microservice, gitPath, fileBaseName);
-            Method method = new Method(target, fn, new Location());
+            Method method = new Method(target, memberName(byName, fn), new Location());
             attachParameters(method, fn, paramSignatures);
             target.getMethods().add(method);
             methodsByQualifiedName.put(fn, method);
@@ -123,6 +143,8 @@ public final class PolyglotFactsToIrConverter {
         attachHttpCalls(byName, methodsByQualifiedName, facts.get("httpCalls"), microservice, gitPath, fileBaseName);
         attachRpcFacts(byName, methodsByQualifiedName, facts.get("rpcServers"), "grpc-server", microservice, gitPath, fileBaseName);
         attachRpcFacts(byName, methodsByQualifiedName, facts.get("rpcClients"), "grpc-client", microservice, gitPath, fileBaseName);
+        attachRpcFacts(byName, methodsByQualifiedName, facts.get("queueProducers"), "queue-producer", microservice, gitPath, fileBaseName);
+        attachRpcFacts(byName, methodsByQualifiedName, facts.get("queueConsumers"), "queue-consumer", microservice, gitPath, fileBaseName);
 
         // Only one AbstractClass is returned (matching the LanguageParser contract, one return value per
         // file); any additional real classes the file declared are added to the microservice directly
@@ -146,7 +168,20 @@ public final class PolyglotFactsToIrConverter {
     private static ClassSlot newSlot(Microservice microservice, Path path, String name, ClassRole role) {
         JClass abstractClass = new JClass(microservice, path, null, "", Set.of());
         abstractClass.setClassRole(role);
+        // A real declared type is named after itself (as Java classes already are), not after its file -
+        // "CustomersController.cs" reads to any consumer splitting on '.' as a class named "cs".
+        if (!name.equals(path.getFileName().toString())) abstractClass.setName(name);
         return new ClassSlot(abstractClass, name);
+    }
+
+    /**
+     * "Owner.method" -> "method" when Owner is one of this file's own declared types (the method is then
+     * stored on that type, so repeating the owner in its name is redundant - and unlike how Java methods
+     * are named); left qualified otherwise, since a module-level container doesn't carry the owner.
+     */
+    private static String memberName(Map<String, ClassSlot> byName, String qualifiedName) {
+        String owner = ownerOf(qualifiedName);
+        return owner != null && byName.containsKey(owner) ? qualifiedName.substring(owner.length() + 1) : qualifiedName;
     }
 
     /** name.rest -> owning class name if known; a bare (unqualified) name -> module-level. */

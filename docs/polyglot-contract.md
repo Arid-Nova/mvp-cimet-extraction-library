@@ -185,7 +185,7 @@ variance), 5 runs each:
 | | Baseline (median of 5) | Current (median of 5) | Change |
 | --- | --- | --- | --- |
 | Scan phase time | 2,269 ms | 2,215 ms | **-2.4%** |
-| Heap retained | 34.58 MB | 32.31 MB | **-2.0%** |
+| Heap retained | 34.58 MB | 32.31 MB | **-6.6%** |
 
 Both runs were tight across all 5 iterations (heap retained varied by well under 1% run-to-run with
 this method, versus the 2x swings seen with raw OS-level RSS). Current is marginally *better* than
@@ -194,5 +194,6 @@ non-source files get scanned per run (1,315 vs 1,338 files - the vendored JS bun
 at all).
 
 **Status against the epic's acceptance criterion: met.** Java shows no measurable runtime or memory
-regression - comfortably within the 5% budget on both counts, verified with a repeatable, low-variance
+regression - both counts are *improvements* over baseline (well clear of the 5% regression budget,
+which only limits how much worse things are allowed to get), verified with a repeatable, low-variance
 method rather than a single noisy sample.

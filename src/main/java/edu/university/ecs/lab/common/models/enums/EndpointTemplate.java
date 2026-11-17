@@ -5,6 +5,7 @@ import com.github.javaparser.ast.expr.*;
 import edu.university.ecs.lab.common.utils.StringUtils;
 import lombok.Getter;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -19,6 +20,16 @@ public class EndpointTemplate {
     private final String url;
 
     public EndpointTemplate(AnnotationExpr requestMapping, AnnotationExpr endpointMapping) {
+        this(requestMapping, endpointMapping, null);
+    }
+
+    /**
+     * Like {@link #EndpointTemplate(AnnotationExpr, AnnotationExpr)}, but for JAX-RS: a bare verb
+     * marker ({@code @GET}, {@code @POST}, ...) carries no path of its own, unlike Spring's combined
+     * {@code @GetMapping("/foo")}. {@code jaxrsSubPath} is that method's own sibling {@code @Path}
+     * annotation, if any, supplying the sub-path appended after the class-level {@code @Path} prefix.
+     */
+    public EndpointTemplate(AnnotationExpr requestMapping, AnnotationExpr endpointMapping, AnnotationExpr jaxrsSubPath) {
         HttpMethod finalHttpMethod = HttpMethod.ALL;
 
         String preUrl = "";
@@ -26,7 +37,8 @@ public class EndpointTemplate {
             if (requestMapping instanceof NormalAnnotationExpr) {
                 NormalAnnotationExpr nae = (NormalAnnotationExpr) requestMapping;
                 for (MemberValuePair pair : nae.getPairs()) {
-                    if (pair.getNameAsString().equals("value")) {
+                    // path and value are aliases of each other in Spring's @RequestMapping
+                    if (pair.getNameAsString().equals("value") || pair.getNameAsString().equals("path")) {
                         preUrl = firstPathValue(pair.getValue()).replaceAll("\"", "");
                     }
                 }
@@ -40,7 +52,8 @@ public class EndpointTemplate {
             NormalAnnotationExpr nae = (NormalAnnotationExpr) endpointMapping;
             for (MemberValuePair pair : nae.getPairs()) {
                 if (pair.getNameAsString().equals("method")) {
-                    String methodValue = pair.getValue().toString();
+                    // method = {RequestMethod.GET} is an array; its raw text matches no verb.
+                    String methodValue = firstPathValue(pair.getValue());
                     finalHttpMethod = httpFromMapping(methodValue);
                 } else if(pair.getNameAsString().equals("path") || pair.getNameAsString().equals("value")) {
                     url = firstPathValue(pair.getValue()).replaceAll("\"", "");
@@ -54,16 +67,26 @@ public class EndpointTemplate {
             }
         }
 
+        if (jaxrsSubPath != null) {
+            String subUrl = extractPathValue(jaxrsSubPath);
+            if (!subUrl.isEmpty()) {
+                url = subUrl;
+            }
+        }
+
         if(finalHttpMethod == HttpMethod.ALL) {
             finalHttpMethod = httpFromMapping(endpointMapping.getNameAsString());
         }
 
         String finalURL = "";
         // Ensure preUrl starts with a slash if it exists
-        if((!preUrl.isEmpty() && !preUrl.startsWith("/"))) {
+        if (!preUrl.isEmpty() && !preUrl.startsWith("/")) {
             preUrl = "/" + preUrl;
-        // Ensure Url starts with a slash if it exists
-        } else if ((!url.isEmpty() && !url.startsWith("/"))) {
+        }
+        // Ensure url starts with a slash if it exists - independently of preUrl, so a non-slash-prefixed
+        // sub-path (e.g. JAX-RS's common @Path("_query") convention) still joins on its own "/" instead
+        // of concatenating directly onto preUrl (was only checked when preUrl was empty).
+        if (!url.isEmpty() && !url.startsWith("/")) {
             url = "/" + url;
         }
 
@@ -110,10 +133,43 @@ public class EndpointTemplate {
             case "PatchMapping":
             case "RequestMethod.PATCH":
                 return HttpMethod.PATCH;
+            // JAX-RS: the verb is its own bare marker annotation (@GET, @POST, ...), not a string argument.
+            case "GET":
+                return HttpMethod.GET;
+            case "POST":
+                return HttpMethod.POST;
+            case "PUT":
+                return HttpMethod.PUT;
+            case "DELETE":
+                return HttpMethod.DELETE;
+            case "PATCH":
+                return HttpMethod.PATCH;
+            case "HEAD":
+                return HttpMethod.HEAD;
+            case "OPTIONS":
+                return HttpMethod.OPTIONS;
             default:
                 return HttpMethod.ALL;
         }
 
+    }
+
+    /**
+     * Extracts a {@code @Path}-style annotation's string value, whether declared as
+     * {@code @Path("/foo")} or {@code @Path(value = "/foo")}.
+     */
+    private static String extractPathValue(AnnotationExpr ae) {
+        if (ae.isSingleMemberAnnotationExpr()) {
+            return firstPathValue(ae.asSingleMemberAnnotationExpr().getMemberValue()).replaceAll("\"", "");
+        }
+        if (ae.isNormalAnnotationExpr()) {
+            for (MemberValuePair pair : ae.asNormalAnnotationExpr().getPairs()) {
+                if (pair.getNameAsString().equals("value")) {
+                    return firstPathValue(pair.getValue()).replaceAll("\"", "");
+                }
+            }
+        }
+        return "";
     }
 
     /**
@@ -145,14 +201,48 @@ public class EndpointTemplate {
     }
 
     /**
-     * A Spring mapping annotation's path/value member is usually a single string
-     * ({@code @GetMapping("/foo")}), but can legally be an array of several
-     * ({@code @GetMapping({"/foo", "/{workspace}/foo"})}, seen in real code, e.g. geoserver-cloud's
-     * KMLReflectorController - #16 follow-up). Calling {@code toString()} directly on the array
-     * expression returns JavaParser's literal array-initializer text (braces, comma, nested quotes),
-     * which corrupts the URL once {@link #simplifyEndpointURL} runs its placeholder regex over it. We
-     * don't yet model one method mapping to several routes, so take the first path - better than the
-     * previous garbled output, not a claim that the other paths don't exist.
+     * A mapping annotation listing several paths ({@code @GetMapping({"/foo", "/{workspace}/foo"})},
+     * e.g. geoserver-cloud's KMLReflectorController) declares one route per path. Returns one copy of
+     * the annotation per path, each with just that single path, or the annotation itself when it has at
+     * most one.
+     */
+    public static List<AnnotationExpr> splitPaths(AnnotationExpr mapping) {
+        Expression paths = null;
+        if (mapping instanceof SingleMemberAnnotationExpr single) {
+            paths = single.getMemberValue();
+        } else if (mapping instanceof NormalAnnotationExpr normal) {
+            for (MemberValuePair pair : normal.getPairs()) {
+                if (pair.getNameAsString().equals("value") || pair.getNameAsString().equals("path")) {
+                    paths = pair.getValue();
+                }
+            }
+        }
+        if (paths == null || !paths.isArrayInitializerExpr() || paths.asArrayInitializerExpr().getValues().size() <= 1) {
+            return List.of(mapping);
+        }
+
+        List<AnnotationExpr> perPath = new ArrayList<>();
+        for (Expression path : paths.asArrayInitializerExpr().getValues()) {
+            AnnotationExpr copy = mapping.clone();
+            if (copy instanceof SingleMemberAnnotationExpr single) {
+                single.setMemberValue(path.clone());
+            } else {
+                for (MemberValuePair pair : copy.asNormalAnnotationExpr().getPairs()) {
+                    if (pair.getNameAsString().equals("value") || pair.getNameAsString().equals("path")) {
+                        pair.setValue(path.clone());
+                    }
+                }
+            }
+            perPath.add(copy);
+        }
+        return perPath;
+    }
+
+    /**
+     * A path member can be an array of several paths; callers wanting every route use
+     * {@link #splitPaths} first, so anything reaching here with an array (e.g. a class-level
+     * @RequestMapping prefix) uses its first path rather than JavaParser's raw array-initializer text,
+     * which would corrupt the URL once {@link #simplifyEndpointURL} runs its placeholder regex over it.
      */
     private static String firstPathValue(Expression value) {
         if (value.isArrayInitializerExpr()) {

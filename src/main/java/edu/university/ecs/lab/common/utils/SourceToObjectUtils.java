@@ -1,5 +1,6 @@
 package edu.university.ecs.lab.common.utils;
 
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.StaticJavaParser;
 import com.github.javaparser.ast.*;
 import com.github.javaparser.ast.Node;
@@ -36,6 +37,13 @@ public class SourceToObjectUtils {
 
 
     private static void generateStaticValues(File sourceFile, RepositoryConfig config) {
+        // JavaParser's default language level predates records (Java 14+) - any file using one
+        // (increasingly common for DTOs in modern Spring Boot code, e.g. geoserver-cloud's
+        // UpdateSequenceController) failed this parse entirely, silently (the catch below just returns),
+        // dropping every endpoint/class/etc. in that whole file, not just the record - #16 follow-up.
+        // JAVA_17 is a safe floor: it's the oldest LTS that already supports records, sealed classes and
+        // pattern matching for instanceof, and JavaParser parses older syntax under a newer level fine.
+        StaticJavaParser.getConfiguration().setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_17);
         // Parse the highest level node being compilation unit
         try {
             cu = StaticJavaParser.parse(sourceFile);
@@ -75,7 +83,9 @@ public class SourceToObjectUtils {
 
         // Calculate early to determine classrole based on annotation, filter for class based annotations only
         Set<AnnotationExpr> classAnnotations = filterClassAnnotations();
-        AnnotationExpr requestMapping = classAnnotations.stream().filter(ae -> ae.getNameAsString().equals("RequestMapping")).findFirst().orElse(null);
+        AnnotationExpr requestMapping = classAnnotations.stream()
+                .filter(ae -> ae.getNameAsString().equals("RequestMapping") || ae.getNameAsString().equals("Path"))
+                .findFirst().orElse(null);
 
         // Identify instances of MongoRepository and CrudRepository
         List<ClassOrInterfaceDeclaration> classInterfaceDecs = cu.findAll(ClassOrInterfaceDeclaration.class);
@@ -106,9 +116,8 @@ public class SourceToObjectUtils {
             abstractClass.setClassRole(classRole);
             abstractClass.setFields(parseFields(abstractClass, cu.findAll(FieldDeclaration.class)));
             abstractClass.setAnnotations(parseAnnotations(abstractClass, cu.findAll(AnnotationExpr.class)));
-            Map<String, Endpoint> inheritedEndpoints = parseInheritedInterfaceEndpoints(
-                    abstractClass, classInterfaceDecs, config);
-            abstractClass.setMethods(parseMethods(abstractClass, cu.findAll(MethodDeclaration.class), requestMapping, inheritedEndpoints));
+            recordEndpointDeclaringInterfaces(microservice, classInterfaceDecs, config);
+            abstractClass.setMethods(parseMethods(abstractClass, cu.findAll(MethodDeclaration.class), requestMapping));
             abstractClass.setImports(parseImports(abstractClass, cu.findAll(ImportDeclaration.class)));
         }
 
@@ -139,131 +148,171 @@ public class SourceToObjectUtils {
      * @return a set of Method models representing the MethodDeclarations
      */
     public static Set<Method> parseMethods(edu.university.ecs.lab.common.models.ir.Node parent, List<MethodDeclaration> methodDeclarations, AnnotationExpr requestMapping) {
-        return parseMethods(parent, methodDeclarations, requestMapping, Map.of());
-    }
-
-    /**
-     * Like {@link #parseMethods(edu.university.ecs.lab.common.models.ir.Node, List, AnnotationExpr)},
-     * but also attributes an endpoint to a method that has no mapping annotation of its own when an
-     * interface this class implements declares one under the same method name (see
-     * {@link #parseInheritedInterfaceEndpoints}) - the common Swagger/OpenAPI-codegen pattern where the
-     * route annotation lives on a generated API interface and the concrete controller's {@code @Override}
-     * repeats none of it.
-     *
-     * @param inheritedEndpoints method name -> the Endpoint it inherits from an implemented interface
-     */
-    public static Set<Method> parseMethods(edu.university.ecs.lab.common.models.ir.Node parent, List<MethodDeclaration> methodDeclarations, AnnotationExpr requestMapping, Map<String, Endpoint> inheritedEndpoints) {
-        // Get params and returnType
         Set<Method> methods = new HashSet<>();
 
         for (MethodDeclaration methodDeclaration : methodDeclarations) {
             Method method = new Method(parent, methodDeclaration);
-
-            Endpoint inherited = inheritedEndpoints == null ? null : inheritedEndpoints.get(methodDeclaration.getNameAsString());
-            method = convertValidEndpoints(methodDeclaration, method, requestMapping, inherited);
-
-            methods.add(method);
+            List<Method> converted = convertValidEndpoints(methodDeclaration, method, requestMapping);
+            if (converted.size() == 1 && !(converted.get(0) instanceof Endpoint)) {
+                List<Method> routes = programmaticRoutes(methodDeclaration, method);
+                if (!routes.isEmpty()) {
+                    converted = routes;
+                }
+            }
+            methods.addAll(converted);
         }
 
         return methods;
     }
 
-    /**
-     * This method converts a valid Method to an Endpoint
-     *
-     * @param methodDeclaration the MethodDeclaration associated with Method
-     * @param method            the Method to be converted
-     * @param requestMapping    the class level requestMapping
-     * @return returns method if it is invalid, otherwise a new Endpoint
-     */
-    public static Method convertValidEndpoints(MethodDeclaration methodDeclaration, Method method, AnnotationExpr requestMapping) {
-        return convertValidEndpoints(methodDeclaration, method, requestMapping, null);
-    }
+    private static final Set<String> JAXRS_VERB_ANNOTATIONS = Set.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS");
 
     /**
-     * Like {@link #convertValidEndpoints(MethodDeclaration, Method, AnnotationExpr)}, but falls back to
-     * {@code inheritedEndpoint} (an endpoint found on an interface this method's class implements, under
-     * the same method name) when the method itself declares no mapping annotation.
+     * The endpoints a method declares - one per route when its mapping lists several paths
+     * (@GetMapping({"/a", "/b"}) is two endpoints) - or just the method itself if it declares none.
      */
-    public static Method convertValidEndpoints(MethodDeclaration methodDeclaration, Method method, AnnotationExpr requestMapping, Endpoint inheritedEndpoint) {
+    public static List<Method> convertValidEndpoints(MethodDeclaration methodDeclaration, Method method, AnnotationExpr requestMapping) {
         for (AnnotationExpr ae : methodDeclaration.getAnnotations()) {
             String ae_name = ae.getNameAsString();
             if (EndpointTemplate.ENDPOINT_ANNOTATIONS.contains(ae_name)) {
-                EndpointTemplate endpointTemplate = new EndpointTemplate(requestMapping, ae);
-
                 // By Spring documentation, only the first valid @Mapping annotation is considered;
                 // And getAnnotations() return them in order, so we can return immediately
-                return new Endpoint(method, endpointTemplate.getUrl(), endpointTemplate.getHttpMethod());
+                List<Method> endpoints = new ArrayList<>();
+                for (AnnotationExpr singlePath : EndpointTemplate.splitPaths(ae)) {
+                    EndpointTemplate endpointTemplate = new EndpointTemplate(requestMapping, singlePath);
+                    endpoints.add(new Endpoint(method, endpointTemplate.getUrl(), endpointTemplate.getHttpMethod()));
+                }
+                return endpoints;
+            }
+            if (JAXRS_VERB_ANNOTATIONS.contains(ae_name) && importsJaxRs(methodDeclaration)) {
+                AnnotationExpr methodPath = methodDeclaration.getAnnotations().stream()
+                        .filter(a -> a.getNameAsString().equals("Path"))
+                        .findFirst().orElse(null);
+                EndpointTemplate endpointTemplate = new EndpointTemplate(requestMapping, ae, methodPath);
+                return List.of(new Endpoint(method, endpointTemplate.getUrl(), endpointTemplate.getHttpMethod()));
             }
         }
 
-        if (inheritedEndpoint != null) {
-            return new Endpoint(method, inheritedEndpoint.getUrl(), inheritedEndpoint.getHttpMethod());
-        }
-
-        return method;
+        return List.of(method);
     }
 
     /**
-     * Resolves, for each interface {@code classInterfaceDecs}' first entry implements, which of that
-     * interface's own methods are endpoints (own mapping annotation, or the interface's class-level
-     * {@code @RequestMapping} as a prefix) - the Swagger/OpenAPI-codegen pattern (see
-     * {@link #parseMethods(edu.university.ecs.lab.common.models.ir.Node, List, AnnotationExpr, Map)}).
-     * Resolution is a best-effort filename lookup across the repository (interfaces and the controllers
-     * implementing them routinely live in different modules, so this can't just look in the current
-     * file); any interface that can't be found or parsed is silently skipped.
+     * @GET/@POST/@Path are also Retrofit's HTTP-client annotations (outbound calls declared on an
+     * interface, e.g. inlong's manager-client, much of spinnaker) - only a JAX-RS import makes them
+     * inbound routes.
      */
-    private static Map<String, Endpoint> parseInheritedInterfaceEndpoints(
-            edu.university.ecs.lab.common.models.ir.Node parent,
-            List<ClassOrInterfaceDeclaration> classInterfaceDecs,
-            RepositoryConfig config) {
-        Map<String, Endpoint> inherited = new HashMap<>();
+    private static boolean importsJaxRs(Node node) {
+        return node.findCompilationUnit().map(unit -> unit.getImports().stream()
+                .map(ImportDeclaration::getNameAsString)
+                .anyMatch(name -> name.startsWith("javax.ws.rs") || name.startsWith("jakarta.ws.rs")))
+                .orElse(false);
+    }
 
-        if (classInterfaceDecs.isEmpty()) {
-            return inherited;
-        }
-
-        for (var implementedType : classInterfaceDecs.get(0).getImplementedTypes()) {
-            File interfaceFile = findJavaFileByClassName(FileUtils.getRepositoryPath(config.getRepoName()), implementedType.getNameAsString());
-            if (interfaceFile == null) {
+    /**
+     * Spring's explicit, non-annotation route registration - a bean method returning
+     * new SimpleUrlHandlerMapping(Map.of("/path", handler, ...)): each key is a route this method
+     * declares. A ResourceHttpRequestHandler serves static content and so answers GET; any other
+     * handler's verbs can't be read off this call, so it's recorded as accepting any.
+     */
+    private static List<Method> programmaticRoutes(MethodDeclaration methodDeclaration, Method method) {
+        List<Method> endpoints = new ArrayList<>();
+        for (ObjectCreationExpr creation : methodDeclaration.findAll(ObjectCreationExpr.class)) {
+            if (!creation.getType().getNameAsString().equals("SimpleUrlHandlerMapping") || creation.getArguments().isEmpty()) {
                 continue;
             }
-
-            try {
-                CompilationUnit interfaceCu = StaticJavaParser.parse(interfaceFile);
-                List<ClassOrInterfaceDeclaration> ifaceDecs = interfaceCu.findAll(ClassOrInterfaceDeclaration.class);
-                if (ifaceDecs.isEmpty() || !ifaceDecs.get(0).isInterface()) {
+            if (!(creation.getArgument(0) instanceof MethodCallExpr mapOf) || !mapOf.getNameAsString().equals("of")) {
+                continue;
+            }
+            NodeList<Expression> keysAndValues = mapOf.getArguments();
+            for (int i = 0; i + 1 < keysAndValues.size(); i += 2) {
+                String route = stringConstantValue(keysAndValues.get(i), methodDeclaration);
+                if (route == null) {
                     continue;
                 }
-
-                AnnotationExpr ifaceRequestMapping = ifaceDecs.get(0).getAnnotations().stream()
-                        .filter(ae -> ae.getNameAsString().equals("RequestMapping"))
-                        .findFirst().orElse(null);
-
-                for (MethodDeclaration ifaceMethod : interfaceCu.findAll(MethodDeclaration.class)) {
-                    Method candidate = convertValidEndpoints(
-                            ifaceMethod, new Method(parent, ifaceMethod), ifaceRequestMapping, null);
-                    if (candidate instanceof Endpoint endpoint) {
-                        String ifaceMethodName = ifaceMethod.getNameAsString();
-                        inherited.put(ifaceMethodName, endpoint);
-
-                        // Common Swagger-codegen pattern (seen in xs2a): the annotated method is named
-                        // with a leading underscore (e.g. "_getAccountList") and its default body just
-                        // delegates to the unannotated method of the same name without it
-                        // ("getAccountList") - which is the one a real controller actually overrides.
-                        // The ground truth's own scorer treats these as the same method for exactly this
-                        // reason ("M4 ignores a leading underscore").
-                        if (ifaceMethodName.startsWith("_")) {
-                            inherited.putIfAbsent(ifaceMethodName.substring(1), endpoint);
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                // Best effort - an interface that fails to parse just contributes nothing.
+                HttpMethod verb = handlerTypeName(keysAndValues.get(i + 1), methodDeclaration).equals("ResourceHttpRequestHandler")
+                        ? HttpMethod.GET : HttpMethod.ALL;
+                endpoints.add(new Endpoint(method, route, verb));
             }
         }
+        return endpoints;
+    }
 
-        return inherited;
+    /** A string literal, or a name whose declaration in the same file initializes it with one. */
+    private static String stringConstantValue(Expression expression, MethodDeclaration context) {
+        if (expression.isStringLiteralExpr()) {
+            return expression.asStringLiteralExpr().asString();
+        }
+        if (!expression.isNameExpr()) {
+            return null;
+        }
+        String name = expression.asNameExpr().getNameAsString();
+        return context.findCompilationUnit().flatMap(unit -> unit.findAll(VariableDeclarator.class).stream()
+                .filter(v -> v.getNameAsString().equals(name))
+                .flatMap(v -> v.getInitializer().stream())
+                .filter(Expression::isStringLiteralExpr)
+                .map(init -> init.asStringLiteralExpr().asString())
+                .findFirst()).orElse(null);
+    }
+
+    private static String handlerTypeName(Expression handler, MethodDeclaration context) {
+        if (handler.isObjectCreationExpr()) {
+            return handler.asObjectCreationExpr().getType().getNameAsString();
+        }
+        if (handler.isNameExpr()) {
+            String name = handler.asNameExpr().getNameAsString();
+            for (com.github.javaparser.ast.body.Parameter p : context.getParameters()) {
+                if (p.getNameAsString().equals(name)) {
+                    return p.getType().asString();
+                }
+            }
+        }
+        return "";
+    }
+
+    // Serving microservice (by identity) -> the API interfaces its classes implement that declare endpoints.
+    private static final Map<Microservice, Set<File>> endpointInterfacesByService = new IdentityHashMap<>();
+
+    /**
+     * Swagger/OpenAPI-codegen pattern (xs2a): the mapping annotations live on a generated API interface
+     * and the concrete controller's @Override repeats none of them. The endpoint is the annotated
+     * interface method, served by whichever service implements it - so the declaring interface is
+     * recorded here and IRExtractionService adds it to the serving microservice, even when it lives in a
+     * separate non-service module. (Copying the route onto the controller instead put the endpoint on the
+     * wrong class, and double-counted it whenever the interface sat in the same module.)
+     */
+    private static void recordEndpointDeclaringInterfaces(Microservice microservice,
+                                                          List<ClassOrInterfaceDeclaration> classInterfaceDecs,
+                                                          RepositoryConfig config) {
+        if (microservice == null || classInterfaceDecs.isEmpty()) {
+            return;
+        }
+        for (var implementedType : classInterfaceDecs.get(0).getImplementedTypes()) {
+            File interfaceFile = findJavaFileByClassName(FileUtils.getRepositoryPath(config.getRepoName()), implementedType.getNameAsString());
+            if (interfaceFile != null && declaresEndpoints(interfaceFile)) {
+                endpointInterfacesByService.computeIfAbsent(microservice, k -> new LinkedHashSet<>()).add(interfaceFile);
+            }
+        }
+    }
+
+    public static Set<File> takeEndpointDeclaringInterfaces(Microservice microservice) {
+        Set<File> files = endpointInterfacesByService.remove(microservice);
+        return files == null ? Set.of() : files;
+    }
+
+    private static boolean declaresEndpoints(File interfaceFile) {
+        try {
+            CompilationUnit interfaceCu = StaticJavaParser.parse(interfaceFile);
+            List<ClassOrInterfaceDeclaration> decs = interfaceCu.findAll(ClassOrInterfaceDeclaration.class);
+            if (decs.isEmpty() || !decs.get(0).isInterface()) {
+                return false;
+            }
+            return interfaceCu.findAll(MethodDeclaration.class).stream()
+                    .flatMap(m -> m.getAnnotations().stream())
+                    .map(AnnotationExpr::getNameAsString)
+                    .anyMatch(n -> EndpointTemplate.ENDPOINT_ANNOTATIONS.contains(n) || JAXRS_VERB_ANNOTATIONS.contains(n));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // Simple-class-name -> file, built once per repository and reused: resolving an implemented
@@ -422,6 +471,7 @@ public class SourceToObjectUtils {
             switch (annotation.getNameAsString()) {
                 case "RestController":
                 case "Controller":
+                case "Path":
                     return ClassRole.CONTROLLER;
                 case "Service":
                     return ClassRole.SERVICE;

@@ -21,7 +21,8 @@ public class PolyglotExtractor {
 
     public static final List<String> DIMENSIONS = List.of(
             "types", "classRole", "fields", "functions", "parameters", "imports", "annotations",
-            "endpoints", "httpCalls", "rpcServers", "rpcClients");
+            "endpoints", "httpCalls", "rpcServers", "rpcClients", "queueProducers", "queueConsumers",
+            "routeMounts");
 
     private static final LanguageConfig CONFIG = LanguageConfig.get();
 
@@ -54,6 +55,41 @@ public class PolyglotExtractor {
 
     private static final Set<String> HTTP_VERBS = Set.of("get", "post", "put", "delete", "patch", "head", "options", "all");
     private static final Pattern GO_HTTP_METHOD = Pattern.compile("Method(Get|Post|Put|Delete|Patch|Head|Options)|\"(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\"");
+
+    // Message-queue (AMQP/Kafka) produce/consume detection, shared across all four languages - name
+    // matching only, the same spirit as the HTTP-verb and gRPC rules above (#16 follow-up: the pipeline
+    // had no async/queue dimension at all). Grounded in real library usage found across our own
+    // ground-truth repos: pika (basic_publish/basic_consume), amqplib (publish/sendToQueue/consume),
+    // RabbitMQ.Client (BasicPublish[Async]/BasicConsume[Async]), streadway/amqp (Publish/Consume),
+    // segmentio/kafka-go (WriteMessages/ReadMessage/FetchMessage), Sarama (SendMessage/ConsumePartition),
+    // confluent-kafka/kafka-python (produce/consume/poll/subscribe), kafkajs (send/subscribe).
+    // "ALWAYS" method names are distinctive enough to match regardless of the receiver's name; "HINTED"
+    // ones (publish/send/consume/subscribe/poll - all common words with unrelated meanings elsewhere)
+    // only count when the receiver's own name also suggests messaging, the same tradeoff the HTTP-verb
+    // rules already make for generic names like "get"/"post".
+    private static final Set<String> MQ_PRODUCE_ALWAYS = Set.of(
+            "basic_publish", "BasicPublish", "BasicPublishAsync", "sendToQueue", "WriteMessages",
+            "SendMessage", "sendBatch",
+            // aiokafka's producer method (confirmed by reproduction: Python-Microservices' order-service
+            // calls _producer.send_and_wait(topic, ...) - "send" alone didn't match it, #16 follow-up)
+            "send_and_wait");
+    private static final Set<String> MQ_CONSUME_ALWAYS = Set.of(
+            "basic_consume", "BasicConsume", "BasicConsumeAsync", "ConsumePartition", "FetchMessage",
+            "ReadMessage");
+    // aiokafka/kafka-python's consumer takes its topic as the constructor's own first argument and is
+    // then driven by `async for msg in consumer:` - a language construct, not a method call, so there's
+    // no verb to match the way basic_consume()/Subscribe() give every other library. The constructor
+    // call itself is the only call-shaped signal available, and it's reliable on its own (#16 follow-up).
+    private static final Set<String> PY_KAFKA_CONSUMER_CTORS = Set.of("AIOKafkaConsumer", "KafkaConsumer");
+    private static final Set<String> MQ_PRODUCE_HINTED = Set.of("publish", "Publish", "produce", "Produce", "send", "Send");
+    private static final Set<String> MQ_CONSUME_HINTED = Set.of("consume", "Consume", "subscribe", "Subscribe", "poll", "Poll");
+    private static final Set<String> MQ_OBJECT_HINTS = Set.of(
+            "channel", "ch", "queue", "mq", "amqp", "kafka", "broker", "publisher", "producer",
+            "consumer", "exchange", "rabbit", "rabbitmq");
+    // Checked in this order, not just set membership: pika's basic_publish(exchange=..., routing_key=...)
+    // passes both, and routing_key/topic/queue identify the actual destination - "exchange" is just the
+    // broker-side router, the least useful of the four when only one can be reported.
+    private static final List<String> MQ_TOPIC_KEYWORDS = List.of("routing_key", "topic", "queue", "exchange");
 
     private final Map<Language, TSParser> parsers = new EnumMap<>(Language.class);
 
@@ -91,6 +127,30 @@ public class PolyglotExtractor {
     private static final class Out {
         final byte[] bytes;
         final Map<String, List<String>> values = new LinkedHashMap<>();
+        // JS only: local variable name -> what it refers to, either "THIS_FILE" (a router created
+        // in-file, e.g. express.Router()) or a require()'d relative module path (e.g.
+        // "./routers/events-router") - built in a pass over the whole file before call expressions are
+        // processed, so an app.use("/prefix", thatVariable) mount can be resolved regardless of
+        // declaration order (see resolveRouteMounts in IRExtractionService for the other half of this).
+        final Map<String, String> jsRouterVars = new HashMap<>();
+        // Go only: local variable name -> prefix, for gorilla/mux's r.PathPrefix("/x").Subrouter() and
+        // gin's router.Group("/x") - both always same-file (the sub-router/group is used right where
+        // it's created), so unlike JS this is resolved immediately in goCall, no cross-file pass needed.
+        final Map<String, String> goRouterPrefixes = new HashMap<>();
+        // Python only, same-file case: local variable -> prefix, for Blueprint(..., url_prefix="/x") /
+        // APIRouter(prefix="/x") - the prefix is known at construction, so (like Go) this is resolved
+        // immediately at each @var.route(...) decorator, not via the cross-file resolver.
+        final Map<String, String> pyRouterPrefixes = new HashMap<>();
+        // Python only, cross-file case: local variable -> what it refers to, either "THIS_FILE" (a
+        // Blueprint/APIRouter created in-file) or a relative module path from `from .x.y import name`
+        // (e.g. "./x/y") - for app.include_router(name, prefix=...) / app.register_blueprint(name,
+        // url_prefix=...), which (like Express's app.use) is routinely in a different file than the one
+        // declaring the routes.
+        final Map<String, String> pyRouterVars = new HashMap<>();
+        // Go only: package-level var/const name -> its string-literal initializer (e.g. microservices-demo's
+        // `var baseUrl = ""`, later overridable from an env var). A route built as baseUrl+"/cart" then
+        // resolves to its declared default instead of a placeholder segment.
+        final Map<String, String> stringConstants = new HashMap<>();
 
         Out(byte[] bytes) {
             this.bytes = bytes;
@@ -121,9 +181,19 @@ public class PolyglotExtractor {
                 if (left != null && right != null) return urlOf(left, out) + urlOf(right, out);
                 return "{?}";
             }
-            case "identifier", "field_identifier" -> { return "{" + out.text(n) + "}"; }
+            case "identifier", "field_identifier" -> {
+                String known = out.stringConstants.get(out.text(n));
+                return known != null ? known : "{" + out.text(n) + "}";
+            }
             case "parenthesized_expression" -> { return n.namedChildCount() > 0 ? urlOf(n.namedChild(0), out) : "{?}"; }
             case "argument" -> { return n.namedChildCount() > 0 ? urlOf(n.namedChild(n.namedChildCount() - 1), out) : "{?}"; }
+            // C# attribute arguments ([Route("api/v1/items")], [HttpGet("{id}")]) are wrapped one level
+            // deeper than a plain call argument - tree-sitter-c-sharp always nests the value in an
+            // "attribute_argument" node, even for a single unnamed string literal. Without this case every
+            // C# attribute-based route's literal path was silently replaced with "{?}" (#16 follow-up -
+            // found by comparing our output against an external ground truth's exact path strings; the
+            // endpoint COUNTS were always right, only the path text was wrong, for every C# repo tested).
+            case "attribute_argument" -> { return n.namedChildCount() > 0 ? urlOf(n.namedChild(n.namedChildCount() - 1), out) : "{?}"; }
             default -> { }
         }
         if (!STRING_TYPES.contains(n.type)) return "{?}";
@@ -155,10 +225,63 @@ public class PolyglotExtractor {
         return url.startsWith("/") || url.startsWith("{") && url.contains("/");
     }
 
+    /** Prepends a mount/group/router prefix to a path, normalizing the single slash between them. */
+    private static String joinPaths(String prefix, String path) {
+        if (prefix == null || prefix.isEmpty()) {
+            return path;
+        }
+        String normalizedPrefix = prefix.endsWith("/") ? prefix.substring(0, prefix.length() - 1) : prefix;
+        String normalizedPath = (path == null || path.isEmpty()) ? "" : (path.startsWith("/") ? path : "/" + path);
+        return normalizedPrefix + normalizedPath;
+    }
+
     private static List<SNode> args(SNode call, Out out) {
         SNode a = call.field("arguments");
         if (a == null) return List.of();
         return a.namedChildren().stream().filter(c -> !c.type.contains("comment")).toList();
+    }
+
+    /** "produce", "consume", or null - see the MQ_* constants above for the reasoning. */
+    private static String messageDirection(String methodName, String objectName) {
+        if (MQ_PRODUCE_ALWAYS.contains(methodName)) return "produce";
+        if (MQ_CONSUME_ALWAYS.contains(methodName)) return "consume";
+        String objLower = objectName == null ? "" : lastSegment(objectName).toLowerCase();
+        boolean hinted = MQ_OBJECT_HINTS.stream().anyMatch(objLower::contains);
+        if (!hinted) return null;
+        if (MQ_PRODUCE_HINTED.contains(methodName)) return "produce";
+        if (MQ_CONSUME_HINTED.contains(methodName)) return "consume";
+        return null;
+    }
+
+    /**
+     * Best-effort queue/topic name for a message-queue call: a keyword argument named queue/
+     * routing_key/topic/exchange if one is present (pika's basic_publish takes these as keyword
+     * args, not positionally), else the first positional argument (true for amqplib's
+     * consume("queue", cb), Go's amqp Consume("queue", ...), RabbitMQ.Client's BasicPublish(exchange,
+     * routingKey, ...)). A struct-literal argument (e.g. kafka-go's kafka.Message{Topic: ...}) isn't
+     * unpacked - same "best-effort, not resolved" tradeoff the rest of this extractor already makes.
+     */
+    private static String messageTopicOf(List<SNode> args, Out out) {
+        Map<String, SNode> keywordValues = new LinkedHashMap<>();
+        for (SNode a : args) {
+            if (a.type.equals("keyword_argument") && a.field("name") != null) {
+                keywordValues.put(out.text(a.field("name")), a.field("value"));
+            }
+        }
+        for (String keyword : MQ_TOPIC_KEYWORDS) {
+            SNode value = keywordValues.get(keyword);
+            if (value != null) return urlOf(value, out);
+        }
+        return args.isEmpty() ? "" : urlOf(args.get(0), out);
+    }
+
+    /** Emits a queueProducers/queueConsumers fact if this call matches a message-queue produce/consume
+     *  pattern; returns whether it did, so callers can {@code return} early like the gRPC checks do. */
+    private static boolean tryMessageCall(Out out, String caller, String methodName, String objectName, List<SNode> args) {
+        String direction = messageDirection(methodName, objectName);
+        if (direction == null) return false;
+        out.add(direction.equals("produce") ? "queueProducers" : "queueConsumers", caller + ": " + messageTopicOf(args, out));
+        return true;
     }
 
     private static String lastSegment(String s) {
@@ -175,6 +298,38 @@ public class PolyglotExtractor {
     // ------------------------------------------------------------------ JavaScript
 
     private void javascript(SNode root, Out out) {
+        // First pass: find every local variable that refers to an Express router, cross-file
+        // (var x = require('./some-router')) or same-file (var x = express.Router() / new Router()) -
+        // done up front so a later app.use("/prefix", x) resolves regardless of where in the file x was
+        // declared (#16 follow-up: sub-router mount prefixes were never tracked at all before this).
+        root.walk(n -> {
+            if (!n.type.equals("variable_declarator")) return;
+            SNode nameNode = n.field("name");
+            SNode value = n.field("value");
+            if (nameNode == null || value == null || !nameNode.type.equals("identifier")) return;
+            String varName = out.text(nameNode);
+
+            if (value.type.equals("call_expression")) {
+                SNode fn = value.field("function");
+                List<SNode> callArgs = args(value, out);
+                if (fn != null && fn.type.equals("identifier") && out.text(fn).equals("require")
+                        && callArgs.size() == 1) {
+                    String modulePath = urlOf(callArgs.get(0), out);
+                    if (modulePath.startsWith(".")) out.jsRouterVars.put(varName, modulePath);
+                    return;
+                }
+                if (fn != null && fn.type.equals("member_expression")
+                        && out.text(fn.field("property")).equals("Router")) {
+                    out.jsRouterVars.put(varName, "THIS_FILE");
+                }
+            } else if (value.type.equals("new_expression")) {
+                SNode ctor = value.field("constructor");
+                if (ctor != null && lastSegment(out.text(ctor)).equals("Router")) {
+                    out.jsRouterVars.put(varName, "THIS_FILE");
+                }
+            }
+        });
+
         root.walk(n -> {
             switch (n.type) {
                 case "class_declaration", "class" -> {
@@ -206,6 +361,7 @@ public class PolyglotExtractor {
                 case "import_statement" -> out.add("imports", urlOf(n.field("source"), out));
                 case "decorator" -> out.add("annotations", out.text(n).substring(1));
                 case "call_expression" -> jsCall(n, out);
+                case "pair" -> jsMoleculerAlias(n, out);
                 case "new_expression" -> {
                     // gRPC client stubs: new proto.pkg.SomeService(address, credentials)
                     SNode ctor = n.field("constructor");
@@ -217,6 +373,34 @@ public class PolyglotExtractor {
                 default -> { }
             }
         });
+    }
+
+    private static final Pattern MOLECULER_ALIAS_KEY =
+            Pattern.compile("(?:(GET|POST|PUT|DELETE|PATCH|OPTIONS)\\s+)?(/\\S*)");
+
+    /**
+     * moleculer-web (StretchShop and others) declares its REST routes as plain object-literal entries -
+     * {@code aliases: {"POST /webhook/:supplier": "orders.paymentWebhookRaw", ...}} - not a single
+     * registration call anywhere, so jsCall's whole approach (matching a .get()/.post() call) finds
+     * nothing here at all (#16 follow-up: 0 endpoints extracted from a real repo with ~70). Requiring
+     * BOTH the "METHOD /path" key shape AND the enclosing object being itself the value of a sibling
+     * "aliases" key keeps this from matching an unrelated object that happens to have a string key
+     * starting with "/".
+     */
+    private void jsMoleculerAlias(SNode pair, Out out) {
+        SNode keyNode = pair.field("key");
+        if (keyNode == null || !keyNode.type.equals("string")) return;
+        Matcher m = MOLECULER_ALIAS_KEY.matcher(urlOf(keyNode, out));
+        if (!m.matches()) return;
+
+        SNode objectNode = pair.parent;
+        if (objectNode == null || !objectNode.type.equals("object")) return;
+        SNode aliasesPair = objectNode.parent;
+        if (aliasesPair == null || !aliasesPair.type.equals("pair")) return;
+        SNode aliasesKey = aliasesPair.field("key");
+        if (aliasesKey == null || !out.text(aliasesKey).equals("aliases")) return;
+
+        out.add("endpoints", (m.group(1) == null ? "GET" : m.group(1).toUpperCase()) + " " + m.group(2));
     }
 
     private void jsCall(SNode call, Out out) {
@@ -241,6 +425,23 @@ public class PolyglotExtractor {
             String svc = out.text(args.get(0)).replaceAll("\\.service$", "");
             out.add("rpcServers", caller + ": " + lastSegment(svc));
             return;
+        }
+        if (tryMessageCall(out, caller, method, objectText, args)) return;
+        // app.use("/prefix", routerVar) / router.use("/prefix", routerVar) - a sub-router mount. Requires
+        // a path-shaped first argument (excludes plain middleware installs like app.use(express.json())
+        // or app.use(cors()), which pass no path) and a last argument that's a plain identifier matching
+        // a tracked router variable (excludes those same middleware calls, whose single argument is
+        // itself a call/arrow-function, never a bare identifier naming one of our tracked routers).
+        if (method.equals("use") && args.size() >= 2) {
+            String prefix = urlOf(args.get(0), out);
+            SNode lastArg = args.get(args.size() - 1);
+            if (looksLikePath(prefix) && lastArg.type.equals("identifier")) {
+                String target = out.jsRouterVars.get(out.text(lastArg));
+                if (target != null) {
+                    out.add("routeMounts", prefix + "|||" + target);
+                    return;
+                }
+            }
         }
         String httpMethod = CONFIG.httpMethodFor("javascript", objectText, method);
         if (httpMethod != null && !args.isEmpty()) {
@@ -333,7 +534,45 @@ public class PolyglotExtractor {
     private static final Pattern PY_GRPC_SERVER = Pattern.compile("add_(\\w+?)Servicer_to_server");
     private static final Pattern PY_GRPC_STUB = Pattern.compile("(\\w+)Stub");
 
+    private static final Set<String> PY_ROUTER_CTORS = Set.of("Blueprint", "APIRouter");
+
     private void python(SNode root, Out out) {
+        // First pass: track every local variable that's a Flask Blueprint / FastAPI APIRouter, same-file
+        // (var = Blueprint(..., url_prefix="/x") / APIRouter(prefix="/x") - prefix known immediately) or
+        // cross-file (from .routes.users import router [as alias] - prefix given later, wherever it's
+        // include_router()'d/register_blueprint()'d - #16 follow-up, same bug class as Express's mount
+        // prefix, just Python's two common frameworks' equivalent of it).
+        root.walk(n -> {
+            if (n.type.equals("assignment")) {
+                SNode left = n.field("left");
+                SNode right = n.field("right");
+                if (left == null || right == null || !left.type.equals("identifier") || !right.type.equals("call")) return;
+                SNode fn = right.field("function");
+                if (fn == null) return;
+                String ctorName = fn.type.equals("attribute") ? out.text(fn.field("attribute")) : out.text(fn);
+                if (!PY_ROUTER_CTORS.contains(ctorName)) return;
+                String varName = out.text(left);
+                out.pyRouterVars.put(varName, "THIS_FILE");
+                for (SNode a : args(right, out)) {
+                    if (a.type.equals("keyword_argument")) {
+                        String kwName = out.text(a.field("name"));
+                        if (kwName.equals("prefix") || kwName.equals("url_prefix")) {
+                            out.pyRouterPrefixes.put(varName, urlOf(a.field("value"), out));
+                        }
+                    }
+                }
+            } else if (n.type.equals("import_from_statement")) {
+                String module = out.text(n.field("module_name"));
+                if (!module.startsWith(".")) return; // only relative (same-repo) imports can be resolved
+                String modulePath = "./" + module.replaceFirst("^\\.+", "").replace('.', '/');
+                for (SNode nameNode : n.fields("name")) {
+                    boolean aliased = nameNode.type.equals("aliased_import");
+                    String localName = out.text(aliased ? nameNode.field("alias") : nameNode);
+                    out.pyRouterVars.putIfAbsent(localName, modulePath);
+                }
+            }
+        });
+
         root.walk(n -> {
             switch (n.type) {
                 case "class_definition" -> {
@@ -395,8 +634,10 @@ public class PolyglotExtractor {
         } else {
             return;
         }
+        String object = out.text(fn.field("object"));
+        String finalUrl = joinPaths(out.pyRouterPrefixes.get(object), url);
         SNode def = decorator.parent == null ? null : decorator.parent.field("definition");
-        out.add("endpoints", method + " " + url + (def == null ? "" : " -> " + pyQualifiedFunctionName(def, out)));
+        out.add("endpoints", method + " " + finalUrl + (def == null ? "" : " -> " + pyQualifiedFunctionName(def, out)));
     }
 
     private void pyCall(SNode call, Out out) {
@@ -415,8 +656,32 @@ public class PolyglotExtractor {
             out.add("endpoints", "ANY /" + urlOf(args.get(0), out)); // Django urls.py
             return;
         }
+        if (fn.type.equals("identifier") && PY_KAFKA_CONSUMER_CTORS.contains(callee) && !args.isEmpty()
+                && !args.get(0).type.equals("keyword_argument")) {
+            out.add("queueConsumers", caller + ": " + urlOf(args.get(0), out));
+            return;
+        }
         if (fn.type.equals("attribute")) {
             String object = out.text(fn.field("object"));
+            if (tryMessageCall(out, caller, callee, object, args)) return;
+            // app.include_router(router, prefix="/v1") / app.register_blueprint(bp, url_prefix="/api") -
+            // a cross-file mount, resolved later by RouteMountResolver once every file in the microservice
+            // has been parsed (same mechanism as Express's app.use mount, #16 follow-up).
+            if ((callee.equals("include_router") || callee.equals("register_blueprint")) && !args.isEmpty()
+                    && args.get(0).type.equals("identifier")) {
+                String target = out.pyRouterVars.get(out.text(args.get(0)));
+                if (target != null) {
+                    for (SNode a : args) {
+                        if (a.type.equals("keyword_argument")) {
+                            String kwName = out.text(a.field("name"));
+                            if (kwName.equals("prefix") || kwName.equals("url_prefix")) {
+                                out.add("routeMounts", urlOf(a.field("value"), out) + "|||" + target);
+                            }
+                        }
+                    }
+                    return;
+                }
+            }
             // requests.get(...), self.client.get(...) (Locust / test clients), session.post(...)
             String httpMethod = CONFIG.httpMethodFor("python", lastSegment(object), callee);
             if (httpMethod != null && !args.isEmpty()) {
@@ -520,6 +785,52 @@ public class PolyglotExtractor {
 
     private void go(SNode root, Out out) {
         root.walk(n -> {
+            if (!n.type.equals("var_spec") && !n.type.equals("const_spec")) return;
+            if (n.ancestorOfType("function_declaration", "method_declaration", "func_literal") != null) return;
+            SNode name = n.field("name");
+            SNode value = n.field("value");
+            if (name == null || value == null || value.namedChildCount() != 1) return;
+            SNode literal = value.namedChild(0);
+            if (literal.type.equals("interpreted_string_literal") || literal.type.equals("raw_string_literal")) {
+                out.stringConstants.put(out.text(name), urlOf(literal, out));
+            }
+        });
+        // First pass: find every local variable that's a prefixed sub-router/group - gorilla/mux's
+        // r.PathPrefix("/x").Subrouter() or gin's router.Group("/x") - so a later call on that variable
+        // (goCall) can prepend its prefix. Always same-file in practice (#16 follow-up: same class of bug
+        // as JS's sub-router mount prefix, but Go's idiom doesn't span files the way Express's does, so
+        // this resolves immediately rather than needing the cross-file RouteMountResolver pass).
+        root.walk(n -> {
+            if (!n.type.equals("short_var_declaration")) return;
+            SNode left = n.field("left");
+            SNode right = n.field("right");
+            if (left == null || right == null || left.namedChildCount() != 1 || right.namedChildCount() != 1) return;
+            SNode nameNode = left.namedChild(0);
+            SNode valueNode = right.namedChild(0);
+            if (!nameNode.type.equals("identifier") || !valueNode.type.equals("call_expression")) return;
+            SNode fn = valueNode.field("function");
+            if (fn == null || !fn.type.equals("selector_expression")) return;
+            String methodName = out.text(fn.field("field"));
+            List<SNode> callArgs = args(valueNode, out);
+
+            if (methodName.equals("Subrouter")) {
+                SNode operand = fn.field("operand");
+                if (operand != null && operand.type.equals("call_expression")) {
+                    SNode operandFn = operand.field("function");
+                    if (operandFn != null && operandFn.type.equals("selector_expression")
+                            && out.text(operandFn.field("field")).equals("PathPrefix")) {
+                        List<SNode> prefixArgs = args(operand, out);
+                        if (!prefixArgs.isEmpty()) {
+                            out.goRouterPrefixes.put(out.text(nameNode), urlOf(prefixArgs.get(0), out));
+                        }
+                    }
+                }
+            } else if (methodName.equals("Group") && !callArgs.isEmpty()) {
+                out.goRouterPrefixes.put(out.text(nameNode), urlOf(callArgs.get(0), out));
+            }
+        });
+
+        root.walk(n -> {
             switch (n.type) {
                 case "type_spec" -> {
                     SNode t = n.field("type");
@@ -565,6 +876,7 @@ public class PolyglotExtractor {
         if (server.matches()) { out.add("rpcServers", caller + ": " + server.group(1)); return; }
         Matcher client = GO_GRPC_CLIENT.matcher(name);
         if (client.matches()) { out.add("rpcClients", caller + ": " + client.group(1)); return; }
+        if (tryMessageCall(out, caller, name, operand, args)) return;
 
         if (operand.equals("http")) {
             // net/http client helpers; http.HandleFunc/Handle register routes on the default mux
@@ -581,6 +893,31 @@ public class PolyglotExtractor {
                 return;
             }
         }
+        // gorilla/mux builder-chain idiom with the verb FIRST: r.Methods("GET").Path("/login").Handler(...)
+        // or r.Methods("GET").PathPrefix("/customers").Handler(...) - common in older (pre-go-modules)
+        // services (e.g. sock-shop's user/payment/catalogue, #16 follow-up); distinct from the
+        // HandleFunc(path, h).Methods(...) chain already handled below, where the verb comes last.
+        if ((name.equals("Path") || name.equals("PathPrefix")) && !args.isEmpty()) {
+            SNode operandNode = fn.field("operand");
+            if (operandNode != null && operandNode.type.equals("call_expression")) {
+                SNode operandFn = operandNode.field("function");
+                if (operandFn != null && operandFn.type.equals("selector_expression")
+                        && out.text(operandFn.field("field")).equals("Methods")) {
+                    List<String> verbs = new ArrayList<>();
+                    for (SNode a : args(operandNode, out)) {
+                        String v = goHttpMethod(out.text(a));
+                        if (!v.startsWith("{")) verbs.add(v);
+                    }
+                    String chainUrl = urlOf(args.get(0), out);
+                    if (looksLikePath(chainUrl)) {
+                        out.add("endpoints", (verbs.isEmpty() ? "ANY" : String.join(",", verbs)) + " "
+                                + withGoPrefix(operand, chainUrl, out));
+                        return;
+                    }
+                }
+            }
+        }
+
         if (!GO_ROUTE_FUNCS.contains(name) || args.isEmpty()) return;
         String url = urlOf(args.get(0), out);
         if (!looksLikePath(url)) return;
@@ -595,7 +932,13 @@ public class PolyglotExtractor {
             while (m.find()) verbs.add((m.group(1) != null ? m.group(1) : m.group(2)).toUpperCase());
             if (!verbs.isEmpty()) method = String.join(",", verbs);
         }
-        out.add("endpoints", method + " " + url);
+        out.add("endpoints", method + " " + withGoPrefix(operand, url, out));
+    }
+
+    /** Prepends a tracked sub-router/group's own prefix (see the short_var_declaration pass in go()
+     *  above) - a no-op if operand isn't one. */
+    private static String withGoPrefix(String operand, String url, Out out) {
+        return joinPaths(out.goRouterPrefixes.get(operand), url);
     }
 
     private static String goHttpMethod(String arg) {
@@ -692,27 +1035,95 @@ public class PolyglotExtractor {
         });
     }
 
-    /** ASP.NET MVC controllers: [Route] on the class + [HttpGet("...")] on actions. */
+    /**
+     * ASP.NET controllers. Attribute routing: [Route] on the class + [HttpGet("...")] on actions.
+     * Conventional routing (an MVC controller with no route template anywhere on the class or action -
+     * routed instead by the app's default "{controller=Home}/{action=Index}/{id?}" map): the path is
+     * /{Controller}/{Action}, plus /{id} when the action takes a parameter named id, and a public action
+     * with no verb attribute at all accepts any verb.
+     */
     private void csharpController(SNode cls, Out out) {
         String className = out.text(cls.field("name"));
+        String controllerName = className.replaceAll("Controller$", "");
         String prefix = attributeArg(cls, "Route", out);
-        if (prefix != null) prefix = prefix.replace("[controller]", className.replaceAll("Controller$", ""));
+        if (prefix != null) prefix = prefix.replace("[controller]", controllerName);
+        boolean conventional = prefix == null && className.endsWith("Controller")
+                && csharpSupertypes(cls, out).contains("Controller");
         SNode body = cls.field("body");
         if (body == null) return;
         for (SNode m : body.namedChildren()) {
             if (!m.type.equals("method_declaration")) continue;
+            String action = out.text(m.field("name"));
+            String conventionalUrl = "/" + controllerName + "/" + action
+                    + (csharpHasParameterNamed(m, "id", out) ? "/{id}" : "");
+            if (conventional && csharpIsPublicAction(m, out) && !csharpHasVerbAttribute(m, out)) {
+                out.add("endpoints", "ANY " + conventionalUrl + " -> " + className + "." + action);
+                continue;
+            }
+            // A verb attribute's own path argument is often left blank, with the actual route template
+            // given instead by a SEPARATE sibling [Route("...")] attribute on the same method (e.g.
+            // pitstop's WorkshopPlanningController: "[HttpGet]\n[Route(\"{planningDate}\")]") - scan all
+            // of this method's attribute_lists up front so either shape resolves correctly (#16 follow-up).
+            String methodRoute = null;
+            for (SNode list : m.namedChildren()) {
+                if (!list.type.equals("attribute_list")) continue;
+                for (SNode attr : list.namedChildren()) {
+                    if (out.text(attr.field("name")).equals("Route")) methodRoute = firstAttributeArg(attr, out);
+                }
+            }
             for (SNode list : m.namedChildren()) {
                 if (!list.type.equals("attribute_list")) continue;
                 for (SNode attr : list.namedChildren()) {
                     Matcher verb = CS_HTTP_ATTR.matcher(out.text(attr.field("name")));
                     if (!verb.matches()) continue;
-                    String template = firstAttributeArg(attr, out);
-                    String url = "/" + String.join("/", java.util.stream.Stream.of(prefix, template)
-                            .filter(s -> s != null && !s.isEmpty()).map(s -> s.replaceAll("^/|/$", "")).toList());
-                    out.add("endpoints", verb.group(1).toUpperCase() + " " + url + " -> " + className + "." + out.text(m.field("name")));
+                    String ownArg = firstAttributeArg(attr, out);
+                    String template = (ownArg == null || ownArg.isEmpty()) ? methodRoute : ownArg;
+                    String url = (prefix == null && (template == null || template.isEmpty()) && className.endsWith("Controller"))
+                            ? conventionalUrl
+                            : "/" + String.join("/", java.util.stream.Stream.of(prefix, template)
+                                    .filter(s -> s != null && !s.isEmpty()).map(s -> s.replaceAll("^/|/$", "")).toList());
+                    out.add("endpoints", verb.group(1).toUpperCase() + " " + url + " -> " + className + "." + action);
                 }
             }
         }
+    }
+
+    private static boolean csharpHasVerbAttribute(SNode method, Out out) {
+        for (SNode list : method.namedChildren()) {
+            if (!list.type.equals("attribute_list")) continue;
+            for (SNode attr : list.namedChildren()) {
+                String name = out.text(attr.field("name"));
+                if (CS_HTTP_ATTR.matcher(name).matches() || name.equals("Route")) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Public, non-static, not marked [NonAction] - what ASP.NET's conventional router treats as an action. */
+    private static boolean csharpIsPublicAction(SNode method, Out out) {
+        boolean isPublic = false;
+        for (SNode c : method.namedChildren()) {
+            if (c.type.equals("modifier")) {
+                String mod = out.text(c);
+                if (mod.equals("public")) isPublic = true;
+                if (mod.equals("static")) return false;
+            }
+            if (c.type.equals("attribute_list")) {
+                for (SNode attr : c.namedChildren()) {
+                    if (out.text(attr.field("name")).equals("NonAction")) return false;
+                }
+            }
+        }
+        return isPublic;
+    }
+
+    private static boolean csharpHasParameterNamed(SNode method, String paramName, Out out) {
+        SNode params = method.field("parameters");
+        if (params == null) return false;
+        for (SNode p : params.namedChildren()) {
+            if (p.type.equals("parameter") && paramName.equals(out.text(p.field("name")))) return true;
+        }
+        return false;
     }
 
     /** gRPC service implementations derive from the generated Foo.FooBase class. */
@@ -769,6 +1180,8 @@ public class PolyglotExtractor {
             out.add("rpcServers", caller + ": " + lastSegment(out.text(nameNode.namedChild(1)).replaceAll("[<>]", "")));
             return;
         }
+        SNode receiver = fn.field("expression");
+        if (tryMessageCall(out, caller, name, receiver == null ? "" : out.text(receiver), args)) return;
         Matcher minimal = CS_MINIMAL_API.matcher(name);
         if (minimal.matches() && !args.isEmpty()) {
             String url = urlOf(args.get(0), out);

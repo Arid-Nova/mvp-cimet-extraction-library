@@ -272,6 +272,7 @@ class ServiceBoundaryDetectorTest {
         Path repository = tempDir.resolve("deployment-root-repo");
 
         writeFile(repository.resolve("direct-deployment-service").resolve("pom.xml"), pom("direct-deployment-artifact"));
+        writeFile(repository.resolve("direct-deployment-service").resolve("src").resolve("main").resolve("java").resolve("example").resolve("App.java"), "package example; class App {}");
         writeFile(repository.resolve("direct-deployment-service").resolve("deployment.yml"), """
                 apiVersion: apps/v1
                 kind: Deployment
@@ -279,6 +280,7 @@ class ServiceBoundaryDetectorTest {
                   name: direct-deployment-service
                 """);
         writeFile(repository.resolve("direct-helm-service").resolve("pom.xml"), pom("direct-helm-artifact"));
+        writeFile(repository.resolve("direct-helm-service").resolve("src").resolve("main").resolve("java").resolve("example").resolve("App.java"), "package example; class App {}");
         writeFile(repository.resolve("direct-helm-service").resolve("Chart.yaml"), """
                 apiVersion: v2
                 name: direct-helm-service
@@ -327,6 +329,7 @@ class ServiceBoundaryDetectorTest {
                     id 'java'
                 }
                 """);
+        writeFile(repository.resolve("gradle-without-name-service").resolve("src").resolve("main").resolve("java").resolve("example").resolve("App.java"), "package example; class App {}");
         writeFile(repository.resolve("gradle-without-name-service").resolve("Dockerfile"), "FROM eclipse-temurin:21\n");
 
         List<ServiceBoundaryCandidate> candidates = detector.detect(
@@ -360,6 +363,7 @@ class ServiceBoundaryDetectorTest {
         Path repository = tempDir.resolve("lowercase-dockerfile-repo");
 
         writeFile(repository.resolve("lowercase-docker-service").resolve("pom.xml"), pom("lowercase-docker-artifact"));
+        writeFile(repository.resolve("lowercase-docker-service").resolve("src").resolve("main").resolve("java").resolve("example").resolve("App.java"), "package example; class App {}");
         writeFile(repository.resolve("lowercase-docker-service").resolve("dockerfile"), "FROM eclipse-temurin:21\n");
 
         ServiceBoundaryCandidate candidate = singleCandidate(detector.detect(
@@ -394,6 +398,7 @@ class ServiceBoundaryDetectorTest {
         Path repository = tempDir.resolve("non-deployment-root-repo");
 
         writeFile(repository.resolve("service-manifest-service").resolve("pom.xml"), pom("service-manifest-artifact"));
+        writeFile(repository.resolve("service-manifest-service").resolve("src").resolve("main").resolve("java").resolve("example").resolve("App.java"), "package example; class App {}");
         writeFile(repository.resolve("service-manifest-service").resolve("Dockerfile"), "FROM eclipse-temurin:21\n");
         writeFile(repository.resolve("service-manifest-service").resolve("deployment.yaml"), """
                 apiVersion: v1
