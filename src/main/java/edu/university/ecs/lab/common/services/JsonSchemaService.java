@@ -1,15 +1,16 @@
 package edu.university.ecs.lab.common.services;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchema;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
+
 import edu.university.ecs.lab.common.models.ir.MicroserviceSystem;
-import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
+import edu.university.ecs.lab.common.utils.FileUtils;
+
 import edu.university.ecs.lab.delta.models.SystemChange;
 
-import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,7 +45,7 @@ public class JsonSchemaService {
         // Ensure the local directories exist
         FileUtils.makeDirs();
 
-        writeSchemas("./.docs/schema/");
+        writeSchemas(Path.of(FileUtils.getDocsPath(), "schema").toString());
     }
 
     /**
@@ -55,10 +56,11 @@ public class JsonSchemaService {
         // Ensure the local directories exist
         FileUtils.makeDirs();
 
-        // Ensure the target directory exists (supports nested paths like './.docs/schema/')
-        Files.createDirectories(Path.of(directoryPath));
+        // Resolve child files against the directory; callers need not supply a trailing separator.
+        Path directory = Path.of(directoryPath);
+        Files.createDirectories(directory);
 
-        JsonReadWriteUtils.writeToJSON(Path.of(directoryPath + "MicroserviceSystemSchema.json"), getMicroserviceSystemSchema());
-        JsonReadWriteUtils.writeToJSON(Path.of(directoryPath + "SystemChangeSchema.json"), getSystemChangeSchema());
+        JsonReadWriteUtils.writeToJSON(directory.resolve("MicroserviceSystemSchema.json"), getMicroserviceSystemSchema());
+        JsonReadWriteUtils.writeToJSON(directory.resolve("SystemChangeSchema.json"), getSystemChangeSchema());
     }
 }

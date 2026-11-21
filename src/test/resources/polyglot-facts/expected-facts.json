@@ -1,0 +1,54 @@
+{
+  "sample.js" : {
+    "types" : [ "class AuditRepository", "class UserService" ],
+    "classRole" : [ "AuditRepository:REPOSITORY", "UserService:SERVICE" ],
+    "fields" : [ "AuditRepository.value:", "UserService.name:" ],
+    "functions" : [ "AuditRepository.save", "UserService.load", "user" ],
+    "parameters" : [ "AuditRepository.save(event)", "UserService.load(id)", "user(id)" ],
+    "imports" : [ "axios", "express" ],
+    "annotations" : [ ],
+    "endpoints" : [ "GET /users/:id" ],
+    "httpCalls" : [ "UserService.load: GET /remote/{id}", "user: ANY /users/{id}" ],
+    "rpcServers" : [ "<module>: UsersService" ],
+    "rpcClients" : [ "UsersClient" ]
+  },
+  "sample.py" : {
+    "types" : [ "class AuditRepository", "class UserService" ],
+    "classRole" : [ "AuditRepository:REPOSITORY", "UserService:SERVICE" ],
+    "fields" : [ "AuditRepository.count:int", "UserService.name:str" ],
+    "functions" : [ "AuditRepository.save", "UserService.load", "user" ],
+    "parameters" : [ "AuditRepository.save(self, event)", "UserService.load(self, int user_id)", "user(int user_id)" ],
+    "imports" : [ "fastapi.FastAPI", "requests" ],
+    "annotations" : [ "app.get(\"/users/{user_id}\")" ],
+    "endpoints" : [ "GET /users/{user_id} -> user" ],
+    "httpCalls" : [ "UserService.load: GET /remote/{user_id}", "user: GET {?}" ],
+    "rpcServers" : [ "<module>: Users" ],
+    "rpcClients" : [ "<module>: Users" ]
+  },
+  "sample.go" : {
+    "types" : [ "struct AuditRepository", "struct UserService" ],
+    "classRole" : [ "AuditRepository:REPOSITORY", "UserService:SERVICE" ],
+    "fields" : [ "AuditRepository.Count:int", "UserService.Name:string" ],
+    "functions" : [ "UserService.Load", "routes" ],
+    "parameters" : [ "UserService.Load(string id)", "routes()" ],
+    "imports" : [ "example/pb", "net/http" ],
+    "annotations" : [ ],
+    "endpoints" : [ "ANY /health", "GET /users/:id" ],
+    "httpCalls" : [ "UserService.Load: GET /remote/{id}" ],
+    "rpcServers" : [ "routes: Users" ],
+    "rpcClients" : [ "routes: Users" ]
+  },
+  "sample.cs" : {
+    "types" : [ "class OtherService", "class UsersController" ],
+    "classRole" : [ "OtherService:SERVICE", "UsersController:CONTROLLER" ],
+    "fields" : [ "UsersController.Name:string" ],
+    "functions" : [ "OtherService.Run", "UsersController.Get" ],
+    "parameters" : [ "OtherService.Run(string message)", "UsersController.Get(string id)" ],
+    "imports" : [ "System.Net.Http" ],
+    "annotations" : [ "ApiController", "HttpGet(\"{id}\")", "Route(\"users\")" ],
+    "endpoints" : [ "GET /users/{id} -> UsersController.Get", "POST /orders" ],
+    "httpCalls" : [ "OtherService.Run: POST /events", "UsersController.Get: GET /remote/{id}" ],
+    "rpcServers" : [ "Users" ],
+    "rpcClients" : [ "Users" ]
+  }
+}

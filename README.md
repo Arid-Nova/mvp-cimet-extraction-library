@@ -11,6 +11,70 @@ Project status
 --------------
 Active development. The repository includes a reproducible devcontainer for local development and CI parity.
 
+## Polyglot extraction
+
+The regular extraction API now routes each supported source file through an extensible
+`LanguageParser` registry: Java, JavaScript/TypeScript, Python, Go, and C# can coexist
+in one repository or across several repositories. Java keeps its JavaParser adapter;
+JavaScript/TypeScript uses the bundled TypeScript AST adapter, and Python/Go/C# use
+tree-sitter rules. Framework and type-resolution coverage differs by language.
+
+See [polyglot extraction](docs/polyglot-extraction.md) for supported extensions,
+parser capabilities, source provenance, local-source APIs, additional-language
+registration, and limits. JavaScript requires Node and the installed trusted adapter;
+Java-only extraction does not start Node. Target applications are never installed,
+imported, built, or executed.
+
+Snapshot comparison and revision delta extraction share this registry. Deltas retain
+per-file/component changes and an additive complete target snapshot for exact
+multi-class, multi-repository and application-boundary merges. Renames use deletion
+plus addition in the existing change-type schema. Full target extraction may cost
+more than an incremental diff; no Java performance-regression percentage is asserted.
+
+Run `npm ci --prefix adapter/javascript --ignore-scripts` followed by `mvn clean verify`
+for all deterministic local tests and packaging. Tests which clone public repositories
+are explicitly tagged `network` and run with `mvn -Pnetwork-integration verify`; they
+remain separate from hermetic fixture coverage. Run `npm test --prefix adapter/javascript`
+and `node --test study/*.test.mjs` for the parser and study-runner suites.
+
+## JavaScript / TypeScript API study support
+
+An opt-in AST adapter supports Express endpoints and JavaScript/TypeScript HTTP
+call sites, including React JSX/TSX and configurable local request wrappers.
+It runs through a Java API or an executable JAR and projects endpoints/calls into
+CIMET's intermediate representation. Frontend files retain their client role;
+endpoint counts are not microservice counts.
+
+The JavaScript architecture extension additionally extracts local module and
+function dependencies and runs bounded graph analysis, degree-coupling metrics,
+cycle/chain observations, API caller checks, and historical comparisons with
+candidate endpoint impact paths. Each report states which capabilities have
+sufficient evidence. Weighted SC/LWF/GWF and SCC modularity are available over
+static observation graphs. SIDC, LOMLC and SSIC include explicit contract or
+local-function coverage, with partial estimates separated from complete-contract
+values. Additional JavaScript detectors now cover weighted greedy/hub/AR20
+candidates, function cycles/chains, health-like routes, activated Node proxies
+and resilience policies, the legacy WrongCuts analogy, AR1 endpoint-removal
+caller impact, AR7 data-access impact, and AR22 explicit entity evolution.
+These source observations state their scope and uncertainty; Java/Spring
+annotations and production deployment behavior are not inferred.
+
+See [JavaScript adapter](docs/javascript-adapter.md) for setup, supported patterns,
+snapshot/delta commands and limitations, and [study runner](study/README.md) for
+reproducible analysis of local Git revisions. The existing Java extraction APIs
+continue to use the Java parser.
+
+See [JavaScript architecture analysis](docs/javascript-architecture.md) for the
+capability matrix, differences from CIMET2's original metrics, CLI commands,
+and interpretation of historical indicators. The study runner also accepts
+`study/nutrosal-history.config.json` for pinned calendar checkpoints.
+
+## Prerequisites
+
+* Maven 3.6+
+* Java 21+
+* Node.js 22+ for the optional JavaScript adapter
+
 License
 -------
 This project is licensed under the Apache License 2.0 — see the [LICENSE](./LICENSE) file for details. (SPDX: Apache-2.0)
@@ -87,6 +151,7 @@ Build (recommended: use the Maven wrapper)
 
 Run tests
 ```
+npm ci --prefix adapter/javascript --ignore-scripts
 ./mvnw -B test
 ```
 
@@ -109,7 +174,7 @@ What the devcontainer provides
 Testing (local & in-container)
 -----------------------------
 - Unit tests: `mvn test`
-- Integration/E2E: `mvn verify` (runs failsafe)
+- Local integration and packaging: `mvn verify`; public-repository scenarios: `mvn -Pnetwork-integration verify`
 - There is a lightweight test that generates JSON documentation: `mvn -Dtest=JSONDocumentationTest test` or run the JsonSchemaService from IDE.
 
 Contributing

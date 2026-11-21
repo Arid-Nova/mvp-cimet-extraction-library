@@ -1,0 +1,90 @@
+{
+  "schemaVersion": 1,
+  "name": "Nutrosal",
+  "association": "Main is the user-confirmed backend deployment branch. Exact deployed SHAs and frontend/backend deployment pairs are not verified.",
+  "components": [
+    {
+      "name": "nutrosal-backend",
+      "kind": "backend",
+      "repo": "../../nutrosal-backend",
+      "repositoryURL": "https://github.com/sali1982/nutrosal-backend",
+      "commit": "4273a7e40b77b3df6e9c36db54b23854c8460825"
+    },
+    {
+      "name": "nutrosal-frontend",
+      "kind": "frontend",
+      "repo": "../../nutrosal_v2",
+      "repositoryURL": "https://github.com/sali1982/nutrosal_v2",
+      "commit": "1a1db117564c7fe08c583ae84ad58e4f1f1d579d"
+    }
+  ],
+  "historySelection": "Last first-parent main-lineage commit on/before each UTC cutoff, followed by pinned current main tips. Calendar cohorts are candidates, not verified joint deployments. Cutoffs were selected before inspecting metric results.",
+  "historyCheckpoints": [
+    {
+      "name": "cutoff-2025-10-01", "cutoff": "2025-10-01T23:59:59Z",
+      "components": [
+        { "name": "nutrosal-backend", "commit": "bb741ba7a12bb3f56c376ef2e8b871211ed3ce47" },
+        { "name": "nutrosal-frontend", "commit": "39ea02296244fa1488fc94aba095266dda1d8f3f" }
+      ]
+    },
+    {
+      "name": "cutoff-2026-01-01", "cutoff": "2026-01-01T23:59:59Z",
+      "components": [
+        { "name": "nutrosal-backend", "commit": "5dc293818a0bf1970b3363b84f14520e965634d0" },
+        { "name": "nutrosal-frontend", "commit": "11c67f3d6334f5a34a7e425e635c5864626739b1" }
+      ]
+    },
+    {
+      "name": "cutoff-2026-04-01", "cutoff": "2026-04-01T23:59:59Z",
+      "components": [
+        { "name": "nutrosal-backend", "commit": "a1b1cae79b173b834d07aaa29cafab5d31b199d7" },
+        { "name": "nutrosal-frontend", "commit": "89a9b7dea0a215895b8689dfb01c826587caadb9" }
+      ]
+    },
+    {
+      "name": "cutoff-2026-07-01", "cutoff": "2026-07-01T23:59:59Z",
+      "components": [
+        { "name": "nutrosal-backend", "commit": "c1bafb7a41fed88c96edbef238dcfe493f2fe8f8" },
+        { "name": "nutrosal-frontend", "commit": "92fb702159a012323450bb6c593b6b292d2a2b43" }
+      ]
+    },
+    {
+      "name": "cutoff-2026-08-01", "cutoff": "2026-08-01T23:59:59Z",
+      "components": [
+        { "name": "nutrosal-backend", "commit": "c17f90539cc30dd2d28cf93ad8b7172285b042ee" },
+        { "name": "nutrosal-frontend", "commit": "7a84e263f03051e8420f9ece9b672d0b1278413a" }
+      ]
+    },
+    {
+      "name": "cutoff-2026-08-15", "cutoff": "2026-08-15T23:59:59Z",
+      "components": [
+        { "name": "nutrosal-backend", "commit": "3cab5dc71b0436ad4d52f04defdfc481884c3525" },
+        { "name": "nutrosal-frontend", "commit": "748ecfdf4226b5f724af964c5c8e64b2638927f4" }
+      ]
+    },
+    {
+      "name": "cutoff-2026-09-01", "cutoff": "2026-09-01T23:59:59Z",
+      "components": [
+        { "name": "nutrosal-backend", "commit": "bbdc893c3314d96432ecd8d2ee15ef69fa5772dd" },
+        { "name": "nutrosal-frontend", "commit": "2daeea13ad30be82aeaa61b04d81da7d6188245a" }
+      ]
+    },
+    {
+      "name": "current-pinned-tips", "cutoff": null,
+      "components": [
+        { "name": "nutrosal-backend", "commit": "4273a7e40b77b3df6e9c36db54b23854c8460825" },
+        { "name": "nutrosal-frontend", "commit": "1a1db117564c7fe08c583ae84ad58e4f1f1d579d" }
+      ]
+    }
+  ],
+  "historicalCohorts": [
+    {
+      "name": "discount-code-registrations",
+      "association": "Candidate coordinated feature change; maintainer validation is pending.",
+      "components": [
+        { "name": "nutrosal-backend", "before": "f4cd26b7ed5ca62072e384d000d2fee721bdda73", "after": "8e2976a02a74ed8319ba4511b8ed5f9ed888295a" },
+        { "name": "nutrosal-frontend", "before": { "parentOf": "d39501130c10d8c3ffdc283894059c8563d6a08a", "parent": 1 }, "after": "d39501130c10d8c3ffdc283894059c8563d6a08a" }
+      ]
+    }
+  ]
+}

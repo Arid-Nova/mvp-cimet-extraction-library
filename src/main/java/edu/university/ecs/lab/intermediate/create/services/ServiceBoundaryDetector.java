@@ -1,5 +1,7 @@
 package edu.university.ecs.lab.intermediate.create.services;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import edu.university.ecs.lab.common.config.RepositoryConfig;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -40,7 +42,14 @@ public class ServiceBoundaryDetector {
     private static final int CONTROLLER_SCORE = 2;
     private static final int DOCKER_COMPOSE_SERVICE_SCORE = 2;
 
-    private static final List<String> BUILD_FILES = List.of("pom.xml", "build.gradle", "build.gradle.kts");
+    // Java's own build markers, plus one exact-filename manifest per non-Java language we now parse
+    // (#16). C#'s project file (*.csproj) is named after the project, not a fixed name, so it doesn't
+    // fit this exact-filename list; it's matched separately by extension (see firstFileWithExtension).
+    private static final List<String> BUILD_FILES = List.of(
+            "pom.xml", "build.gradle", "build.gradle.kts",
+            "package.json", "go.mod", "requirements.txt", "pyproject.toml"
+    );
+    private static final List<String> JAVA_BUILD_FILES = List.of("pom.xml", "build.gradle", "build.gradle.kts");
     private static final List<String> DOCKER_FILES = List.of("Dockerfile", "DockerFile");
     private static final List<String> DOCKER_COMPOSE_FILES = List.of("docker-compose.yml", "docker-compose.yaml");
     private static final List<String> APPLICATION_CONFIG_FILES = List.of(
@@ -54,16 +63,9 @@ public class ServiceBoundaryDetector {
             "build.gradle",
             "build.gradle.kts"
     );
-    private static final Set<String> IGNORED_DIRECTORIES = Set.of(
-            ".git",
-            ".gradle",
-            ".idea",
-            ".mvn",
-            "build",
-            "node_modules",
-            "out",
-            "target"
-    );
+    // Shared with IRExtractionService.scanDirectory (edu.university.ecs.lab.common.utils.FileUtils),
+    // so the same folders are excluded from both "where can a microservice live" and the actual scan.
+    private static final Set<String> IGNORED_DIRECTORIES = edu.university.ecs.lab.common.utils.FileUtils.IGNORED_DIRECTORY_NAMES;
     private static final Set<String> DEPLOYMENT_DIRECTORIES = Set.of(
             "chart",
             "charts",
@@ -92,7 +94,7 @@ public class ServiceBoundaryDetector {
         List<ScoredServiceRoot> scoredRoots = new ArrayList<>();
         for (Path possibleRoot : scanIndex.possibleServiceRoots()) {
             ScoredServiceRoot scoredRoot = score(possibleRoot, rc, scanIndex);
-            if (scoredRoot.score() >= MINIMUM_SERVICE_SCORE) {
+            if (qualifiesAsService(possibleRoot, scanIndex, scoredRoot)) {
                 scoredRoots.add(scoredRoot);
             }
         }
@@ -131,7 +133,8 @@ public class ServiceBoundaryDetector {
         int score = 0;
         Set<String> evidence = new LinkedHashSet<>();
 
-        Optional<String> buildFile = scanIndex.firstExistingFileName(possibleRoot, BUILD_FILES);
+        Optional<String> buildFile = scanIndex.firstExistingFileName(possibleRoot, BUILD_FILES)
+                .or(() -> scanIndex.firstFileWithExtension(possibleRoot, ".csproj"));
         if (buildFile.isPresent()) {
             score += BUILD_FILE_SCORE;
             evidence.add("build file: " + buildFile.get());
@@ -188,6 +191,115 @@ public class ServiceBoundaryDetector {
         return new ScoredServiceRoot(new ServiceBoundaryCandidate(possibleRoot, serviceName, score, evidence), score);
     }
 
+    /**
+     * Decides whether a candidate root is actually a service boundary, using explicit per-ecosystem
+     * rules instead of an additive score crossing an arbitrary threshold (#16 follow-up). A manifest
+     * file is, by each language's own build tooling, already the definition of one buildable/deployable
+     * unit in Go, Python, C#, and (with an entry point) Node - no further corroboration is needed there.
+     * Java/Maven/Gradle is the one ecosystem with a real false-positive pattern this must still guard
+     * against: multi-module repos routinely split ONE service into several submodules (e.g. a shared
+     * utility library with its own pom.xml - see {@code ignoresSharedLibrariesWithoutServiceEvidence}),
+     * so a Java build file alone isn't sufficient; it still requires some independent-deployability
+     * signal. The score itself is left untouched (still reported on the candidate) since it's informative,
+     * but it no longer gates acceptance except for the rare candidate with no recognized build file at
+     * all, where the original scored behavior is kept unchanged.
+     */
+    private boolean qualifiesAsService(Path possibleRoot, RepositoryScanIndex scanIndex, ScoredServiceRoot scoredRoot) {
+        // A directory can legitimately carry more than one manifest at once - e.g. an ASP.NET Core app
+        // with a Vite/webpack frontend bundler has both its own .csproj AND its own package.json in the
+        // same folder, and only one of them is the "real" backend entry point. Each manifest type found
+        // here is judged on its own ecosystem's rule; the directory qualifies if ANY of them does -
+        // checking only whichever manifest happens to be first in a fixed lookup order (the original,
+        // buggy version of this method) wrongly rejects that kind of directory.
+        boolean hasAnyBuildFile = false;
+
+        if (scanIndex.firstExistingFileName(possibleRoot, JAVA_BUILD_FILES).isPresent()) {
+            hasAnyBuildFile = true;
+            JavaEvidence javaEvidence = scanIndex.javaEvidence(possibleRoot);
+            boolean javaQualifies = javaEvidence.hasSpringBootApplication()
+                    || javaEvidence.hasController()
+                    || scanIndex.firstApplicationConfig(possibleRoot).isPresent()
+                    || scanIndex.firstExistingFileName(possibleRoot, DOCKER_FILES).isPresent()
+                    || scanIndex.dockerComposeWithServices(possibleRoot).isPresent()
+                    || scanIndex.findKubernetesDeployment(possibleRoot).isPresent()
+                    || scanIndex.findHelmChart(possibleRoot).isPresent();
+            if (javaQualifies) {
+                return true;
+            }
+        }
+
+        if (scanIndex.hasOwnFile(possibleRoot, "package.json")) {
+            hasAnyBuildFile = true;
+            // package.json is also used for pure config/workspace-root/tooling packages (or, as here, a
+            // frontend asset bundler sitting next to a real backend) that are never run on their own -
+            // require an actual entry point before treating it as its own deployable service.
+            if (hasNodeEntryPoint(possibleRoot.resolve("package.json"))) {
+                return true;
+            }
+        }
+
+        Optional<String> csproj = scanIndex.firstFileWithExtension(possibleRoot, ".csproj");
+        if (csproj.isPresent()) {
+            hasAnyBuildFile = true;
+            // Unlike pom.xml/build.gradle, a .csproj is already one buildable unit on its own - except a
+            // test project (xUnit/NUnit/MSTest) or a plain shared-code library (e.g. a "TestUtils" or
+            // "Infrastructure.Messaging" project referenced by other projects), neither of which is
+            // independently deployable. Both share one observable trait a real service (web API or
+            // console/worker) always has and these never do: an actual Program.cs entry point in the
+            // project's own directory.
+            if (scanIndex.hasOwnFile(possibleRoot, "Program.cs")) {
+                return true;
+            }
+        }
+
+        if (scanIndex.hasOwnFile(possibleRoot, "go.mod")
+                || scanIndex.hasOwnFile(possibleRoot, "requirements.txt")
+                || scanIndex.hasOwnFile(possibleRoot, "pyproject.toml")) {
+            // Each already is, definitionally, one buildable/deployable unit in its own ecosystem's
+            // tooling - no multi-module ambiguity to guard against the way Java's convention requires.
+            return true;
+        }
+
+        if (hasAnyBuildFile) {
+            // Every manifest actually present was checked above and none qualified (e.g. only a Java
+            // shared-library pom.xml, or only a Node tooling-only package.json).
+            return false;
+        }
+
+        // No recognized manifest at all - e.g. a Java module directory inferred purely from its
+        // src/main/java tree, a deployment-directory-only root, etc. Keep the original scored behavior
+        // for these less common, already-tested paths rather than re-deriving new rules for cases this
+        // refactor wasn't specifically built to fix.
+        return scoredRoot.score() >= MINIMUM_SERVICE_SCORE;
+    }
+
+    private boolean hasNodeEntryPoint(Path packageJsonPath) {
+        try (InputStream inputStream = Files.newInputStream(packageJsonPath)) {
+            JsonNode root = new ObjectMapper().readTree(inputStream);
+            if (isNonBlankText(root.get("main")) || hasAnyBin(root.get("bin"))) {
+                return true;
+            }
+            JsonNode scripts = root.get("scripts");
+            return scripts != null && (isNonBlankText(scripts.get("start")) || isNonBlankText(scripts.get("server")));
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private boolean isNonBlankText(JsonNode node) {
+        return node != null && node.isTextual() && !node.asText().isBlank();
+    }
+
+    private boolean hasAnyBin(JsonNode bin) {
+        if (bin == null) {
+            return false;
+        }
+        if (bin.isTextual()) {
+            return !bin.asText().isBlank();
+        }
+        return bin.isObject() && bin.size() > 0;
+    }
+
     private List<ServiceBoundaryCandidate> removeParentCandidates(List<ScoredServiceRoot> scoredRoots) {
         List<ServiceBoundaryCandidate> candidatesByDepth = scoredRoots.stream()
                 .map(ScoredServiceRoot::candidate)
@@ -218,9 +330,26 @@ public class ServiceBoundaryDetector {
         return readSpringApplicationName(possibleRoot)
                 .or(() -> readMavenArtifactId(possibleRoot.resolve("pom.xml")))
                 .or(() -> readGradleRootProjectName(possibleRoot))
+                .or(() -> readCsprojServiceName(possibleRoot))
                 .or(() -> Optional.ofNullable(possibleRoot.getFileName()).map(Path::toString))
                 .filter(name -> !name.isBlank())
                 .orElse(rc.getRepoName());
+    }
+
+    /**
+     * A C# project's .csproj file is conventionally named after the project (e.g. cartservice.csproj),
+     * which is usually a far better service name than the directory it sits in - .csproj files often
+     * live in a nested "src" folder (see #16), which would otherwise become the inferred name.
+     */
+    private Optional<String> readCsprojServiceName(Path possibleRoot) {
+        try (var files = Files.list(possibleRoot)) {
+            return files.map(p -> p.getFileName().toString())
+                    .filter(name -> name.endsWith(".csproj"))
+                    .map(name -> name.substring(0, name.length() - ".csproj".length()))
+                    .findFirst();
+        } catch (IOException e) {
+            return Optional.empty();
+        }
     }
 
     private Optional<String> readSpringApplicationName(Path possibleRoot) {
@@ -465,7 +594,8 @@ public class ServiceBoundaryDetector {
         return matchesAnyFileName(fileName, BUILD_FILES)
                 || matchesAnyFileName(fileName, DOCKER_FILES)
                 || matchesAnyFileName(fileName, DOCKER_COMPOSE_FILES)
-                || fileName.equals("Chart.yaml");
+                || fileName.equals("Chart.yaml")
+                || fileName.endsWith(".csproj"); // C#'s project file; named after the project, not a fixed name
     }
 
     private boolean matchesAnyFileName(String fileName, List<String> expectedFileNames) {
@@ -699,8 +829,22 @@ public class ServiceBoundaryDetector {
             return Optional.empty();
         }
 
+        /** Like {@link #firstExistingFileName}, but for a filename ending in a given extension rather
+         * than an exact name - needed for C#'s project file (*.csproj), which is named after the
+         * project, not a fixed name. */
+        private Optional<String> firstFileWithExtension(Path dir, String extension) {
+            return fileNamesByDirectory.getOrDefault(key(dir), List.of()).stream()
+                    .filter(fileName -> fileName.endsWith(extension))
+                    .findFirst();
+        }
+
         private boolean isRegularFile(Path path) {
             return regularFiles.contains(key(path));
+        }
+
+        /** Whether {@code dir} itself (not a subdirectory) contains a file named exactly {@code fileName}. */
+        private boolean hasOwnFile(Path dir, String fileName) {
+            return fileNamesByDirectory.getOrDefault(key(dir), List.of()).contains(fileName);
         }
 
         private void addPossibleServiceRoot(Path path) {
