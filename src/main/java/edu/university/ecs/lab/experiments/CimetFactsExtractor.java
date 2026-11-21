@@ -2,17 +2,18 @@ package edu.university.ecs.lab.experiments;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
-import edu.university.ecs.lab.common.config.RepositoryBranchPair;
-import edu.university.ecs.lab.common.config.RepositoryConfig;
+
 import edu.university.ecs.lab.common.models.ir.*;
+import edu.university.ecs.lab.common.config.RepositoryConfig;
+import edu.university.ecs.lab.common.config.RepositoryBranchPair;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
+import edu.university.ecs.lab.common.parsers.treesitter.FileFacts;
+import static edu.university.ecs.lab.common.parsers.treesitter.FileFacts.sortedAttributes;
 
 import java.io.File;
 import java.nio.file.Path;
-import java.util.*;
 
-import edu.university.ecs.lab.common.parsers.treesitter.FileFacts;
-import static edu.university.ecs.lab.common.parsers.treesitter.FileFacts.sortedAttributes;
+import java.util.*;
 
 /**
  * Baseline: runs the original CIMET JavaParser pipeline ({@link SourceToObjectUtils#parseClass})

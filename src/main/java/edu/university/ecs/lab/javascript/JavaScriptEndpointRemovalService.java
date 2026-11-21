@@ -6,8 +6,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+
 import java.util.*;
 
 /** AR1-style temporal evidence: an unchanged observed caller loses its previously unique endpoint. */
@@ -21,12 +23,17 @@ public final class JavaScriptEndpointRemovalService {
     }
     private final Options options;
     public JavaScriptEndpointRemovalService() { this(Options.defaults()); }
-    public JavaScriptEndpointRemovalService(Options options) { this.options = Objects.requireNonNull(options); }
+    public JavaScriptEndpointRemovalService(Options options) { 
+        this.options = Objects.requireNonNull(options); 
+    }
 
     public ObjectNode compare(JsonNode before, JsonNode after) throws IOException {
         JavaScriptHttpAnalysisValidator.validate(before, options.maxRecords);
         JavaScriptHttpAnalysisValidator.validate(after, options.maxRecords);
-        if (!before.path("name").equals(after.path("name"))) throw new IOException("Endpoint removal analysis names differ");
+        
+        if (!before.path("name").equals(after.path("name"))) 
+            throw new IOException("Endpoint removal analysis names differ");
+
         Map<String, JsonNode> oldComponents = index(before.path("components")), currentComponents = index(after.path("components"));
         for (String component : oldComponents.keySet()) {
             if (!currentComponents.containsKey(component)) continue;
@@ -34,6 +41,7 @@ public final class JavaScriptEndpointRemovalService {
             String b = currentComponents.get(component).path("repositoryIdentity").asText();
             if (!a.isBlank() && !b.isBlank() && !a.equals(b)) throw new IOException("Endpoint removal component repositories differ");
         }
+
         Map<String, JsonNode> oldEndpoints = index(before.path("http").path("endpoints"));
         Map<String, JsonNode> newEndpoints = index(after.path("http").path("endpoints"));
         Map<String, JsonNode> oldCalls = index(before.path("http").path("calls"));
@@ -51,12 +59,14 @@ public final class JavaScriptEndpointRemovalService {
                 && after.path("http").path("summary").path("matchingComplete").asBoolean(false);
         coverage.put("matchingComplete", complete);
         ObjectNode counts = result.putObject("summary");
+        
         if (!complete) {
             result.put("reason", "Incomplete HTTP matching cannot establish loss of an endpoint relationship");
             counts.putNull("danglingCallerCandidates").putNull("removalRelatedObservations")
                     .put("witnessesTruncated", false).put("comparisonComplete", false);
             return result;
         }
+
         int total = 0, dangling = 0, ambiguousBefore = 0, scopeOmitted = 0;
         SortedMap<String, Integer> classifications = new TreeMap<>();
         for (JsonNode oldCall : oldCalls.values()) {
@@ -65,31 +75,49 @@ public final class JavaScriptEndpointRemovalService {
                 if ("ambiguous".equals(oldCall.path("status").asText())) ambiguousBefore++;
                 continue;
             }
+
             String targetId = candidates.get(0).asText();
             JsonNode endpoint = oldEndpoints.get(targetId);
-            if (endpoint == null) throw new IOException("Unknown previous endpoint relationship");
-            if (newEndpoints.containsKey(targetId)) continue;
+            if (endpoint == null) 
+                throw new IOException("Unknown previous endpoint relationship");
+
+            if (newEndpoints.containsKey(targetId)) 
+                continue;
+            
             // Removing an input component is not evidence that its implementation was deleted.
             if (!newComponents.contains(endpoint.path("component").asText())
                     || !newComponents.contains(oldCall.path("component").asText())) { scopeOmitted++; continue; }
             JsonNode newCall = newCalls.get(oldCall.path("id").asText());
+            
             String classification;
-            if (newCall == null) classification = "caller-no-longer-observed";
-            else if (!sameRequest(oldCall, newCall)) classification = "caller-request-changed";
-            else if ("matched".equals(newCall.path("status").asText())) classification = "replacement-endpoint-observed";
-            else if ("unmatched".equals(newCall.path("status").asText())) classification = "unchanged-caller-lost-endpoint-candidate";
-            else classification = "remaining-caller-match-uncertain";
+            if (newCall == null) 
+                classification = "caller-no-longer-observed";
+            else if (!sameRequest(oldCall, newCall)) 
+                classification = "caller-request-changed";
+            else if ("matched".equals(newCall.path("status").asText())) 
+                classification = "replacement-endpoint-observed";
+            else if ("unmatched".equals(newCall.path("status").asText())) 
+                classification = "unchanged-caller-lost-endpoint-candidate";
+            else 
+                classification = "remaining-caller-match-uncertain";
+
             total++; classifications.merge(classification, 1, Integer::sum);
             boolean candidate = classification.equals("unchanged-caller-lost-endpoint-candidate");
-            if (candidate) dangling++;
+            if (candidate) 
+                dangling++;
+
             String identity = identity(targetId, oldCall.path("id").asText());
             if (observations.size() < options.maxWitnesses) {
                 ObjectNode record = object().put("id", identity).put("classification", classification)
                         .put("removedEndpointId", targetId).put("callerId", oldCall.path("id").asText());
                 record.set("beforeEndpoint", endpoint.deepCopy()); record.set("beforeCaller", oldCall.deepCopy());
-                if (newCall == null) record.putNull("afterCaller"); else record.set("afterCaller", newCall.deepCopy());
+                if (newCall == null) 
+                    record.putNull("afterCaller"); 
+                else 
+                    record.set("afterCaller", newCall.deepCopy());
                 observations.add(record);
             }
+
             if (candidate && findings.size() < options.maxWitnesses) {
                 ObjectNode finding = object().put("id", identity).put("kind", "AR1-endpoint-removal-caller-candidate")
                         .put("scope", "http-endpoint-removal").put("confidence", "static-candidate")
@@ -100,6 +128,7 @@ public final class JavaScriptEndpointRemovalService {
                 findings.add(finding);
             }
         }
+
         coverage.put("ambiguousPreviousCallsExcluded", ambiguousBefore).put("componentScopeOmissionsExcluded", scopeOmitted);
         counts.put("danglingCallerCandidates", dangling).put("removalRelatedObservations", total)
                 .put("emittedObservations", observations.size()).put("emittedFindings", findings.size())
@@ -113,6 +142,7 @@ public final class JavaScriptEndpointRemovalService {
                 .add("A still-matched caller is classified as having replacement evidence, not as broken by registration identity changes.")
                 .add("Unknown, ambiguous, case-only, changed-request and omitted-component observations do not become dangling-caller findings.")
                 .add("This AR1 adaptation is source evidence, not proof of runtime failure, payload incompatibility or release pairing.");
+        
         return result;
     }
 
@@ -124,6 +154,7 @@ public final class JavaScriptEndpointRemovalService {
             if (!record.isObject() || id.isBlank() || id.length() > 4096 || indexed.putIfAbsent(id, record) != null)
                 throw new IOException("Invalid endpoint removal identity");
         }
+
         return indexed;
     }
     private static boolean sameRequest(JsonNode a, JsonNode b) {

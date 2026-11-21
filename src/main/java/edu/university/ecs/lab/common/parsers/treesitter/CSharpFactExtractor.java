@@ -8,8 +8,9 @@ import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.looks
 import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.urlOf;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
-import java.util.ArrayList;
+
 import java.util.List;
+import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -82,7 +83,9 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
     if (prefix != null)
       prefix = prefix.replace("[controller]", className.replaceAll("Controller$", ""));
     SNode body = cls.field("body");
+    
     if (body == null) return;
+    
     for (SNode m : body.namedChildren()) {
       if (!m.type.equals("method_declaration")) continue;
       for (SNode list : m.namedChildren()) {
@@ -133,6 +136,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
     if (bases == null) return List.of();
     List<String> names = new ArrayList<>();
     for (SNode b : bases.namedChildren()) names.add(lastSegment(out.text(b)));
+
     return names;
   }
 
@@ -142,6 +146,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
       if (!list.type.equals("attribute_list")) continue;
       for (SNode attr : list.namedChildren()) names.add(out.text(attr.field("name")));
     }
+
     return names;
   }
 
@@ -152,6 +157,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
         if (out.text(attr.field("name")).equals(attributeName)) return firstAttributeArg(attr, out);
       }
     }
+
     return null;
   }
 
@@ -178,6 +184,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
           caller + ": " + lastSegment(out.text(nameNode.namedChild(1)).replaceAll("[<>]", "")));
       return;
     }
+
     Matcher minimal = CS_MINIMAL_API.matcher(name);
     if (minimal.matches() && !args.isEmpty()) {
       String url = urlOf(args.get(0), out);
@@ -188,6 +195,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
         return;
       }
     }
+
     if (CS_HTTP_CLIENT.matcher(name).matches() && !args.isEmpty()) {
       SNode first =
           args.get(0).namedChildCount() > 0
@@ -250,6 +258,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
         if (name != null) fields.add(out.text(name) + ":" + (type == null ? "" : out.text(type)));
       }
     }
+
     return fields;
   }
 
@@ -262,6 +271,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
       SNode name = p.field("name");
       parts.add((type == null ? "" : out.text(type)) + (name != null ? " " + out.text(name) : ""));
     }
+    
     return String.join(", ", parts);
   }
 }

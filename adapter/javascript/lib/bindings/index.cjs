@@ -16,6 +16,7 @@ function buildBindings({ root, files, resource }) {
     const relative = path.relative(root, absolute);
     return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
   };
+
   function binding(scope, id, node, extra = {}) {
     if (!id) return;
     const found = { name: id, node, scope, file: scope.file, ...extra };
@@ -23,6 +24,7 @@ function buildBindings({ root, files, resource }) {
     scope.file.bindings.push(found);
     return found;
   }
+
   function declarePattern(scope, pattern, node, extra) {
     if (ts.isIdentifier(pattern)) return binding(scope, pattern.text, node, extra);
     if (ts.isObjectBindingPattern(pattern))
@@ -33,11 +35,13 @@ function buildBindings({ root, files, resource }) {
             selector: memberName(element.propertyName || element.name),
           });
   }
+
   function visit(file, node, scope) {
     resource.step();
     scopes.set(node, scope);
     if (ts.isFunctionDeclaration(node) && node.name)
       binding(scope, node.name.text, node, { init: node });
+    
     if (isFunction(node)) {
       scope = { parent: scope, values: new Map(), file, node };
       scopes.set(node, scope);
@@ -47,6 +51,7 @@ function buildBindings({ root, files, resource }) {
       scope = { parent: scope, values: new Map(), file, node };
       scopes.set(node, scope);
     }
+
     if (ts.isImportDeclaration(node) && literal(node.moduleSpecifier)) {
       const source = node.moduleSpecifier.text;
       if (node.importClause?.name)
@@ -61,6 +66,7 @@ function buildBindings({ root, files, resource }) {
             imported: memberName(element.propertyName || element.name),
           });
     }
+
     if (ts.isVariableDeclaration(node))
       declarePattern(scope, node.name, node, { init: node.initializer });
     if (
@@ -73,6 +79,7 @@ function buildBindings({ root, files, resource }) {
         imported: '*',
         typeOnly: !!node.isTypeOnly,
       });
+
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
       const key = dotted(node.left);
       if (key === 'module.exports') file.exports.set('default', node.right);
@@ -80,7 +87,9 @@ function buildBindings({ root, files, resource }) {
       else if (key.startsWith('module.exports.')) file.exports.set(key.substring(15), node.right);
       else if (ts.isIdentifier(node.left)) file.assignments.push(node.left);
     }
+
     if (ts.isExportAssignment(node)) file.exports.set('default', node.expression);
+
     if (node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) {
       if (node.modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword))
         file.exports.set('default', node);
@@ -90,21 +99,26 @@ function buildBindings({ root, files, resource }) {
           if (ts.isIdentifier(declaration.name))
             file.exports.set(declaration.name.text, declaration.initializer);
     }
+
     if (ts.isCallExpression(node)) file.calls.push(node);
     ts.forEachChild(node, (child) => visit(file, child, scope));
   }
+
   for (const file of files.values())
     if (!file.bad) {
       file.scope = { parent: null, values: new Map(), file, node: file.sf };
       visit(file, file.sf, file.scope);
     }
+
   function lookup(node, id = node?.text) {
     for (let scope = scopes.get(node); scope; scope = scope.parent) {
       resource.step();
       if (scope.values.has(id)) return scope.values.get(id);
     }
+
     return null;
   }
+
   for (const file of files.values())
     for (const assignment of file.assignments) {
       const b = lookup(assignment);
@@ -115,11 +129,13 @@ function buildBindings({ root, files, resource }) {
           implicit: true,
         });
     }
+
   function resolveModule(file, source) {
     resource.step();
     if (!source?.startsWith('.')) return null;
     const base = path.resolve(path.dirname(file.absolute), source);
     if (!inside(base)) return null;
+
     return (
       [
         base,
@@ -130,13 +146,16 @@ function buildBindings({ root, files, resource }) {
         .find((f) => f && !f.bad) || null
     );
   }
+
   function exported(file, name) {
     if (!file) return null;
     if (file.exports.has(name)) return file.exports.get(name);
     const node = unwrap(file.exports.get('default'));
     if (node && ts.isObjectLiteralExpression(node)) return property(node, name);
+    
     return null;
   }
+
   function property(node, key, depth = 0) {
     node = unwrap(node);
     if (!node || depth > 16) return null;
@@ -144,6 +163,7 @@ function buildBindings({ root, files, resource }) {
       const b = lookup(node);
       if (b && !b.assigned) return property(b.init, key, depth + 1);
     }
+    
     if (ts.isObjectLiteralExpression(node))
       for (const item of node.properties) {
         if (memberName(item.name) === key)
@@ -155,9 +175,11 @@ function buildBindings({ root, files, resource }) {
                 ? item
                 : null;
       }
+
     return null;
   }
 
   return { scopes, lookup, resolveModule, exported, property };
 }
+
 module.exports = { buildBindings };

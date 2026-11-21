@@ -54,6 +54,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
     const directory = directories.pop();
     const entries = [];
     const handle = fs.opendirSync(directory);
+    
     try {
       let entry;
       while ((entry = handle.readSync()) !== null) {
@@ -63,7 +64,9 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
     } finally {
       handle.closeSync();
     }
+    
     entries.sort((a, b) => a.name.localeCompare(b.name, 'en'));
+    
     // Match the original lexicographic depth-first order without retaining ASTs.
     const pending = [];
     for (const entry of entries) {
@@ -78,28 +81,34 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
         });
         continue;
       }
+
       if (entry.isDirectory()) {
         if (!excluded.has(entry.name) && !entry.name.startsWith('.')) pending.push(absolute);
         continue;
       }
+
       if (
         !EXTENSIONS.includes(path.extname(entry.name)) ||
         /\.(?:test|spec|d)\.[cm]?[jt]sx?$/.test(entry.name) ||
         entry.name.startsWith('.')
       )
         continue;
+      
       const size = fs.statSync(absolute).size;
       if (size > MAX_FILE_BYTES) {
         oversized(absolute);
         continue;
       }
+
       if (admitted.length >= resource.limits.maxFiles) resource.fail('SOURCE_FILE_LIMIT');
       if (size > resource.limits.maxSourceBytes - admittedBytes) resource.fail('SOURCE_BYTE_LIMIT');
       admittedBytes += size;
       admitted.push({ absolute, size });
     }
+
     for (let i = pending.length - 1; i >= 0; i--) directories.push(pending[i]);
   }
+
   // The previous recursive traversal orders directories and files together, not
   // files before subdirectories. Sort by path segments to retain that order.
   admitted.sort((a, b) => compareSourcePaths(relative(a.absolute), relative(b.absolute)));
@@ -113,6 +122,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
       oversized(item.absolute);
       continue;
     }
+
     resource.sourceBytes(buffer.length);
     const extension = path.extname(item.absolute);
     const scriptKind =
@@ -121,6 +131,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
         : ['.ts', '.mts', '.cts'].includes(extension)
           ? ts.ScriptKind.TS
           : ts.ScriptKind.JSX;
+    
     const sf = ts.createSourceFile(
       item.absolute,
       buffer.toString('utf8'),
@@ -128,6 +139,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
       true,
       scriptKind,
     );
+
     // Check immediately after parsing, before retaining this AST or any binding
     // graph. Parser allocation itself remains isolated by the bridge's heap cap.
     const nodes = [sf];
@@ -140,6 +152,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
       // forEachChild omits attached JSDoc trees, which contracts may inspect.
       for (const documentation of node.jsDoc || []) nodes.push(documentation);
     }
+
     resource.file();
     const file = {
       absolute: item.absolute,
@@ -151,6 +164,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
       calls: [],
       bad: sf.parseDiagnostics.length > 0,
     };
+
     files.set(item.absolute, file);
     for (const issue of sf.parseDiagnostics)
       diagnostics.push({
@@ -161,6 +175,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
           'Parser reported invalid or unsupported syntax; this file is excluded from extraction.',
       });
   }
+
   return files;
 }
 
@@ -171,6 +186,7 @@ function compareSourcePaths(left, right) {
     const difference = a[i].localeCompare(b[i], 'en');
     if (difference) return difference;
   }
+  
   return a.length - b.length;
 }
 

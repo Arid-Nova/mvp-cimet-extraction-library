@@ -64,6 +64,7 @@ function buildSemanticEvidence({
     callSites = [],
     wrappers = new Map();
   const invalidBindings = new Set(mutations);
+
   for (const binding of mutations) {
     let current = binding;
     const visited = new Set();
@@ -80,6 +81,7 @@ function buildSemanticEvidence({
       if (current) invalidBindings.add(current);
     }
   }
+
   let work = 0,
     boundsReached = false,
     unresolvedDataAccessCandidates = 0,
@@ -88,6 +90,7 @@ function buildSemanticEvidence({
     typeof value === 'string' && /^[A-Za-z_$][\w$]{0,79}$/.test(value) ? value : null;
   const member = (node) =>
     node && (ts.isIdentifier(node) ? safeName(node.text) : safeName(literal(node)));
+  
   // Local semantic bounds yield partial evidence; a repository resource bound aborts the snapshot.
   function budget() {
     resource.step();
@@ -97,11 +100,13 @@ function buildSemanticEvidence({
     }
     return true;
   }
+
   function owner(node) {
     for (let parent = node.parent; parent; parent = parent.parent)
       if (isFunction(parent)) return functionRecords.get(parent) || null;
     return null;
   }
+
   function baseRecord(category, node, library, operation) {
     const file = nodeFiles.get(node),
       parent = owner(node),
@@ -122,18 +127,21 @@ function buildSemanticEvidence({
       functionId: parent?.id || null,
     };
   }
+
   function push(array, value) {
     if (array.length < MAX_RECORDS) {
       resource.record();
       array.push(value);
     } else boundsReached = true;
   }
+
   function property(node, key, seen = new Set()) {
     node = unwrap(node);
     if (seen.size > MAX_DEPTH) {
       boundsReached = true;
       return null;
     }
+
     if (!node || seen.has(node) || !budget()) return null;
     seen = new Set(seen).add(node);
     if (ts.isIdentifier(node)) {
@@ -141,6 +149,7 @@ function buildSemanticEvidence({
       if (binding && !binding.assigned && !invalidBindings.has(binding))
         return property(binding.init, key, seen);
     }
+
     if (
       !node ||
       !ts.isObjectLiteralExpression(node) ||
@@ -149,6 +158,7 @@ function buildSemanticEvidence({
       )
     )
       return null;
+
     const found = node.properties.filter((p) => member(p.name) === key);
     if (found.length !== 1) return null;
     return ts.isPropertyAssignment(found[0])
@@ -157,14 +167,18 @@ function buildSemanticEvidence({
         ? found[0].name
         : null;
   }
+
   function exportRole(file, exported, seen) {
     if (seen.size > MAX_DEPTH) {
       boundsReached = true;
       return null;
     }
+
     if (!file) return null;
+
     const key = `${file.rel}:${exported}`;
     if (seen.has(key)) return null;
+
     seen = new Set(seen).add(key);
     const table = localExports.get(file);
     if (table?.has(exported)) return role(table.get(exported), seen);
@@ -172,6 +186,7 @@ function buildSemanticEvidence({
       const result = propertyRole(role(table.get('default'), seen), exported, seen);
       if (result) return result;
     }
+
     const candidates = [];
     for (const declaration of exportDeclarations.get(file) || []) {
       if (declaration.isTypeOnly) continue;
@@ -191,21 +206,28 @@ function buildSemanticEvidence({
         if (found) candidates.push(found);
       }
     }
+
     if (candidates.length !== 1) return null;
+
     return candidates[0];
   }
+
   function importedRole(file, source, imported, seen) {
     if (libraries.has(source))
       return imported === '*' || imported === 'default'
         ? { type: 'package', library: source }
         : propertyRole({ type: 'package', library: source }, imported, seen);
+    
     const local = resolveModule(file, source);
     if (!local) return null;
+
     return imported === '*' ? { type: 'module', file: local } : exportRole(local, imported, seen);
   }
+
   function bindingRole(binding, seen) {
     if (!binding || binding.assigned || invalidBindings.has(binding) || binding.typeOnly)
       return null;
+
     if (binding.module) {
       if (
         ts.isImportDeclaration(binding.node) &&
@@ -215,11 +237,14 @@ function buildSemanticEvidence({
           ))
       )
         return null;
+
       return importedRole(binding.file, binding.module, binding.imported, seen);
     }
+
     const result = role(binding.init, seen);
     return binding.selector ? propertyRole(result, binding.selector, seen) : result;
   }
+
   function propertyRole(base, key, seen) {
     if (!base || !key) return null;
     if (base.type === 'module') return exportRole(base.file, key, seen);
@@ -245,6 +270,7 @@ function buildSemanticEvidence({
       return { ...base, type: 'resilience-operation', operation: key };
     return null;
   }
+
   function role(node, seen = new Set()) {
     node = unwrap(node);
     if (seen.size > MAX_DEPTH) {
@@ -402,28 +428,34 @@ function buildSemanticEvidence({
           result = { type: 'rate-middleware', library: 'express-rate-limit', definition: node };
       }
     }
+
     // Nulls are not cached while a recursive export may still be under resolution.
     if (result) roleCache.set(node, result);
+
     return result;
   }
+
   function sqlExpression(node, env = new Map(), seen = new Set()) {
     node = unwrap(node);
     if (seen.size > MAX_DEPTH) {
       boundsReached = true;
       return { text: '?', dynamic: true };
     }
+
     if (!node || seen.has(node) || !budget()) return { text: '?', dynamic: true };
     seen = new Set(seen).add(node);
     if (ts.isStringLiteralLike(node))
       return node.text.length <= MAX_SQL
         ? { text: node.text, dynamic: false }
         : ((boundsReached = true), { text: '?', dynamic: true });
+
     if (ts.isIdentifier(node)) {
       const binding = lookup(node);
       if (env.has(binding)) return sqlExpression(env.get(binding), env, seen);
       if (binding && !binding.assigned && !invalidBindings.has(binding))
         return sqlExpression(binding.init, env, seen);
     }
+
     if (ts.isTemplateExpression(node)) {
       const text =
         node.head.text + node.templateSpans.map((span) => ' ? ' + span.literal.text).join('');
@@ -433,6 +465,7 @@ function buildSemanticEvidence({
       }
       return { text, dynamic: true };
     }
+
     if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
       const left = sqlExpression(node.left, env, seen),
         right = sqlExpression(node.right, env, seen);
@@ -442,10 +475,13 @@ function buildSemanticEvidence({
       }
       return { text: left.text + right.text, dynamic: left.dynamic || right.dynamic };
     }
+
     if (ts.isObjectLiteralExpression(node))
       return sqlExpression(property(node, 'sql') || property(node, 'text'), env, seen);
+
     return { text: '?', dynamic: true };
   }
+
   // Tokenize SQL into redacted operation/table/column shapes, not executable SQL.
   function sqlShape(value) {
     const tokens = [];
@@ -458,6 +494,7 @@ function buildSemanticEvidence({
         at++;
         continue;
       }
+
       if (text.startsWith('--', at) || c === '#') {
         at = text.indexOf('\n', at);
         if (at < 0) {
@@ -466,6 +503,7 @@ function buildSemanticEvidence({
         }
         continue;
       }
+
       if (text.startsWith('/*', at)) {
         const end = text.indexOf('*/', at + 2);
         if (end < 0) {
@@ -475,6 +513,7 @@ function buildSemanticEvidence({
         at = end + 2;
         continue;
       }
+
       const dollarQuote = /^\$(?:[A-Za-z_]\w*)?\$/.exec(text.slice(at));
       if (dollarQuote) {
         const end = text.indexOf(dollarQuote[0], at + dollarQuote[0].length);
@@ -485,6 +524,7 @@ function buildSemanticEvidence({
         tokens.push('?');
         continue;
       }
+
       if (c === "'" || c === '"') {
         const quote = c;
         if (c === '"') incomplete = true;
@@ -506,10 +546,12 @@ function buildSemanticEvidence({
           }
           at++;
         }
+
         if (!closed) incomplete = true;
         tokens.push('?');
         continue;
       }
+
       if (c === '`') {
         const end = text.indexOf('`', at + 1);
         if (end < 0) {
@@ -522,25 +564,30 @@ function buildSemanticEvidence({
         at = end + 1;
         continue;
       }
+
       const number = /^(?:\$\d+|\d+(?:\.\d+)?)/.exec(text.slice(at));
       if (number) {
         tokens.push('?');
         at += number[0].length;
         continue;
       }
+
       const identifier = /^[A-Za-z_$][\w$]*/.exec(text.slice(at));
       if (identifier) {
         tokens.push(safeName(identifier[0]) || '?');
         at += identifier[0].length;
         continue;
       }
+
       tokens.push('(),.*;=<>!+-/?'.includes(c) ? c : '?');
       at++;
     }
+
     if (tokens.length >= MAX_TOKENS && at < text.length) {
       boundsReached = true;
       incomplete = true;
     }
+
     const upper = tokens.map((token) => token.toUpperCase()),
       first = upper[0];
     const operation =
@@ -561,6 +608,7 @@ function buildSemanticEvidence({
         ' ',
       ),
     );
+
     function add(set, token) {
       const safe = safeName(token);
       if (safe && !keywords.has(safe.toUpperCase())) {
@@ -571,6 +619,7 @@ function buildSemanticEvidence({
         }
       }
     }
+
     for (let i = 0; i < tokens.length; i++) {
       if (['FROM', 'JOIN', 'INTO', 'UPDATE', 'TABLE'].includes(upper[i])) {
         if (tokens[i + 1] === '(' || !safeName(tokens[i + 1]) || keywords.has(upper[i + 1]))
@@ -586,6 +635,7 @@ function buildSemanticEvidence({
         } else add(tables, tokens[i + 1]);
       }
     }
+
     const from = upper.indexOf('FROM');
     if (operation === 'select' && from > 0) {
       for (let i = 1; i < from; i++) {
@@ -602,6 +652,7 @@ function buildSemanticEvidence({
           add(columns, tokens[i]);
       }
     }
+    
     if (operation === 'insert') {
       const into = upper.indexOf('INTO');
       const start = tokens.indexOf('(', into + 2),
@@ -610,6 +661,7 @@ function buildSemanticEvidence({
         for (let i = start + 1; i < end; i++) add(columns, tokens[i]);
       else incomplete = true;
     }
+
     for (let i = 0; i < tokens.length; i++)
       if (['=', '<', '>'].includes(tokens[i]) && safeName(tokens[i - 1]))
         add(columns, tokens[i - 1]);
@@ -634,13 +686,16 @@ function buildSemanticEvidence({
       tokens.some((t, i) => t === ';' && i !== tokens.length - 1)
     )
       incomplete = true;
+    
     const tableList = [...tables].sort(),
       columnList = [...columns].sort();
     const structure = `${operation}|tables:${tableList.join(',')}|columns:${columnList.join(',')}|dynamic:${value.dynamic}|wildcard:${tokens.includes('*')}`;
+    
     if (structure.length > 2048) {
       boundsReached = true;
       incomplete = true;
     }
+
     return {
       operation,
       tables: tableList,
@@ -650,12 +705,14 @@ function buildSemanticEvidence({
       complete: !incomplete,
     };
   }
+
   function parameterDependencies(node, env = new Map(), seen = new Set()) {
     node = unwrap(node);
     if (seen.size > MAX_DEPTH) {
       boundsReached = true;
       return new Set();
     }
+
     if (!node || seen.has(node) || !budget()) return new Set();
     seen = new Set(seen).add(node);
     if (ts.isIdentifier(node)) {
@@ -666,12 +723,15 @@ function buildSemanticEvidence({
         return parameterDependencies(binding.init, env, seen);
       return new Set();
     }
+
     const result = new Set();
     ts.forEachChild(node, (child) => {
       for (const binding of parameterDependencies(child, env, seen)) result.add(binding);
     });
+
     return result;
   }
+
   function addWrapperAncestors(call, descriptor) {
     const parameters = parameterDependencies(descriptor.sqlNode, descriptor.env);
     let additions = 0;
@@ -691,8 +751,10 @@ function buildSemanticEvidence({
         wrappers.set(parent, entries);
         additions++;
       }
+
     return additions;
   }
+
   for (const file of validFiles) {
     function visit(node) {
       if (!budget()) return;
@@ -701,6 +763,7 @@ function buildSemanticEvidence({
     }
     visit(file.sf);
   }
+
   const directSql = new Map();
   for (const call of callSites) {
     const callee = role(call.expression);
@@ -715,6 +778,7 @@ function buildSemanticEvidence({
       addWrapperAncestors(call, descriptor);
     }
   }
+
   for (let pass = 0; pass < 4; pass++) {
     let added = 0;
     for (const call of callSites) {
@@ -737,6 +801,7 @@ function buildSemanticEvidence({
     if (!added) break;
     if (pass === 3) boundsReached = true;
   }
+
   const ormOperation = (method) =>
     [
       'find',
@@ -758,6 +823,7 @@ function buildSemanticEvidence({
           : ['delete', 'deleteMany', 'deleteOne', 'destroy', 'remove', 'del'].includes(method)
             ? 'delete'
             : null;
+
   function objectNames(node) {
     node = unwrap(node);
     if (!node || !ts.isObjectLiteralExpression(node)) return [];
@@ -771,6 +837,7 @@ function buildSemanticEvidence({
       ),
     ].sort();
   }
+
   function declarationFields(node, library) {
     node = unwrap(node);
     if (node && ts.isIdentifier(node)) {
@@ -778,10 +845,13 @@ function buildSemanticEvidence({
       node =
         binding && !binding.assigned && !invalidBindings.has(binding) ? unwrap(binding.init) : null;
     }
+
     if (!node || !ts.isObjectLiteralExpression(node)) return { fields: [], complete: false };
     let complete = node.properties.length <= MAX_FIELDS;
+    
     if (!complete) boundsReached = true;
     const fields = [];
+    
     for (const item of node.properties.slice(0, MAX_FIELDS)) {
       const field = member(item.name);
       if (!field || !ts.isPropertyAssignment(item)) {
@@ -826,6 +896,7 @@ function buildSemanticEvidence({
               Mixed: 'unknown',
             }[value.name.text] || 'unknown';
       }
+
       if (type === 'unknown') complete = false;
       const duplicate = fields.find((existing) => existing.name === field);
       if (duplicate) {
@@ -833,9 +904,12 @@ function buildSemanticEvidence({
         complete = false;
       } else fields.push({ name: field, type });
     }
+
     fields.sort((a, b) => a.name.localeCompare(b.name, 'en'));
+
     return { fields, complete };
   }
+
   function targetKind(config) {
     const value = property(config, 'target');
     return !value
@@ -844,10 +918,12 @@ function buildSemanticEvidence({
         ? 'literal-redacted'
         : 'dynamic';
   }
+
   function appliesTo(node) {
     const target = resolveValue(node);
     return target?.type === 'function' ? functionRecords.get(target.node)?.id : null;
   }
+
   // Classify only activated library operations after package/alias provenance is proven.
   const registeredProxies = new Set();
   for (const call of callSites) {
@@ -865,6 +941,7 @@ function buildSemanticEvidence({
         });
         sqlDescriptors.push({ ...descriptor, env });
       }
+
     const sqlSeen = new Set();
     for (const descriptor of sqlDescriptors) {
       const shape = sqlShape(sqlExpression(descriptor.sqlNode, descriptor.env)),
@@ -879,6 +956,7 @@ function buildSemanticEvidence({
       });
       if (shape.operation === 'unknown') unresolvedDataAccessCandidates++;
     }
+
     const method = callee?.type === 'orm-method' && ormOperation(callee.method);
     if (method) {
       const tables = callee.model ? [callee.model] : [],
@@ -893,6 +971,7 @@ function buildSemanticEvidence({
                 ),
               ].sort()
             : objectNames(property(args[0], 'select') || property(args[0], 'data') || args[0]);
+
       const shape = `${method}|models:${tables.join(',')}|fields:${columns.join(',')}`;
       if (shape.length > 2048 || args.length > MAX_NAMES) boundsReached = true;
       push(dataAccess, {
@@ -915,6 +994,7 @@ function buildSemanticEvidence({
       !callee
     )
       unresolvedDataAccessCandidates++;
+    
     if (
       callee?.type === 'entity-factory' ||
       (callee?.type === 'package-member' &&
@@ -939,6 +1019,7 @@ function buildSemanticEvidence({
         });
       }
     }
+
     if (callee?.type === 'express-use')
       for (const argument of args) {
         const middleware = role(argument);
@@ -965,6 +1046,7 @@ function buildSemanticEvidence({
           });
         }
       }
+
     if (callee?.type === 'proxy-operation') {
       registeredProxies.add(callee.node);
       const structure = {
@@ -979,6 +1061,7 @@ function buildSemanticEvidence({
         fingerprint: hash(JSON.stringify(structure)),
       });
     }
+
     let resilienceKind = null,
       operation = null,
       applies = null;
@@ -1037,11 +1120,13 @@ function buildSemanticEvidence({
         applies = appliesTo(args.find((argument) => resolveValue(argument)?.type === 'function'));
       }
     }
+
     if (callee?.type === 'resilience-instance' && callee.library === 'p-limit') {
       resilienceKind = 'concurrency-limit';
       operation = 'invoke';
       applies = appliesTo(args[0]);
     }
+
     if (resilienceKind) {
       const structure = { library: callee.library, kind: resilienceKind, operation };
       push(resilience, {
@@ -1052,11 +1137,13 @@ function buildSemanticEvidence({
       });
     }
   }
+
   for (const call of callSites) {
     const value = role(call);
     if (value?.type === 'proxy-middleware' && value.node === call && !registeredProxies.has(call))
       unregisteredProxyCreations++;
   }
+
   for (const endpoint of endpoints) {
     const route = endpoint.normalizedPath || endpoint.path;
     if (
@@ -1076,10 +1163,13 @@ function buildSemanticEvidence({
       });
     }
   }
+
   const order = (a, b) =>
     a.file.localeCompare(b.file, 'en') || a.line - b.line || a.id.localeCompare(b.id, 'en');
+  
   for (const array of [dataAccess, entities, proxies, resilience]) array.sort(order);
   healthEndpoints.sort((a, b) => a.endpointId.localeCompare(b.endpointId, 'en'));
+  
   return {
     schemaVersion: 1,
     dataAccess,

@@ -32,26 +32,33 @@ public final class JavaScriptCohesionService {
     public JavaScriptCohesionService(Options options) { this.options = Objects.requireNonNull(options); }
 
     public ObjectNode analyze(List<? extends JsonNode> snapshots) throws IOException {
-        if (snapshots == null || snapshots.isEmpty()) throw new IllegalArgumentException("Cohesion requires snapshots");
+        if (snapshots == null || snapshots.isEmpty()) 
+            throw new IllegalArgumentException("Cohesion requires snapshots");
+
         ObjectNode output = object().put("schemaVersion", 1).put("scope", "declared-backend-applications");
         output.putObject("limits").put("maxOperations", options.maxOperations)
                 .put("maxReachabilityWork", options.maxReachabilityWork).put("maxPairComparisons", options.maxPairComparisons)
                 .put("maxPairComparisonCharacterWork", 128L * options.maxPairComparisons);
+        
         ArrayNode components = output.putArray("components");
         List<JsonNode> ordered = new ArrayList<>(snapshots);
         ordered.sort(Comparator.comparing(snapshot -> componentKey(snapshot.path("component"))));
         Set<String> seen = new HashSet<>();
         long operationCount = 0;
+        
         for (JsonNode snapshot : ordered) {
             JavaScriptExtractionService.validateSnapshot(snapshot);
             String component = componentKey(snapshot.path("component"));
-            if (!seen.add(component)) throw new IOException("Duplicate cohesion component");
+            if (!seen.add(component)) 
+                throw new IOException("Duplicate cohesion component");
             if (snapshot.path("component").path("kind").asText().equals("backend")) {
                 operationCount += snapshot.path("endpoints").size();
-                if (operationCount > options.maxOperations) throw new IOException("Cohesion operation limit exceeded");
+                if (operationCount > options.maxOperations) 
+                    throw new IOException("Cohesion operation limit exceeded");
             }
             components.add(analyzeComponent(snapshot));
         }
+
         output.putArray("limitations")
                 .add("Operation groups are whole declared backend applications; endpoint registrations, including duplicate routes, remain operations.")
                 .add("SIDC and LOMLC use coarse extracted type tags, not validated nominal DTO equivalence. Their strict values require complete evidence for every operation.")
@@ -61,6 +68,7 @@ public final class JavaScriptCohesionService {
                 .add("SSIC preserves the legacy two-times-shared-distinct formula with the full operation-count denominator; its scale depends on operation count.")
                 .add("Fewer than two operations, unknown evidence and empty undefined denominators yield null instead of inherited trivial or non-finite values.")
                 .add("These static measurements do not establish design defects, runtime behavior, or degradation.");
+        
         return output;
     }
 
@@ -69,6 +77,7 @@ public final class JavaScriptCohesionService {
         String kind = info.path("kind").asText();
         ObjectNode result = object().put("component", componentKey(info)).put("name", info.path("name").asText())
                 .put("kind", kind).put("operationCount", snapshot.path("endpoints").size());
+        
         if (!kind.equals("backend")) {
             result.put("status", "not-applicable");
             for (String metric : List.of("SIDC", "LOMLC", "SSIC"))
@@ -76,18 +85,22 @@ public final class JavaScriptCohesionService {
             result.putArray("operations");
             return result;
         }
+
         List<JsonNode> endpoints = new ArrayList<>(); snapshot.path("endpoints").forEach(endpoints::add);
         endpoints.sort(Comparator.comparing(endpoint -> endpoint.path("id").asText()));
         JsonNode architecture = snapshot.path("architecture");
         Map<String, JsonNode> contracts = new HashMap<>();
         Set<String> endpointIds = new HashSet<>(); endpoints.forEach(endpoint -> endpointIds.add(endpoint.path("id").asText()));
+        
         for (JsonNode contract : architecture.path("contracts").path("operations")) {
             String endpoint = contract.path("endpointId").asText();
             if (!endpointIds.contains(endpoint) || contracts.put(endpoint, contract) != null)
                 throw new IOException("Unknown or duplicate cohesion contract endpoint");
         }
+
         List<Operation> operations = new ArrayList<>();
         ArrayNode evidence = result.putArray("operations");
+        
         for (JsonNode endpoint : endpoints) {
             Operation operation = operation(endpoint.path("id").asText(), contracts.get(endpoint.path("id").asText()));
             operations.add(operation);
@@ -101,26 +114,33 @@ public final class JavaScriptCohesionService {
             strings(item.putArray("knownInputTypes"), operation.inputTypes);
             strings(item.putArray("knownResponseTypes"), operation.outputTypes);
         }
+
         result.put("status", operations.isEmpty() ? "not-applicable" : "partial");
         result.set("SIDC", typedSidc(operations));
         result.set("LOMLC", typedLomlc(operations));
+        
         ObjectNode proxy = result.putObject("observedFieldShapeProxy")
                 .put("definition", "Observed location-qualified input field identities and canonical known response shapes; not original typed cohesion");
         proxy.set("SIDC", sidc(operations, true));
         proxy.set("LOMLC", lomlc(operations, true));
         result.set("SSIC", implementationCohesion(operations, architecture, evidence));
+        
         JsonNode truncated = architecture.path("contracts").path("summary").path("truncatedOperations");
         boolean truncationKnown = truncated.isIntegralNumber() && truncated.canConvertToInt()
                 && truncated.asInt() >= 0 && truncated.asInt() <= operations.size();
+        
         for (String name : List.of("SIDC", "LOMLC")) {
             ObjectNode metric = (ObjectNode) result.path(name);
             for (ObjectNode target : List.of(metric.withObject("coverage"), metric.withObject("availableEvidenceEstimate"),
                     (ObjectNode) proxy.path(name))) {
                 target.put("sourceContractTruncationKnown", truncationKnown);
-                if (truncationKnown) target.put("sourceContractTruncatedOperations", truncated.asInt());
-                else target.putNull("sourceContractTruncatedOperations");
+                if (truncationKnown) 
+                    target.put("sourceContractTruncatedOperations", truncated.asInt());
+                else 
+                    target.putNull("sourceContractTruncatedOperations");
             }
         }
+
         return result;
     }
 
@@ -130,21 +150,29 @@ public final class JavaScriptCohesionService {
         if (contract != null) {
             for (JsonNode input : contract.path("inputs")) {
                 String type = input.path("type").asText();
-                if (KNOWN_TYPES.contains(type)) types.add(type); else unknownInputs++;
+                if (KNOWN_TYPES.contains(type)) 
+                    types.add(type); else unknownInputs++;
                 String location = input.path("location").asText(), name = input.path("name").asText();
-                if (!location.isBlank() && !name.isBlank()) fields.add(location + "." + name);
+                if (!location.isBlank() && !name.isBlank()) 
+                    fields.add(location + "." + name);
             }
             for (JsonNode response : contract.path("responses")) {
                 String type = response.path("type").asText();
-                if (KNOWN_TYPES.contains(type)) outputTypes.add(type); else unknownOutputs++;
+                if (KNOWN_TYPES.contains(type)) 
+                    outputTypes.add(type); else unknownOutputs++;
                 String shape = response.path("shape").asText();
-                if (KNOWN_TYPES.contains(type) && !shape.isBlank() && !UNKNOWN_SHAPE_TYPE.matcher(shape).find()) shapes.add(shape);
+                if (KNOWN_TYPES.contains(type) && !shape.isBlank() && !UNKNOWN_SHAPE_TYPE.matcher(shape).find()) 
+                    shapes.add(shape);
             }
         }
+
         boolean completeInput = contract != null && contract.path("inputComplete").asBoolean(false) && unknownInputs == 0;
         boolean completeOutput = contract != null && contract.path("outputComplete").asBoolean(false)
                 && contract.path("responses").size() > 0 && unknownOutputs == 0;
-        if (contract != null) for (JsonNode response : contract.path("responses")) completeOutput &= response.path("complete").asBoolean(false);
+        if (contract != null) 
+            for (JsonNode response : contract.path("responses")) 
+                completeOutput &= response.path("complete").asBoolean(false);
+        
         return new Operation(id, contract != null, types, fields, outputTypes, shapes,
                 completeInput, completeOutput, unknownInputs, unknownOutputs);
     }
@@ -171,7 +199,11 @@ public final class JavaScriptCohesionService {
 
     private ObjectNode typedMetric(List<Operation> operations, ObjectNode estimate, boolean complete, String formula, String requirement) {
         ObjectNode result = object().put("formula", formula).put("strictRequirement", requirement);
-        if (complete) result.set("value", estimate.path("value")); else result.putNull("value");
+        if (complete) 
+            result.set("value", estimate.path("value")); 
+        else 
+            result.putNull("value");
+
         String status = operations.size() < 2 ? "not-applicable" : !result.path("value").isNull() ? "supported" : "partial";
         result.put("status", status).put("reason", complete ? estimate.path("reason").asText()
                 : "Strict value unavailable: at least one operation lacks complete typed contract evidence");
@@ -179,7 +211,8 @@ public final class JavaScriptCohesionService {
         result.set("availableEvidenceEstimate", estimate);
         result.put("comparisonComplete", estimate.path("comparisonComplete").asBoolean())
                 .put("boundsReached", estimate.path("boundsReached").asBoolean());
-        return result;
+        
+                return result;
     }
 
     /** Frequency >= 2 is exactly the union of every pairwise set intersection, without quadratic pairs. */
@@ -191,6 +224,7 @@ public final class JavaScriptCohesionService {
         Map<String, Integer> frequency = new HashMap<>();
         for (Operation operation : eligible) for (String input : fields ? operation.inputFields : operation.inputTypes)
             frequency.merge(input, 1, Integer::sum);
+        
         long shared = frequency.values().stream().filter(count -> count >= 2).count();
         output.put("distinctElements", frequency.size()).put("sharedDistinctElements", shared)
                 .put("comparisonComplete", true).put("boundsReached", false);
@@ -198,6 +232,7 @@ public final class JavaScriptCohesionService {
             output.putNull("value").put("status", "not-applicable").put("reason", "Fewer than two eligible operations or no known input elements");
         } else output.put("value", (double) shared / frequency.size()).put("status", "partial")
                 .put("reason", "Available observed elements only; eligible subset and type/field granularity are explicit");
+        
         return output;
     }
 
@@ -210,6 +245,7 @@ public final class JavaScriptCohesionService {
         output.put("basis", fieldShape ? "observed-field-overlap-and-canonical-response-shape-identity" : "known-type-overlap-and-response-type-set-identity");
         long pairs = pairs(eligible.size()); output.put("eligibleOperationPairs", pairs);
         Map<Signature, Integer> counts = new LinkedHashMap<>();
+        
         for (Operation operation : eligible) counts.merge(new Signature(List.copyOf(fieldShape ? operation.inputFields : operation.inputTypes),
                 List.copyOf(fieldShape ? operation.outputShapes : operation.outputTypes)), 1, Integer::sum);
         List<Map.Entry<Signature, Integer>> groups = new ArrayList<>(counts.entrySet());
@@ -217,18 +253,21 @@ public final class JavaScriptCohesionService {
         long signatureCharacters = groups.stream().mapToLong(group ->
                 group.getKey().inputs.stream().mapToLong(String::length).sum()
                         + group.getKey().responses.stream().mapToLong(String::length).sum()).sum();
+       
         // Every signature appears in g-1 cross-group comparisons. Count character widths, not just fields:
         // long common-prefix names must not turn one permitted pair into unbounded comparison work.
         long characterWork = comparisonsNeeded + Math.max(0L, groups.size() - 1L) * signatureCharacters;
         long characterLimit = 128L * options.maxPairComparisons;
         output.put("distinctSignatures", groups.size()).put("pairComparisonsRequired", comparisonsNeeded)
                 .put("pairComparisonCharacterWorkRequired", characterWork).put("maxPairComparisonCharacterWork", characterLimit);
+        
         if (pairs == 0 || comparisonsNeeded > options.maxPairComparisons || characterWork > characterLimit) {
             boolean bounded = comparisonsNeeded > options.maxPairComparisons || characterWork > characterLimit;
             return output.putNull("value").put("status", pairs == 0 ? "not-applicable" : "partial")
                     .put("reason", bounded ? "Pair-count or character-work bound exceeded; no truncated estimate emitted" : "Fewer than two eligible operations")
                     .put("comparisonComplete", !bounded).put("boundsReached", bounded).put("pairComparisons", 0);
         }
+
         double sum = 0;
         for (int i = 0; i < groups.size(); i++) {
             Map.Entry<Signature, Integer> first = groups.get(i);
@@ -240,6 +279,7 @@ public final class JavaScriptCohesionService {
                 sum += (1 - (input + outputSimilarity) / 2) * (long) first.getValue() * second.getValue();
             }
         }
+
         return output.put("value", sum / pairs).put("status", "partial")
                 .put("reason", "Available observed contracts only; eligible subset and response identity are explicit")
                 .put("comparisonComplete", true).put("boundsReached", false).put("pairComparisons", comparisonsNeeded);
@@ -251,22 +291,30 @@ public final class JavaScriptCohesionService {
                 .put("status", operations.size() < 2 ? "not-applicable" : "partial");
         ObjectNode coverage = output.putObject("coverage").put("operationCount", operations.size());
         Map<String, JsonNode> functions = new TreeMap<>();
-        for (JsonNode function : architecture.path("functions")) functions.put(function.path("id").asText(), function);
+        
+        for (JsonNode function : architecture.path("functions")) 
+            functions.put(function.path("id").asText(), function);
+
         Map<String, SortedSet<String>> graph = new HashMap<>(), seeds = new HashMap<>();
         Set<String> endpointIds = new HashSet<>(); operations.forEach(operation -> endpointIds.add(operation.id));
+        
         for (JsonNode call : architecture.path("calls")) {
             String source = call.path("callerId").asText(), target = call.path("targetId").asText();
             if (!functions.containsKey(source) || !functions.containsKey(target)) throw new IOException("Unknown cohesion call graph function");
             graph.computeIfAbsent(source, ignored -> new TreeSet<>()).add(target);
         }
+
         for (JsonNode handler : architecture.path("endpointHandlers")) {
             String endpoint = handler.path("endpointId").asText(), function = handler.path("functionId").asText();
             if (!endpointIds.contains(endpoint) || !functions.containsKey(function)) throw new IOException("Unknown cohesion handler reference");
             seeds.computeIfAbsent(endpoint, ignored -> new TreeSet<>()).add(function);
         }
+
         coverage.put("operationsWithResolvedHandlers", seeds.size()).put("operationsWithoutResolvedHandlers", operations.size() - seeds.size());
+        
         Map<String, Integer> frequency = new TreeMap<>();
         long work = 0; int completed = 0; boolean bounded = false;
+        
         for (int index = 0; index < operations.size(); index++) {
             Operation operation = operations.get(index);
             Set<String> start = seeds.getOrDefault(operation.id, Collections.emptySortedSet());
@@ -283,30 +331,48 @@ public final class JavaScriptCohesionService {
                 }
                 if (bounded) break;
             }
-            if (bounded) { operationEvidence.putNull("reachableFunctionCount"); break; }
+
+            if (bounded) { 
+                operationEvidence.putNull("reachableFunctionCount"); 
+                break; 
+            }
             operationEvidence.put("reachableFunctionCount", reached.size()); completed++;
-            for (String function : reached) frequency.merge(function, 1, Integer::sum);
+            for (String function : reached) 
+                frequency.merge(function, 1, Integer::sum);
         }
+
         long shared = frequency.values().stream().filter(count -> count >= 2).count();
         long unresolved = 0; int missingCounters = 0;
         for (String function : frequency.keySet()) {
             JsonNode count = functions.get(function).path("unresolvedCalls");
-            if (count.isIntegralNumber() && count.canConvertToLong() && count.asLong() >= 0) unresolved += count.asLong(); else missingCounters++;
+            if (count.isIntegralNumber() && count.canConvertToLong() && count.asLong() >= 0) 
+                unresolved += count.asLong(); else missingCounters++;
         }
+
         coverage.put("operationsTraversed", completed).put("distinctReachableFunctions", frequency.size())
                 .put("sharedDistinctReachableFunctions", shared).put("unresolvedCallsInObservedFunctionUnion", unresolved)
                 .put("uniqueImplementationElements", frequency.size()).put("sharedImplementationElements", shared)
                 .put("reachableFunctionsMissingUnresolvedCallCount", missingCounters)
                 .put("reachabilityWork", Math.min(work, options.maxReachabilityWork)).put("reachabilityCompleteForObservedGraph", !bounded);
-        if (bounded || frequency.isEmpty()) coverage.putNull("sharedElementFraction");
-        else coverage.put("sharedElementFraction", (double) shared / frequency.size());
-        if (operations.size() < 2) coverage.putNull("theoreticalMaximum"); else coverage.put("theoreticalMaximum", 2.0 / operations.size());
+        if (bounded || frequency.isEmpty()) 
+            coverage.putNull("sharedElementFraction");
+        else 
+            coverage.put("sharedElementFraction", (double) shared / frequency.size());
+        
+        if (operations.size() < 2) 
+            coverage.putNull("theoreticalMaximum"); 
+        else 
+            coverage.put("theoreticalMaximum", 2.0 / operations.size());
+        
         output.put("boundsReached", bounded).put("comparisonComplete", !bounded);
-        if (bounded || operations.size() < 2 || frequency.isEmpty()) output.putNull("value").put("reason", bounded
+        
+        if (bounded || operations.size() < 2 || frequency.isEmpty()) 
+            output.putNull("value").put("reason", bounded
                 ? "Reachability bound exceeded; no estimate from truncated operation sets emitted"
                 : "Fewer than two operations or no resolved implementation elements");
         else output.put("value", 2.0 * shared / ((double) frequency.size() * operations.size()))
                 .put("reason", "Observed local-function estimate with full operation denominator; unresolved/external behavior is not complete");
+        
         return output;
     }
 

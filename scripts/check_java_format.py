@@ -14,13 +14,13 @@ URL = (
     f"{VERSION}/google-java-format-{VERSION}-all-deps.jar"
 )
 
-
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--apply", action="store_true", help="Format the listed files in place")
     parser.add_argument("--jar", type=Path, help="Use an already downloaded, matching formatter JAR")
     args = parser.parse_args()
     jar = args.jar or ROOT / "target" / "tools" / f"google-java-format-{VERSION}.jar"
+    
     if not jar.is_file():
         if args.jar:
             raise SystemExit("Formatter JAR does not exist")
@@ -30,15 +30,19 @@ def main():
         if len(data) > 8 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != SHA256:
             raise SystemExit("Formatter download does not match the pinned checksum")
         jar.write_bytes(data)
+    
     if hashlib.sha256(jar.read_bytes()).hexdigest() != SHA256:
         raise SystemExit("Formatter JAR does not match the pinned checksum")
+    
     files = [
         line.strip()
         for line in (ROOT / ".java-format-files").read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
+
     if not files or any(not (ROOT / file).is_file() for file in files):
         raise SystemExit("The Java format manifest contains missing files or is empty")
+    
     mode = ["--replace"] if args.apply else ["--dry-run", "--set-exit-if-changed"]
     subprocess.run(["java", "-jar", str(jar.resolve()), *mode, *files], cwd=ROOT, check=True)
     print(f"Java formatting {'applied to' if args.apply else 'checked for'} {len(files)} files")

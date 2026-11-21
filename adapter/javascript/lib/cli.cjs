@@ -1,6 +1,7 @@
 'use strict';
 const fs = require('node:fs');
 const { AnalysisResourceLimitError } = require('./source/resources.cjs');
+
 /** Parse only trusted adapter arguments/config data; sanitize errors instead of echoing target text. */
 function runCli(analyze, args = process.argv.slice(2)) {
   try {

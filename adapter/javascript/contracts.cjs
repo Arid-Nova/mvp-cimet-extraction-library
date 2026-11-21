@@ -29,6 +29,7 @@ function buildContracts({
     typeLimitHit = false;
   const declaredCache = new WeakMap();
   const mutatedValues = new Set(mutations);
+  
   for (const binding of mutations) {
     let current = binding;
     const seen = new Set();
@@ -43,9 +44,11 @@ function buildContracts({
       if (current) mutatedValues.add(current);
     }
   }
+
   const types = new Map(validFiles.map((file) => [file, new Map()]));
   const sourceFiles = new Map(validFiles.map((file) => [file.sf, file]));
   const fileFor = (node) => nodeFiles.get(node) || sourceFiles.get(node?.getSourceFile());
+
   // Without router provenance here, any .use call is conservatively possible
   // global/inherited middleware. This may lower completeness, never fabricate it.
   const potentialInheritedMiddleware = validFiles.some((file) =>
@@ -54,17 +57,20 @@ function buildContracts({
         ts.isPropertyAccessExpression(call.expression) && call.expression.name.text === 'use',
     ),
   );
+
   for (const file of validFiles)
     for (const statement of file.sf.statements) {
       if (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement))
         types.get(file).set(statement.name.text, statement);
     }
+  
   const safeName = (text) =>
     typeof text === 'string' && /^[A-Za-z_$][\w$-]{0,79}$/.test(text) ? text : null;
   const propertyName = (node) =>
     node && (ts.isIdentifier(node) ? safeName(node.text) : safeName(literal(node)));
   const unknown = () => ({ type: 'unknown', shape: 'unknown', complete: false });
   const primitive = (type) => ({ type, shape: type, complete: true });
+  
   // Declared type evidence is cached only while complete; bounded inference stays unknown.
   function declared(node, file, seen = new Set()) {
     resource.step();
@@ -73,12 +79,15 @@ function buildContracts({
       typeLimitHit = true;
       return unknown();
     }
+
     if (declaredCache.has(node)) return declaredCache.get(node);
     const beforeLimit = typeLimitHit,
       result = declaredValue(node, file, seen);
     if (!beforeLimit && !typeLimitHit && result.complete) declaredCache.set(node, result);
+    
     return result;
   }
+
   function declaredValue(node, file, seen) {
     seen = new Set(seen).add(node);
     if (
@@ -93,6 +102,7 @@ function buildContracts({
       [ts.SyntaxKind.NumberKeyword, 'number'],
       [ts.SyntaxKind.BooleanKeyword, 'boolean'],
     ]);
+
     if (keyword.has(node.kind)) return primitive(keyword.get(node.kind));
     if (ts.isLiteralTypeNode(node)) {
       if (node.literal.kind === ts.SyntaxKind.NullKeyword) return primitive('null');
@@ -101,6 +111,7 @@ function buildContracts({
       if ([ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword].includes(node.literal.kind))
         return primitive('boolean');
     }
+
     if (ts.isArrayTypeNode(node) || ts.isTupleTypeNode(node)) {
       const children = ts.isArrayTypeNode(node) ? [node.elementType] : [...node.elements];
       if (children.length > MAX_FIELDS) {
@@ -115,6 +126,7 @@ function buildContracts({
       }
       return { type: 'array', shape, complete: values.every((v) => v.complete) };
     }
+
     if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName)) {
       if (
         ['Array', 'ReadonlyArray'].includes(node.typeName.text) &&
@@ -126,9 +138,11 @@ function buildContracts({
           typeLimitHit = true;
           return unknown();
         }
+
         return { type: 'array', shape, complete: item.complete };
       }
       const definition = types.get(file)?.get(node.typeName.text);
+      
       if (definition && !definition.typeParameters?.length && !definition.heritageClauses?.length)
         return declared(
           ts.isTypeAliasDeclaration(definition) ? definition.type : definition,
@@ -136,6 +150,7 @@ function buildContracts({
           seen,
         );
     }
+
     if (
       ts.isTypeLiteralNode(node) ||
       ts.isInterfaceDeclaration(node) ||
@@ -145,7 +160,9 @@ function buildContracts({
         fields = [];
       let complete = members.length <= MAX_FIELDS,
         shapeLength = 8;
+      
       if (!complete) typeLimitHit = true;
+      
       for (const member of [...members].slice(0, MAX_FIELDS)) {
         const name = propertyName(member.name);
         if (
@@ -168,20 +185,26 @@ function buildContracts({
         fields.push({ name, value, node: member });
         complete &&= value.complete;
       }
+
       const shape = `object{${fields
         .map((field) => `${field.name}:${field.value.shape}`)
         .sort()
         .join(',')}}`;
+
       return shape.length > MAX_SHAPE ? unknown() : { type: 'object', shape, complete, fields };
     }
+
     return unknown();
   }
+
   function parameterType(parameter) {
     if (parameter?.type) return parameter.type;
     const tag =
       parameter && ts.getJSDocParameterTags(parameter).find((item) => item.typeExpression?.type);
+    
     return tag?.typeExpression?.type;
   }
+
   function bindPattern(pattern, value, context) {
     if (!pattern) return;
     if (ts.isIdentifier(pattern)) {
@@ -200,33 +223,42 @@ function buildContracts({
         );
       }
   }
+
   function childContextFor(fn, context, argumentsRefs = []) {
     const child = new Map(context);
+
     // Recursive entries must not inherit their previous locals or parameter taints.
     for (const binding of child.keys()) {
       let owner = binding.node;
       while (owner && !isFunction(owner)) owner = owner.parent;
       if (owner === fn) child.delete(binding);
     }
+
     fn.parameters.forEach((parameter, index) =>
       bindPattern(parameter.name, argumentsRefs[index], child),
     );
+
     return child;
   }
+
   function descend(base, name) {
     if (!base || !name) return null;
     if (base.role === 'request')
       return LOCATIONS.has(name) ? { role: 'input', location: name, path: [] } : null;
     if (base.role === 'input' && base.path.length < MAX_DEPTH)
       return { ...base, path: [...base.path, name] };
+    
     return null;
   }
+
   // Track request/response references through lexical bindings, never execute target values.
   function reference(node, context, seen = new Set()) {
     resource.step();
     node = unwrap(node);
+    
     if (!node || seen.has(node) || seen.size > 32) return null;
     seen = new Set(seen).add(node);
+
     if (ts.isIdentifier(node)) {
       const binding = lookup(node);
       if (!binding || binding.assigned) return null;
@@ -234,6 +266,7 @@ function buildContracts({
       const value = reference(binding.init, context, seen);
       return binding.selector ? descend(value, binding.selector) : value;
     }
+
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
       return descend(
         reference(node.expression, context, seen),
@@ -241,6 +274,7 @@ function buildContracts({
           ? safeName(node.name.text)
           : safeName(literal(node.argumentExpression)),
       );
+
     if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
       const base = reference(node.expression.expression, context, seen);
       // These Express response builders return the same response; arbitrary methods do not.
@@ -260,8 +294,10 @@ function buildContracts({
       )
         return base;
     }
+
     return null;
   }
+
   function coercion(node) {
     node = unwrap(node);
     if (ts.isPrefixUnaryExpression(node))
@@ -270,8 +306,10 @@ function buildContracts({
         : node.operator === ts.SyntaxKind.ExclamationToken
           ? 'boolean'
           : null;
+
     if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || lookup(node.expression))
       return null;
+    
     return (
       {
         Number: 'number',
@@ -282,6 +320,7 @@ function buildContracts({
       }[node.expression.text] || null
     );
   }
+
   function expressionShape(node, context, seen = new Set()) {
     resource.step();
     if (!node || seen.has(node)) return unknown();
@@ -289,13 +328,16 @@ function buildContracts({
       typeLimitHit = true;
       return unknown();
     }
+
     seen = new Set(seen).add(node);
     node = unwrap(node);
     if (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node)) return primitive('string');
     if (ts.isNumericLiteral(node)) return primitive('number');
     if ([ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword].includes(node.kind))
       return primitive('boolean');
+
     if (node.kind === ts.SyntaxKind.NullKeyword) return primitive('null');
+
     const coerced = coercion(node);
     if (coerced) return primitive(coerced);
     if (ts.isIdentifier(node)) {
@@ -313,8 +355,10 @@ function buildContracts({
         (ts.isObjectLiteralExpression(initializer) || ts.isArrayLiteralExpression(initializer))
       )
         return unknown();
+
       return expressionShape(binding.init, context, seen);
     }
+
     if (ts.isObjectLiteralExpression(node)) {
       const fields = [];
       let complete = node.properties.length <= MAX_FIELDS;
@@ -328,6 +372,7 @@ function buildContracts({
           complete = false;
           continue;
         }
+
         const value = expressionShape(
           ts.isPropertyAssignment(property) ? property.initializer : property.name,
           context,
@@ -338,6 +383,7 @@ function buildContracts({
         fields.push({ name, value });
         complete &&= value.complete;
       }
+
       const shape = `object{${fields
         .map((field) => `${field.name}:${field.value.shape}`)
         .sort()
@@ -346,8 +392,10 @@ function buildContracts({
         typeLimitHit = true;
         return unknown();
       }
+
       return { type: 'object', shape, complete };
     }
+
     if (ts.isArrayLiteralExpression(node)) {
       if (node.elements.length > MAX_FIELDS) typeLimitHit = true;
       const values = [...node.elements]
@@ -360,16 +408,20 @@ function buildContracts({
         typeLimitHit = true;
         return unknown();
       }
+
       return {
         type: 'array',
         shape,
         complete: node.elements.length <= MAX_FIELDS && values.every((value) => value.complete),
       };
     }
+
     return unknown();
   }
+
   const operations = [];
   let truncatedOperations = 0;
+
   for (const endpoint of endpoints) {
     typeWork = 0;
     typeLimitHit = false;
@@ -383,6 +435,7 @@ function buildContracts({
       declaredComplete = false,
       unknownHandler = false,
       opaqueCalls = 0;
+
     function addInput(ref, type, evidence, node) {
       if (ref?.role !== 'input' || !ref.path.length) return;
       const name = ref.path.join('.');
@@ -390,6 +443,7 @@ function buildContracts({
         truncated = true;
         return;
       }
+
       const file = fileFor(node);
       if (!file) return;
       const key = `${ref.location}:${name}`;
@@ -397,6 +451,7 @@ function buildContracts({
         truncated = true;
         return;
       }
+
       if (!inputs.has(key)) resource.record();
       const existing = inputs.get(key),
         next = {
@@ -407,11 +462,13 @@ function buildContracts({
           file: file.rel,
           line: location(file, node).line,
         };
+
       const rank = { 'property-read': 0, 'route-param': 1, coercion: 2, declared: 3 };
       if (!existing || rank[evidence] > rank[existing.evidence]) inputs.set(key, next);
       else if (rank[evidence] === rank[existing.evidence] && existing.type !== type)
         inputs.set(key, { ...existing, type: 'unknown' });
     }
+
     function declaredInputs(fn) {
       const parameter = fn.parameters[0],
         file = nodeFiles.get(fn);
@@ -427,6 +484,7 @@ function buildContracts({
               field.node,
             );
         }
+
       return (
         shape.complete &&
         shape.fields.length === LOCATIONS.size &&
@@ -437,6 +495,7 @@ function buildContracts({
         )
       );
     }
+
     function observeResponse(node, context) {
       if (!ts.isPropertyAccessExpression(node.expression)) return false;
       const kind = node.expression.name.text;
@@ -445,11 +504,13 @@ function buildContracts({
         reference(node.expression.expression, context)?.role !== 'response'
       )
         return false;
+
       let shape = node.arguments.length
         ? expressionShape(node.arguments[0], context)
         : kind === 'end'
           ? { type: 'unknown', shape: 'empty', complete: true }
           : unknown();
+
       // Legacy send(status, body) and extra arguments are deliberately not inferred.
       if (node.arguments.length > 1) shape = unknown();
       const file = nodeFiles.get(node),
@@ -458,6 +519,7 @@ function buildContracts({
         truncated = true;
         return true;
       }
+
       const record = {
         kind,
         type: shape.type,
@@ -466,6 +528,7 @@ function buildContracts({
         file: file.rel,
         line: location(file, node).line,
       };
+
       if (!responses.has(key)) resource.record();
       const previous = responses.get(key);
       if (previous && (previous.shape !== record.shape || previous.type !== record.type)) {
@@ -473,15 +536,19 @@ function buildContracts({
         record.shape = 'unknown';
         record.complete = false;
       }
+
       responses.set(key, record);
       responseNodes.set(node, record);
+
       return true;
     }
+
     function inspect(fn, context, depth = 0) {
       if (depth > MAX_DEPTH || contextsSeen.size >= MAX_CONTEXTS) {
         truncated = true;
         return;
       }
+
       const key = `${functionRecords.get(fn)?.id}:${[...context]
         .filter(([, ref]) => ref)
         .map(
@@ -490,20 +557,25 @@ function buildContracts({
         )
         .sort()
         .join('|')}`;
+
       if (contextsSeen.has(key)) return;
+
       contextsSeen.add(key);
+
       function visit(node) {
         resource.step();
         if (++nodes > MAX_NODES) {
           truncated = true;
           return;
         }
+
         if (isFunction(node) && node !== fn) {
           // Captured request/response evidence inside callbacks is observable source evidence;
           // callback invocation and invocation order are deliberately not claimed.
           inspect(node, childContextFor(node, context), depth + 1);
           return;
         }
+
         if (ts.isVariableDeclaration(node) && node.initializer) {
           const ref = reference(node.initializer, context);
           bindPattern(node.name, ref, context);
@@ -516,6 +588,7 @@ function buildContracts({
               }
           }
         }
+
         if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
           const ref = reference(node, context);
           if (ref?.role === 'input') {
@@ -542,6 +615,7 @@ function buildContracts({
             }
           }
         }
+
         if (ts.isCallExpression(node)) {
           const handled = observeResponse(node, context);
           const target = resolveValue(node.expression);
@@ -562,10 +636,13 @@ function buildContracts({
         }
         ts.forEachChild(node, visit);
       }
+
       visit(fn.body);
     }
+
     const handlerNodes = endpointHandlerNodes.get(endpoint) || [],
       handlers = [];
+
     for (const handlerNode of handlerNodes) {
       const resolved = resolveValue(handlerNode);
       if (resolved?.type !== 'function') {
@@ -580,12 +657,14 @@ function buildContracts({
       declaredComplete ||= declaredInputs(fn);
       inspect(fn, context);
     }
+
     // Route parameters are observed transport strings, not a complete input schema.
     for (const match of (endpoint.path || '').matchAll(/:([A-Za-z_$][\w$]*)/g)) {
       if (inputs.size >= MAX_FIELDS) {
         truncated = true;
         break;
       }
+
       const key = `params:${match[1]}`;
       if (!inputs.has(key)) {
         resource.record();
@@ -599,6 +678,7 @@ function buildContracts({
         });
       }
     }
+
     // A complete output needs a bounded terminal response on every observed branch.
     function pure(node) {
       resource.step();
@@ -613,6 +693,7 @@ function buildContracts({
         )
       )
         return true;
+
       if (ts.isPropertyAccessExpression(node)) return pure(node.expression);
       if (ts.isBinaryExpression(node))
         return (
@@ -620,6 +701,7 @@ function buildContracts({
           pure(node.left) &&
           pure(node.right)
         );
+
       if (ts.isPrefixUnaryExpression(node))
         return (
           ![
@@ -628,8 +710,10 @@ function buildContracts({
             ts.SyntaxKind.DeleteKeyword,
           ].includes(node.operator) && pure(node.operand)
         );
+
       return false;
     }
+
     function terminal(node) {
       resource.step();
       if (!node) return false;
@@ -643,8 +727,10 @@ function buildContracts({
             continue;
           return index === node.statements.length - 1 && terminal(statement);
         }
+
         return false;
       }
+
       if (ts.isIfStatement(node))
         return (
           pure(node.expression) &&
@@ -652,25 +738,30 @@ function buildContracts({
           terminal(node.thenStatement) &&
           terminal(node.elseStatement)
         );
+
       const expression =
         ts.isReturnStatement(node) || ts.isExpressionStatement(node)
           ? unwrap(node.expression)
           : unwrap(node);
+
       return (
         !!expression &&
         ts.isCallExpression(expression) &&
         responseNodes.get(expression)?.complete === true
       );
     }
+
     const inputList = [...inputs.values()].sort((a, b) =>
       `${a.location}:${a.name}`.localeCompare(`${b.location}:${b.name}`, 'en'),
     );
+
     const responseList = [...responses.values()].sort(
       (a, b) =>
         a.file.localeCompare(b.file, 'en') ||
         a.line - b.line ||
         a.shape.localeCompare(b.shape, 'en'),
     );
+
     truncated ||= typeLimitHit;
     const inputComplete =
       declaredComplete &&
@@ -679,6 +770,7 @@ function buildContracts({
       !truncated &&
       !potentialInheritedMiddleware &&
       inputList.every((field) => field.type !== 'unknown' && field.evidence === 'declared');
+
     const outputComplete =
       handlers.length === 1 &&
       !unknownHandler &&
@@ -688,6 +780,7 @@ function buildContracts({
       terminal(handlers[0].body) &&
       responseList.length > 0 &&
       responseList.every((response) => response.complete);
+
     if (!inputComplete)
       limitReasons.add(
         'Input fields are observed evidence; no complete closed request declaration was proven.',
@@ -722,6 +815,7 @@ function buildContracts({
       );
       truncatedOperations++;
     }
+
     resource.record();
     operations.push({
       endpointId: endpoint.id,
@@ -732,7 +826,9 @@ function buildContracts({
       limitations: [...limitReasons],
     });
   }
+
   operations.sort((a, b) => a.endpointId.localeCompare(b.endpointId, 'en'));
+  
   return {
     schemaVersion: 1,
     operations,

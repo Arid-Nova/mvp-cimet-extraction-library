@@ -22,8 +22,7 @@ function buildGraphs({
   resource,
 }) {
   function addDependency(file, node, source, edgeKind, typeOnly = false, provenTarget = null) {
-    const target =
-      provenTarget || (typeof source === 'string' ? resolveModule(file, source) : null);
+    const target = provenTarget || (typeof source === 'string' ? resolveModule(file, source) : null);
     const resolution = target
       ? 'resolved'
       : typeof source === 'string' &&
@@ -32,6 +31,7 @@ function buildGraphs({
           !/^[A-Za-z]:[\\/]/.test(source)
         ? 'external'
         : 'unresolved';
+
     // Specifiers are deliberately omitted: URLs and package strings can contain secrets.
     resource.record();
     dependencies.push({
@@ -44,9 +44,11 @@ function buildGraphs({
       typeOnly,
     });
   }
+
   function dependencyTypes(clause, declarationTypeOnly) {
     if (declarationTypeOnly) return [true];
     const named = clause?.namedBindings || clause;
+    
     if (named && (ts.isNamedImports(named) || ts.isNamedExports(named)) && named.elements.length) {
       const types = new Set(named.elements.map((element) => !!element.isTypeOnly));
       if (clause?.name) types.add(false);
@@ -54,18 +56,21 @@ function buildGraphs({
     }
     return [false];
   }
-  let candidateCallSites = 0,
-    unresolvedCallSites = 0,
-    resolvedTopLevelCallsOmitted = 0;
+
+  let candidateCallSites = 0, unresolvedCallSites = 0, resolvedTopLevelCallsOmitted = 0;
+
   for (const file of validFiles) {
     function visit(node) {
       resource.step();
+      
       if (ts.isImportDeclaration(node))
         for (const typeOnly of dependencyTypes(node.importClause, node.importClause?.isTypeOnly))
           addDependency(file, node, literal(node.moduleSpecifier), 'import', typeOnly);
+      
       if (ts.isExportDeclaration(node) && node.moduleSpecifier)
         for (const typeOnly of dependencyTypes(node.exportClause, node.isTypeOnly))
           addDependency(file, node, literal(node.moduleSpecifier), 'reexport', typeOnly);
+      
       if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference))
         addDependency(
           file,
@@ -74,6 +79,7 @@ function buildGraphs({
           'import-equals',
           !!node.isTypeOnly,
         );
+      
       if (ts.isImportTypeNode(node))
         addDependency(
           file,
@@ -82,21 +88,27 @@ function buildGraphs({
           'import-type',
           true,
         );
+
       if (ts.isCallExpression(node)) {
         if (node.expression.kind === ts.SyntaxKind.ImportKeyword)
           addDependency(file, node, literal(node.arguments[0]), 'dynamic-import');
         else if (requireIdentifier(node.expression))
           addDependency(file, node, literal(node.arguments[0]), 'require');
         candidateCallSites++;
+        
         const target = resolveValue(node.expression);
         const targetRecord = target?.type === 'function' && functionRecords.get(target.node);
+        
         let parent = node.parent;
         while (parent && !isFunction(parent)) parent = parent.parent;
+        
         const callerRecord = parent && functionRecords.get(parent);
+        
         if (!targetRecord) {
           unresolvedCallSites++;
           if (callerRecord) callerRecord.unresolvedCalls++;
-        } else if (!callerRecord) resolvedTopLevelCallsOmitted++;
+        } 
+        else if (!callerRecord) resolvedTopLevelCallsOmitted++;
         else {
           resource.record();
           calls.push({
@@ -112,8 +124,11 @@ function buildGraphs({
     }
     visit(file.sf);
   }
+
   for (const load of consignLoads)
-    if (!load.target.bad) addDependency(load.file, load.call, null, 'consign', false, load.target);
+    if (!load.target.bad) 
+      addDependency(load.file, load.call, null, 'consign', false, load.target);
+  
   for (const endpoint of endpoints)
     for (const node of endpointHandlerNodes.get(endpoint) || []) {
       const value = resolveValue(node),
@@ -123,11 +138,13 @@ function buildGraphs({
         endpointHandlers.push({ endpointId: endpoint.id, functionId: record.id });
       }
     }
+
   const uniqueHandlers = [
     ...new Map(
       endpointHandlers.map((edge) => [`${edge.endpointId}:${edge.functionId}`, edge]),
     ).values(),
   ];
+
   const order = (a, b) =>
     (a.file || a.source || '').localeCompare(b.file || b.source || '', 'en') ||
     (a.line || 0) - (b.line || 0) ||
@@ -135,6 +152,7 @@ function buildGraphs({
   dependencies.sort(order);
   functions.sort(order);
   calls.sort(order);
+
   uniqueHandlers.sort(
     (a, b) =>
       a.endpointId.localeCompare(b.endpointId, 'en') ||
@@ -143,4 +161,5 @@ function buildGraphs({
 
   return { uniqueHandlers, candidateCallSites, unresolvedCallSites, resolvedTopLevelCallsOmitted };
 }
+
 module.exports = { buildGraphs };

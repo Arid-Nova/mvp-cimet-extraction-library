@@ -12,6 +12,7 @@ const literal = (node) => (node && ts.isStringLiteralLike(node) ? node.text : nu
 const isFunction = (node) => ts.isFunctionLike(node) && !!node.body;
 const memberName = (node) =>
   node && (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) ? node.text : null;
+
 function dotted(node) {
   if (!node) return '';
   if (ts.isIdentifier(node)) return node.text;
@@ -20,6 +21,7 @@ function dotted(node) {
   if (ts.isPropertyAccessExpression(node)) return `${dotted(node.expression)}.${node.name.text}`;
   return '';
 }
+
 function unwrap(node) {
   while (
     node &&
@@ -30,8 +32,10 @@ function unwrap(node) {
       ts.isSatisfiesExpression(node))
   )
     node = node.expression;
+
   return node;
 }
+
 function semanticHash(node, resource = null) {
   if (!node) return hash('unresolved');
   const scanner = ts.createScanner(
@@ -40,11 +44,13 @@ function semanticHash(node, resource = null) {
     ts.LanguageVariant.JSX,
     node.getText(),
   );
+
   const output = [];
   for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
     resource?.step();
     output.push(`${token}:${scanner.getTokenText()}`);
   }
+
   const shape = [];
   function visit(current) {
     resource?.step();
@@ -52,7 +58,9 @@ function semanticHash(node, resource = null) {
     ts.forEachChild(current, visit);
     shape.push(')');
   }
+
   visit(node);
+
   return hash(JSON.stringify([output, shape]));
 }
 
@@ -71,6 +79,7 @@ function owner(node) {
         label = `${dotted(current.parent.expression) || 'callback'}:callback`;
       parts.unshift(label || '<anonymous>');
     }
+
   return parts.join('/') || '<module>';
 }
 
@@ -87,9 +96,11 @@ function createSemanticHasher(resource) {
   return (node) => {
     if (!node) return hash('unresolved');
     if (!cache.has(node)) cache.set(node, semanticHash(node, resource));
+    
     return cache.get(node);
   };
 }
+
 module.exports = {
   createSemanticHasher,
   ts,

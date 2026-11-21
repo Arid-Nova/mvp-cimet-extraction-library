@@ -27,10 +27,9 @@ function collectHttpObservations({
   diag,
   semanticHash,
 }) {
-  const endpointCandidates = [],
-    calls = [],
-    mounts = [];
+  const endpointCandidates = [], calls = [], mounts = [];
   const wrapperFiles = new Set();
+
   for (const file of files.values())
     for (const b of file.bindings) {
       const imported =
@@ -43,6 +42,7 @@ function collectHttpObservations({
         if (local && wrapperFor(imported)) wrapperFiles.add(local.absolute);
       }
     }
+
   for (const file of files.values())
     if (!file.bad)
       for (const call of file.calls) {
@@ -55,13 +55,15 @@ function collectHttpObservations({
             const prefix = firstIsRouter
               ? { path: '/', resolution: 'literal' }
               : resolvedPath(call.arguments[0], 'unknown', null, true);
-            if (prefix.unsupportedPattern)
+            
+              if (prefix.unsupportedPattern)
               diag(
                 file,
                 call,
                 'UNSUPPORTED_EXPRESS_PATTERN',
                 'Express path pattern requires runtime-specific matching and is not normalized.',
               );
+
             for (const arg of call.arguments.slice(firstIsRouter ? 0 : 1)) {
               const child = role(arg);
               if (child?.type === 'router')
@@ -74,6 +76,7 @@ function collectHttpObservations({
                 });
             }
           }
+
           if (HTTP.has(e.name.text)) {
             const chain = routeChain(e.expression);
             const router = parent?.type === 'router' ? parent : chain?.router;
@@ -98,12 +101,15 @@ function collectHttpObservations({
             }
           }
         }
+
         if (wrapperFiles.has(file.absolute)) continue;
+
         let source = null,
           methodName = 'UNKNOWN',
           argument = null,
           baseURL = null,
           assumedTarget = 'unknown';
+
         if (ts.isPropertyAccessExpression(e)) {
           const client = role(e.expression);
           const m = e.name.text;
@@ -169,6 +175,7 @@ function collectHttpObservations({
             methodName = optionMethod(call.arguments[1]);
           }
         }
+
         if (source) {
           const route = resolvedPath(argument, assumedTarget, baseURL);
           if (route.resolution === 'unresolved')
@@ -185,6 +192,7 @@ function collectHttpObservations({
               'UNRESOLVED_HTTP_METHOD',
               'The request HTTP method could not be resolved statically.',
             );
+          
           resource.record();
           calls.push({
             ...location(file, call),
@@ -199,4 +207,5 @@ function collectHttpObservations({
 
   return { wrapperFiles, endpointCandidates, calls, mounts };
 }
+
 module.exports = { collectHttpObservations };

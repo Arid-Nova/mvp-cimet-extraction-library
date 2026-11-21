@@ -8,6 +8,7 @@ import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.looks
 import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.urlOf;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -81,9 +82,12 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
       String httpMethod = CONFIG.httpMethodFor("javascript", name, name); // e.g. bare fetch(url)
       if (httpMethod != null && !args.isEmpty())
         out.add("httpCalls", caller + ": " + httpMethod + " " + urlOf(args.get(0), out));
+      
       return;
     }
+
     if (!fn.type.equals("member_expression")) return;
+    
     String method = out.text(fn.field("property"));
     SNode object = fn.field("object");
     String objectText = out.text(object);
@@ -92,13 +96,16 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
       // server.addService(proto.pkg.CartService.service, impl)
       String svc = out.text(args.get(0)).replaceAll("\\.service$", "");
       out.add("rpcServers", caller + ": " + lastSegment(svc));
+      
       return;
     }
+
     String httpMethod = CONFIG.httpMethodFor("javascript", objectText, method);
     if (httpMethod != null && !args.isEmpty()) {
       out.add("httpCalls", caller + ": " + httpMethod + " " + urlOf(args.get(0), out));
       return;
     }
+
     if (HTTP_VERBS.contains(method.toLowerCase()) && !args.isEmpty()) {
       String url = urlOf(args.get(0), out);
       if (looksLikePath(url)) out.add("endpoints", method.toUpperCase() + " " + url);
@@ -117,6 +124,7 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
   private static List<String> jsClassFields(SNode classNode, FactOutput out) {
     SNode body = classNode.field("body");
     if (body == null) return List.of();
+    
     List<String> fields = new ArrayList<>();
     for (SNode m : body.namedChildren()) {
       // The TSX grammar (used here) calls this "public_field_definition" with a "name" field;
@@ -126,6 +134,7 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
       SNode type = m.field("type"); // only present for TS-annotated fields; empty for plain/Flow JS
       if (name != null) fields.add(out.text(name) + ":" + (type == null ? "" : out.text(type)));
     }
+
     return fields;
   }
 
@@ -160,6 +169,7 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
             parts.add(out.text(p)); // object/array destructuring etc.: keep the raw pattern text
       }
     }
+
     return String.join(", ", parts);
   }
 
@@ -193,6 +203,7 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
       SNode vname = fn.parent.field("name");
       if (vname != null) return out.text(vname);
     }
+
     return "<anonymous>";
   }
 }

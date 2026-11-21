@@ -14,13 +14,16 @@ public final class JavaScriptDeltaService {
         JavaScriptExtractionService.validateSnapshot(before);
         JavaScriptExtractionService.validateSnapshot(after);
         JsonNode oldComponent = before.path("component"), newComponent = after.path("component");
+        
         for (String field : List.of("kind", "name")) {
             if (!oldComponent.path(field).equals(newComponent.path(field)))
                 throw new IOException("Cannot compare different JavaScript components");
         }
         String oldRepo = oldComponent.path("repositoryURL").asText(), newRepo = newComponent.path("repositoryURL").asText();
+        
         if (!oldRepo.isBlank() && !newRepo.isBlank() && !oldRepo.equals(newRepo))
             throw new IOException("Cannot compare snapshots from different repositories");
+        
         ObjectNode result = JavaScriptExtractionService.JSON.createObjectNode();
         result.put("schemaVersion", 1);
         result.put("analysis", "static-javascript-snapshot-delta");
@@ -30,18 +33,21 @@ public final class JavaScriptDeltaService {
         result.set("endpoints", compareGroup(before.path("endpoints"), after.path("endpoints"), true));
         result.set("calls", compareGroup(before.path("calls"), after.path("calls"), false));
         ObjectNode summary = result.putObject("summary");
+        
         for (String group : List.of("endpoints", "calls")) {
             ObjectNode counts = summary.putObject(group);
             for (String key : List.of("added", "removed", "contractChanged", "implementationChanged"))
                 counts.put(key, result.path(group).path(key).size());
             counts.put("unchanged", result.path(group).path("unchangedCount").asInt());
         }
+        
         result.putArray("limitations")
                 .add("Contract changes cover extracted HTTP method, path and target observations; payload schemas are not inferred.")
                 .add("Implementation fingerprints observe static token changes, not behavioral equivalence or confirmed regressions.")
                 .add("Ambiguous identity changes remain additions/removals; no heuristic many-to-many rename pairing.")
                 .add("Line numbers, comments, source ordering and provenance commits are not change criteria.");
-        return result;
+        
+                return result;
     }
 
     /** Alias for callers using extraction-service naming. */
@@ -53,6 +59,7 @@ public final class JavaScriptDeltaService {
         for (String id : new TreeSet<>(oldItems.keySet())) {
             if (newItems.containsKey(id)) pairs.add(new Pair(oldItems.remove(id), newItems.remove(id), "stable-id"));
         }
+
         if (endpoints) {
             pairUnambiguous(oldItems, newItems, pairs, n -> usablePath(n)
                     ? n.path("method").asText() + " " + n.path("normalizedPath").asText() : null, "http-identity");
@@ -61,23 +68,29 @@ public final class JavaScriptDeltaService {
                 if (handler.isBlank() || handler.startsWith("<") || handler.startsWith("inline")) return null;
                 return n.path("file").asText() + "\n" + handler;
             }, "unambiguous-handler");
-        } else {
+        } 
+        else {
             pairUnambiguous(oldItems, newItems, pairs, n -> {
                 String caller = n.path("caller").asText();
                 return caller.isBlank() ? null : n.path("file").asText() + "\n" + caller;
             }, "unambiguous-caller");
         }
+
         ObjectNode result = JavaScriptExtractionService.JSON.createObjectNode();
         ArrayNode added = result.putArray("added"), removed = result.putArray("removed");
         ArrayNode contract = result.putArray("contractChanged"), implementation = result.putArray("implementationChanged");
         newItems.values().forEach(n -> added.add(safeRecord(n)));
         oldItems.values().forEach(n -> removed.add(safeRecord(n)));
+        
         int unchanged = 0;
         pairs.sort(Comparator.comparing(p -> p.after.path("id").asText()));
+        
         for (Pair pair : pairs) {
             List<String> changed = new ArrayList<>();
             for (String field : List.of("method", "path", "normalizedPath", "target"))
-                if (!Objects.equals(pair.before.get(field), pair.after.get(field))) changed.add(field);
+                if (!Objects.equals(pair.before.get(field), pair.after.get(field))) 
+                    changed.add(field);
+            
             if (bothPresent(pair, "contractFingerprint") && different(pair, "contractFingerprint"))
                 changed.add("contractFingerprint");
             boolean bodyChanged = bothPresent(pair, "bodyFingerprint") ? different(pair, "bodyFingerprint")
@@ -93,6 +106,7 @@ public final class JavaScriptDeltaService {
             else unchanged++;
         }
         result.put("unchangedCount", unchanged);
+        
         return result;
     }
 

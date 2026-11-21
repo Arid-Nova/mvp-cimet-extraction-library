@@ -5,12 +5,13 @@ import org.treesitter.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
+
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.function.Consumer;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Small helpers shared by the tree-sitter experiments.

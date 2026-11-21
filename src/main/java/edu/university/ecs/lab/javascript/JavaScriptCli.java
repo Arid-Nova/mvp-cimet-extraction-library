@@ -34,15 +34,22 @@ public final class JavaScriptCli {
             case "snapshot" -> {
                 allow(options, "root", "kind", "name", "adapter", "output", "config", "node", "repo-url", "commit", "ir-output");
                 Path adapter = Path.of(required(options, "adapter"));
-                if (adapter.getFileName().toString().equals("analyzer.cjs")) adapter = adapter.toAbsolutePath().getParent();
+                if (adapter.getFileName().toString().equals("analyzer.cjs")) 
+                    adapter = adapter.toAbsolutePath().getParent();
+                
                 JavaScriptExtractionService extraction = new JavaScriptExtractionService(adapter, optional(options, "node", "node"));
                 ObjectNode snapshot = extraction.extract(Path.of(required(options, "root")), required(options, "kind"),
                         required(options, "name"), options.containsKey("config") ? Path.of(required(options, "config")) : null);
                 ObjectNode component = (ObjectNode) snapshot.get("component");
-                if (options.containsKey("repo-url")) component.put("repositoryURL", required(options, "repo-url"));
-                if (options.containsKey("commit")) component.put("commit", required(options, "commit"));
+                if (options.containsKey("repo-url")) 
+                    component.put("repositoryURL", required(options, "repo-url"));
+                
+                if (options.containsKey("commit")) 
+                    component.put("commit", required(options, "commit"));
+                
                 write(Path.of(required(options, "output")), snapshot, false);
-                if (options.containsKey("ir-output")) write(Path.of(required(options, "ir-output")),
+                if (options.containsKey("ir-output")) 
+                    write(Path.of(required(options, "ir-output")),
                         JavaScriptIRConverter.toIR(List.of(snapshot), required(options, "name")), true);
             }
             case "delta" -> {
@@ -54,18 +61,24 @@ public final class JavaScriptCli {
             case "ir" -> {
                 allow(options, "snapshot", "name", "output");
                 List<String> sources = options.get("snapshot");
-                if (sources == null || sources.isEmpty()) throw new IllegalArgumentException("Missing --snapshot");
+                if (sources == null || sources.isEmpty()) 
+                    throw new IllegalArgumentException("Missing --snapshot");
+                
                 List<JsonNode> snapshots = new ArrayList<>();
-                for (String source : sources) snapshots.add(read(Path.of(source)));
+                for (String source : sources) 
+                    snapshots.add(read(Path.of(source)));
                 write(Path.of(required(options, "output")), JavaScriptIRConverter.toIR(snapshots,
                         optional(options, "name", "javascript-system")), true);
             }
             case "architecture" -> {
                 allow(options, "snapshot", "name", "output");
                 List<String> sources = options.get("snapshot");
-                if (sources == null || sources.isEmpty()) throw new IllegalArgumentException("Missing --snapshot");
+                if (sources == null || sources.isEmpty()) 
+                    throw new IllegalArgumentException("Missing --snapshot");
+                
                 List<JsonNode> snapshots = new ArrayList<>();
-                for (String source : sources) snapshots.add(read(Path.of(source)));
+                for (String source : sources) 
+                    snapshots.add(read(Path.of(source)));
                 write(Path.of(required(options, "output")), new JavaScriptArchitectureService().analyze(snapshots,
                         optional(options, "name", "javascript-system")), false);
             }
@@ -82,8 +95,12 @@ public final class JavaScriptCli {
     private static JsonNode read(Path path) throws IOException {
         if (Files.size(path) > JavaScriptExtractionService.DEFAULT_OUTPUT_LIMIT)
             throw new IOException("Snapshot file exceeds size limit");
-        try { return JavaScriptExtractionService.JSON.readTree(Files.readAllBytes(path)); }
-        catch (IOException ex) { throw new IOException("Could not read snapshot JSON"); }
+        try { 
+            return JavaScriptExtractionService.JSON.readTree(Files.readAllBytes(path)); 
+        }
+        catch (IOException ex) { 
+            throw new IOException("Could not read snapshot JSON");
+        }
     }
 
     private static void write(Path path, Object value, boolean nativeIR) throws IOException {
@@ -93,30 +110,41 @@ public final class JavaScriptCli {
         try {
             if (nativeIR) JsonReadWriteUtils.writeToJSON(temporary, value);
             else JavaScriptExtractionService.JSON.writerWithDefaultPrettyPrinter().writeValue(temporary.toFile(), value);
-            try { Files.move(temporary, absolute, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-            catch (java.nio.file.AtomicMoveNotSupportedException ex) { Files.move(temporary, absolute, StandardCopyOption.REPLACE_EXISTING); }
-        } finally { Files.deleteIfExists(temporary); }
+            try { 
+                Files.move(temporary, absolute, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); 
+            }
+            catch (java.nio.file.AtomicMoveNotSupportedException ex) { 
+                Files.move(temporary, absolute, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally { 
+            Files.deleteIfExists(temporary); 
+        }
     }
 
     private static Map<String, List<String>> options(String[] args) {
         Map<String, List<String>> values = new LinkedHashMap<>();
         for (int i = 0; i < args.length; i += 2) {
-            if (!args[i].startsWith("--") || i + 1 >= args.length) throw new IllegalArgumentException("Options require a value");
+            if (!args[i].startsWith("--") || i + 1 >= args.length) 
+                throw new IllegalArgumentException("Options require a value");
             String key = args[i].substring(2);
-            if (values.containsKey(key) && !key.equals("snapshot")) throw new IllegalArgumentException("Duplicate option");
+            if (values.containsKey(key) && !key.equals("snapshot")) 
+                throw new IllegalArgumentException("Duplicate option");
             values.computeIfAbsent(key, ignored -> new ArrayList<>()).add(args[i + 1]);
         }
+
         return values;
     }
 
     private static void allow(Map<String, List<String>> options, String... allowed) {
         Set<String> names = Set.of(allowed);
-        if (!names.containsAll(options.keySet())) throw new IllegalArgumentException("Unknown option for command");
+        if (!names.containsAll(options.keySet())) 
+            throw new IllegalArgumentException("Unknown option for command");
     }
 
     private static String required(Map<String, List<String>> values, String key) {
         String value = optional(values, key, null);
-        if (value == null || value.isBlank()) throw new IllegalArgumentException("Missing --" + key);
+        if (value == null || value.isBlank()) 
+            throw new IllegalArgumentException("Missing --" + key);
         return value;
     }
 
@@ -125,15 +153,19 @@ public final class JavaScriptCli {
     }
 
     private static String alias(Map<String, List<String>> values, String primary, String alias) {
-        if (values.containsKey(primary) && values.containsKey(alias)) throw new IllegalArgumentException("Conflicting delta options");
+        if (values.containsKey(primary) && values.containsKey(alias)) 
+            throw new IllegalArgumentException("Conflicting delta options");
         return values.containsKey(primary) ? required(values, primary) : required(values, alias);
     }
 
     private static String safeMessage(Exception ex) {
         // Filesystem/parser exceptions can contain arbitrary filenames or JSON excerpts; use only controlled messages.
-        if (ex instanceof java.nio.file.FileSystemException) return "A required file could not be accessed";
-        if (ex instanceof com.fasterxml.jackson.core.JsonProcessingException) return "Invalid JSON or IR output";
+        if (ex instanceof java.nio.file.FileSystemException) 
+            return "A required file could not be accessed";
+        if (ex instanceof com.fasterxml.jackson.core.JsonProcessingException) 
+            return "Invalid JSON or IR output";
         String message = ex.getMessage();
+        
         return message == null || message.length() > 180 || message.contains("\n") ? "Invalid input or analyzer execution failure" : message;
     }
 }

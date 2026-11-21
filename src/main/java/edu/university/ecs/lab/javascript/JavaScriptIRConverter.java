@@ -44,6 +44,7 @@ public final class JavaScriptIRConverter {
             .put("repositoryURL", service.getRepositoryURL())
             .put("commit", service.getCommitID())
             .put("boundaryInferred", false));
+    
     for (JsonNode endpoint : snapshot.endpoints(file)) {
       String url = nullableText(endpoint, "normalizedPath");
       Method base = new Method(module, endpoint.path("id").asText(), location(endpoint));
@@ -54,8 +55,10 @@ public final class JavaScriptIRConverter {
               .put("resolved", url != null)
               .put("componentKind", "backend"));
       module.getMethods().add(node);
-      if (url != null) module.setClassRole(ClassRole.CONTROLLER);
+      if (url != null) 
+        module.setClassRole(ClassRole.CONTROLLER);
     }
+
     for (JsonNode call : snapshot.calls(file)) {
       String caller = call.path("caller").asText("<module>");
       Method container =
@@ -75,6 +78,7 @@ public final class JavaScriptIRConverter {
       container.getMethodCalls().add(node);
       module.getMethods().add(container);
     }
+
     // Keep architectural evidence in the native module, without claiming Java role parity.
     JSONObject architecture = new JSONObject().put("schemaVersion", 1);
     JsonNode evidence = snapshot.architecture();
@@ -85,10 +89,12 @@ public final class JavaScriptIRConverter {
       }
       architecture.put(group, selected);
     }
+
     org.json.JSONArray bindings = new org.json.JSONArray();
     for (JsonNode binding : snapshot.handlers(file)) {
       bindings.put(new JSONObject(binding.toString()));
     }
+
     architecture.put("endpointHandlers", bindings);
     if (evidence.path("contracts").isObject()) {
       JSONObject contracts = new JSONObject().put("schemaVersion", 1);
@@ -98,6 +104,7 @@ public final class JavaScriptIRConverter {
       }
       architecture.put("contracts", contracts.put("operations", operations));
     }
+
     if (evidence.path("semanticEvidence").isObject()) {
       JSONObject semantics = new JSONObject().put("schemaVersion", 1);
       JsonNode semanticEvidence = evidence.path("semanticEvidence");
@@ -109,6 +116,7 @@ public final class JavaScriptIRConverter {
         }
         semantics.put(group, selected);
       }
+
       // These flags apply to the complete repository analysis; retain their scope explicitly.
       semantics.put("inspectionScope", "repository");
       if (semanticEvidence.has("summary"))
@@ -119,10 +127,12 @@ public final class JavaScriptIRConverter {
             "limitations", new org.json.JSONArray(semanticEvidence.path("limitations").toString()));
       architecture.put("semanticEvidence", semantics);
     }
+
     if (evidence.has("limitations"))
       architecture.put(
           "limitations", new org.json.JSONArray(evidence.path("limitations").toString()));
     module.getMetadata().put("architectureEvidence", architecture);
+
     return module;
   }
 
@@ -147,6 +157,7 @@ public final class JavaScriptIRConverter {
                 s.path("component").path("kind").asText()
                     + ":"
                     + s.path("component").path("name").asText()));
+    
     for (JsonNode snapshot : ordered) {
       JavaScriptExtractionService.validateSnapshot(snapshot);
       JsonNode info = snapshot.path("component");
@@ -178,6 +189,7 @@ public final class JavaScriptIRConverter {
         service.setFeignClients(new LinkedHashSet<>());
         service.setFiles(new LinkedHashSet<>());
       }
+
       Map<String, JSModule> modules = new TreeMap<>();
       for (JsonNode endpoint : sorted(snapshot.path("endpoints"))) {
         JSModule module =
@@ -199,6 +211,7 @@ public final class JavaScriptIRConverter {
                 .put("componentKind", kind));
         module.getMethods().add(node);
       }
+
       for (JsonNode call : sorted(snapshot.path("calls"))) {
         JSModule module =
             module(
@@ -224,12 +237,16 @@ public final class JavaScriptIRConverter {
         container.getMethodCalls().add(node);
         module.getMethods().add(container);
       }
+
       for (JSModule module : modules.values()) {
         if (service == null) system.getOrphans().add(module);
         else service.addAbstractClass(module);
       }
-      if (service != null) system.getMicroservices().add(service);
+
+      if (service != null) 
+        system.getMicroservices().add(service);
     }
+
     return system;
   }
 
@@ -258,7 +275,9 @@ public final class JavaScriptIRConverter {
                   componentMetadata(info).put("language", language(file)).put("sourceFile", file));
               return created;
             });
-    if (role == ClassRole.CONTROLLER) module.setClassRole(role);
+    if (role == ClassRole.CONTROLLER) 
+      module.setClassRole(role);
+    
     return module;
   }
 

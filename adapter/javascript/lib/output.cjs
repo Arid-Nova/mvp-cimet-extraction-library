@@ -1,5 +1,6 @@
 'use strict';
 const { hash } = require('./common/ast.cjs');
+
 /** Stable semantic identities deliberately exclude timestamps and source line movement. */
 function finalizeRecords(records, category, name, kind) {
   const occurrences = new Map();
@@ -25,6 +26,7 @@ function finalizeRecords(records, category, name, kind) {
     );
     record.fingerprint = hash(`${record.contractFingerprint}:${record.bodyFingerprint}`);
   }
+  
   return records.sort(
     (a, b) =>
       a.file.localeCompare(b.file, 'en') || a.line - b.line || a.id.localeCompare(b.id, 'en'),
@@ -47,15 +49,18 @@ function sourceCoverage(diagnostics) {
       sourceExclusions.filter((d) => d.code === 'SYMLINK_SKIPPED').map((d) => d.file),
     ).size,
   };
+  
   return {
     sourceExclusionCounts: counts,
     sourceInspectionComplete: counts.sourceExcludedPaths === 0,
   };
 }
+
 function orderedDiagnostics(diagnostics) {
   return [...new Map(diagnostics.map((d) => [JSON.stringify(d), d])).values()].sort(
     (a, b) =>
       a.file.localeCompare(b.file, 'en') || a.line - b.line || a.code.localeCompare(b.code, 'en'),
   );
 }
+
 module.exports = { finalizeRecords, sourceCoverage, orderedDiagnostics };

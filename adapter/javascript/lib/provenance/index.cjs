@@ -26,6 +26,7 @@ function createProvenance({
     activeRoles = new Set(),
     routers = new Map(),
     consignLoads = [];
+
   function wrapperFor(module) {
     return wrappers.find(
       (w) =>
@@ -35,6 +36,7 @@ function createProvenance({
           .at(-1) === w.module || module === w.module,
     );
   }
+
   function importedRole(file, module, imported) {
     if (module === 'express')
       return imported === 'Router'
@@ -42,26 +44,33 @@ function createProvenance({
         : ['default', '*'].includes(imported)
           ? { type: 'expressFactory' }
           : null;
+    
     if (module === 'consign') return { type: 'consignFactory' };
+
     if (module === 'axios')
       return REQUEST_METHODS.has(imported)
         ? { type: 'axios', method: imported }
         : ['default', '*', 'request'].includes(imported)
           ? { type: 'axios' }
           : null;
+
     const local = resolveModule(file, module);
     const wrapper = local && wrapperFor(module);
+
     if (wrapper) return { type: 'wrapper', wrapper, local };
     if (local)
       return imported === '*' ? { type: 'module', local } : role(exported(local, imported));
+    
     return null;
   }
+
   function role(node) {
     resource.step();
     node = unwrap(node);
     if (!node) return null;
     if (roles.has(node)) return roles.get(node);
     if (activeRoles.has(node)) return null;
+    
     activeRoles.add(node);
     let result = null;
     const file = scopes.get(node)?.file;
@@ -124,16 +133,20 @@ function createProvenance({
           };
       }
     }
+
     activeRoles.delete(node);
     if (result) roles.set(node, result);
+
     return result;
   }
+
   function bindFunction(fn, router) {
     if (!fn || !isFunction(fn) || !fn.parameters.length || !ts.isIdentifier(fn.parameters[0].name))
       return;
     const b = scopes.get(fn)?.values.get(fn.parameters[0].name.text);
     if (b) forcedRoles.set(b, router);
   }
+
   // Establish exported registration functions only from proven loader/app provenance.
   for (const file of files.values())
     if (!file.bad)
@@ -176,13 +189,16 @@ function createProvenance({
             }
           }
         }
+
         const callee = role(e);
         if (callee?.type === 'function' && role(call.arguments[0])?.type === 'router')
           bindFunction(callee.node, role(call.arguments[0]));
       }
+
   // Some files were examined before their loader bound a parameter.
   roles.clear();
 
   return { role, wrapperFor, routers, consignLoads };
 }
+
 module.exports = { createProvenance };

@@ -8,6 +8,7 @@ import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.looks
 import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.urlOf;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -116,6 +117,7 @@ final class PythonFactExtractor implements LanguageFactExtractor {
       out.add("rpcServers", caller + ": " + server.group(1));
       return;
     }
+
     Matcher stub = PY_GRPC_STUB.matcher(callee);
     if (stub.matches()) {
       out.add("rpcClients", caller + ": " + stub.group(1));
@@ -128,6 +130,7 @@ final class PythonFactExtractor implements LanguageFactExtractor {
       out.add("endpoints", "ANY /" + urlOf(args.get(0), out)); // Django urls.py
       return;
     }
+
     if (fn.type.equals("attribute")) {
       String object = out.text(fn.field("object"));
       // requests.get(...), self.client.get(...) (Locust / test clients), session.post(...)
@@ -173,6 +176,7 @@ final class PythonFactExtractor implements LanguageFactExtractor {
       SNode type = assign.field("type");
       fields.add(out.text(left) + ":" + (type == null ? "" : out.text(type)));
     }
+
     return fields;
   }
 
@@ -208,6 +212,7 @@ final class PythonFactExtractor implements LanguageFactExtractor {
         default -> {}
       }
     }
+
     return String.join(", ", parts);
   }
 
@@ -218,6 +223,7 @@ final class PythonFactExtractor implements LanguageFactExtractor {
   private static List<String> pyDecoratorNames(SNode classNode, FactOutput out) {
     SNode parent = classNode.parent;
     if (parent == null || !parent.type.equals("decorated_definition")) return List.of();
+    
     List<String> names = new ArrayList<>();
     for (SNode d : parent.namedChildren()) {
       if (!d.type.equals("decorator") || d.namedChildCount() == 0) continue;
@@ -225,6 +231,7 @@ final class PythonFactExtractor implements LanguageFactExtractor {
       SNode fn = expr.type.equals("call") ? expr.field("function") : expr;
       if (fn != null) names.add(out.text(fn));
     }
+
     return names;
   }
 
@@ -232,11 +239,13 @@ final class PythonFactExtractor implements LanguageFactExtractor {
   private static List<String> pySupertypes(SNode classNode, FactOutput out) {
     SNode bases = classNode.field("superclasses");
     if (bases == null) return List.of();
+    
     List<String> names = new ArrayList<>();
     for (SNode c : bases.namedChildren()) {
       if (c.type.equals("keyword_argument")) continue; // e.g. class Meta(metaclass=...)
       names.add(lastSegment(out.text(c)));
     }
+
     return names;
   }
 }

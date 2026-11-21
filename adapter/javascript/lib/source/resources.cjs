@@ -37,6 +37,7 @@ function createResourceBudget(config) {
     }
     limits[name] = value;
   }
+
   const usage = {
     files: 0,
     directoryEntries: 0,
@@ -45,10 +46,12 @@ function createResourceBudget(config) {
     workOperations: 0,
     records: 0,
   };
+
   function take(counter, amount, maximum, code) {
     if (amount > limits[maximum] - usage[counter]) throw new AnalysisResourceLimitError(code);
     usage[counter] += amount;
   }
+  
   return {
     limits,
     usage,

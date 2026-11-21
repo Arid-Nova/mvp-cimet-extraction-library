@@ -1,6 +1,7 @@
 package edu.university.ecs.lab.common.parsers.treesitter;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
+
 import java.util.List;
 import java.util.Set;
 
@@ -49,7 +50,9 @@ final class FactSupport {
       }
       default -> {}
     }
+
     if (!STRING_TYPES.contains(n.type)) return "{?}";
+    
     StringBuilder sb = new StringBuilder();
     boolean sawPart = false;
     for (SNode c : n.namedChildren()) {
@@ -77,6 +80,7 @@ final class FactSupport {
         default -> {}
       }
     }
+    
     if (!sawPart) {
       // Leaf literal (e.g. Go raw strings, C# verbatim strings): strip quotes/prefixes
       String t = out.text(n);

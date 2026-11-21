@@ -54,6 +54,7 @@ function buildArchitecture({
       functions,
       resource,
     });
+    
   const { requireIdentifier, resolveValue } = createValueResolver({
     ts,
     unwrap,
@@ -67,6 +68,7 @@ function buildArchitecture({
     exportDeclarations,
     resource,
   });
+
   const { uniqueHandlers, candidateCallSites, unresolvedCallSites, resolvedTopLevelCallsOmitted } =
     buildGraphs({
       ts,
@@ -89,6 +91,7 @@ function buildArchitecture({
       endpointHandlerNodes,
       resource,
     });
+
   const contracts = buildContracts({
     ts,
     validFiles,
@@ -105,6 +108,7 @@ function buildArchitecture({
     mutations,
     resource,
   });
+
   const semanticEvidence = buildSemanticEvidence({
     ts,
     validFiles,
@@ -130,6 +134,7 @@ function buildArchitecture({
     sourceExclusionCounts,
     resource,
   });
+
   return {
     schemaVersion: 1,
     modules,
