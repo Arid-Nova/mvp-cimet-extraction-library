@@ -31,3 +31,4 @@ src/test/java/edu/university/ecs/lab/javascript/JavaScriptSnapshotIndexTest.java
 src/main/java/edu/university/ecs/lab/common/models/ir/AbstractClass.java
 src/main/java/edu/university/ecs/lab/common/models/ir/Component.java
 src/main/java/edu/university/ecs/lab/intermediate/merge/services/MergeService.java
+src/test/java/edu/university/ecs/lab/common/services/CurrentMultiRepositorySchemaTest.java

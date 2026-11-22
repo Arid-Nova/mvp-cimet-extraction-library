@@ -214,6 +214,14 @@ behavior.
 
 ## Review regression validation
 
+On 2026-11-22, `mvn clean verify` passed 184 tests after preserving the reviewer's
+formatting/comments and applying the enforced formatters. The 52 Node parser
+tests and lint/format checks passed. `CurrentMultiRepositorySchemaTest` compares
+both committed schema artifacts with fresh current-model generation and checks
+that the actual writer/reader preserves independent repository revisions. See
+`.docs/schema/schema.md` for the native multi-repository contract and the boundary
+between that generated model documentation and enriched pipeline extensions.
+
 On 2026-11-16, `mvn clean verify` passed 182 local tests; the parser's 52 Node
 tests and 12 study-runner tests passed. New Java fixtures cover multiple/member
 declarations, role filtering, qualified identities, annotation semantics and 24
