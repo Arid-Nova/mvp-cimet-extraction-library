@@ -44,7 +44,7 @@ function createProvenance({
         : ['default', '*'].includes(imported)
           ? { type: 'expressFactory' }
           : null;
-    
+
     if (module === 'consign') return { type: 'consignFactory' };
 
     if (module === 'axios')
@@ -60,7 +60,7 @@ function createProvenance({
     if (wrapper) return { type: 'wrapper', wrapper, local };
     if (local)
       return imported === '*' ? { type: 'module', local } : role(exported(local, imported));
-    
+
     return null;
   }
 
@@ -70,7 +70,7 @@ function createProvenance({
     if (!node) return null;
     if (roles.has(node)) return roles.get(node);
     if (activeRoles.has(node)) return null;
-    
+
     activeRoles.add(node);
     let result = null;
     const file = scopes.get(node)?.file;

@@ -46,20 +46,21 @@ function createValueResolver({
   function exportedValue(file, exportedName, seen = new Set()) {
     if (!file || seen.size > 64) return null;
     const key = `${file.rel}:${exportedName}`;
-    
+
     if (seen.has(key)) return null;
     seen = new Set(seen).add(key);
-    
+
     if (localExports.get(file).has(exportedName))
       return resolveValue(localExports.get(file).get(exportedName), seen);
-    
+
     const defaultNode = localExports.get(file).get('default');
     if (exportedName !== 'default' && defaultNode) {
       const result = memberValue(resolveValue(defaultNode, seen), exportedName, seen);
       if (result) return result;
     }
 
-    const matches = [], stars = [];
+    const matches = [],
+      stars = [];
 
     for (const declaration of exportDeclarations.get(file) || []) {
       if (declaration.isTypeOnly) continue;
@@ -93,7 +94,7 @@ function createValueResolver({
         if (result) matches.push(result);
       }
     // Conflicting star exports are not assigned an arbitrary target.
-    
+
     if (
       !matches.length ||
       matches.some(
@@ -102,7 +103,8 @@ function createValueResolver({
           value.node !== matches[0].node ||
           value.file !== matches[0].file,
       )
-    ) return null;
+    )
+      return null;
 
     return matches[0];
   }
@@ -117,9 +119,8 @@ function createValueResolver({
         importValue(binding.file, binding.module, '*', seen)
       );
 
-    if (binding.module) 
-      return importValue(binding.file, binding.module, binding.imported, seen);
-    
+    if (binding.module) return importValue(binding.file, binding.module, binding.imported, seen);
+
     const value = resolveValue(binding.init, seen);
     return binding.selector ? memberValue(value, binding.selector, seen) : value;
   }
@@ -133,13 +134,14 @@ function createValueResolver({
         base.node.properties.some(
           (p) => ts.isSpreadAssignment(p) || (p.name && ts.isComputedPropertyName(p.name)),
         )
-      ) return null;
+      )
+        return null;
 
       const found = base.node.properties.filter(
         (p) => (identifierName(p.name) || literal(p.name)) === member,
       );
       if (found.length !== 1) return null;
-      
+
       const item = found[0];
 
       return ts.isPropertyAssignment(item)
@@ -159,14 +161,14 @@ function createValueResolver({
     node = unwrap(node);
     if (!node || seen.has(node) || seen.size > 64) return null;
     seen = new Set(seen).add(node);
-    
+
     if (
       isFunction(node) &&
       !ts.isGetAccessorDeclaration(node) &&
       !ts.isSetAccessorDeclaration(node)
     )
       return { type: 'function', node };
-    
+
     if (ts.isIdentifier(node)) return resolveBinding(lookup(node), seen);
     if (ts.isObjectLiteralExpression(node)) return { type: 'object', node };
     if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))

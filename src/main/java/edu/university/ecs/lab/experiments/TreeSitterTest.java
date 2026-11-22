@@ -1,12 +1,10 @@
 package edu.university.ecs.lab.experiments;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-
 import org.treesitter.TSLanguage;
 import org.treesitter.TSNode;
 import org.treesitter.TSParser;

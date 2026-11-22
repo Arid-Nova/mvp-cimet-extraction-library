@@ -31,7 +31,7 @@ function analyze({ root, kind, name, config = {} }) {
 
   root = fs.realpathSync(root);
   if (!fs.statSync(root).isDirectory()) throw new Error('The analysis root must be a directory.');
-  
+
   const resource = createResourceBudget(config);
   const diagnostics = [];
   const files = discoverSourceFiles({ root, config, diagnostics, resource });
@@ -54,7 +54,7 @@ function analyze({ root, kind, name, config = {} }) {
     )
   )
     throw new Error('Invalid wrapper configuration.');
-  
+
   const semanticHash = ast.createSemanticHasher(resource);
   const bindings = buildBindings({ root, files, resource });
   const provenance = createProvenance({ files, ...bindings, wrappers, resource });
@@ -112,7 +112,7 @@ function analyze({ root, kind, name, config = {} }) {
     resource,
     semanticHash,
   });
-  
+
   const validFiles = [...files.values()].filter((file) => !file.bad);
   return {
     schemaVersion: 1,

@@ -51,7 +51,7 @@ function createResourceBudget(config) {
     if (amount > limits[maximum] - usage[counter]) throw new AnalysisResourceLimitError(code);
     usage[counter] += amount;
   }
-  
+
   return {
     limits,
     usage,

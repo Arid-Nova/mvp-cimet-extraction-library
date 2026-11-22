@@ -54,7 +54,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
     const directory = directories.pop();
     const entries = [];
     const handle = fs.opendirSync(directory);
-    
+
     try {
       let entry;
       while ((entry = handle.readSync()) !== null) {
@@ -64,9 +64,9 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
     } finally {
       handle.closeSync();
     }
-    
+
     entries.sort((a, b) => a.name.localeCompare(b.name, 'en'));
-    
+
     // Match the original lexicographic depth-first order without retaining ASTs.
     const pending = [];
     for (const entry of entries) {
@@ -93,7 +93,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
         entry.name.startsWith('.')
       )
         continue;
-      
+
       const size = fs.statSync(absolute).size;
       if (size > MAX_FILE_BYTES) {
         oversized(absolute);
@@ -131,7 +131,7 @@ function discoverSourceFiles({ root, config, diagnostics, resource }) {
         : ['.ts', '.mts', '.cts'].includes(extension)
           ? ts.ScriptKind.TS
           : ts.ScriptKind.JSX;
-    
+
     const sf = ts.createSourceFile(
       item.absolute,
       buffer.toString('utf8'),
@@ -186,7 +186,7 @@ function compareSourcePaths(left, right) {
     const difference = a[i].localeCompare(b[i], 'en');
     if (difference) return difference;
   }
-  
+
   return a.length - b.length;
 }
 

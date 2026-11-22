@@ -2,32 +2,25 @@ package edu.university.ecs.lab.common.parsers.javaparser;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ParserConfiguration;
-
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Modifier;
 import com.github.javaparser.ast.body.*;
-
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
-
-import edu.university.ecs.lab.common.models.ir.*;
-import edu.university.ecs.lab.common.models.enums.ClassRole;
 import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.enums.AccessModifier;
-
+import edu.university.ecs.lab.common.models.enums.ClassRole;
+import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.utils.FileUtils;
 import edu.university.ecs.lab.common.utils.SourceFileReader;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
-
 import java.io.File;
-import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
-
+import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
-
 import org.json.JSONObject;
 
 /**
@@ -56,7 +49,7 @@ public final class JavaSourceParser {
               .setLanguageLevel(ParserConfiguration.LanguageLevel.JAVA_21)
               .setSymbolResolver(new JavaSymbolSolver(solver));
       var result = new JavaParser(configured).parse(new String(bytes, StandardCharsets.UTF_8));
-      
+
       if (!result.isSuccessful() || result.getResult().isEmpty())
         throw new IllegalArgumentException("Invalid Java syntax");
       unit = result.getResult().orElseThrow();
@@ -80,10 +73,10 @@ public final class JavaSourceParser {
   public List<AbstractClass> parse(Microservice service, boolean filterUnknownRoles) {
     List<AbstractClass> classes = new ArrayList<>();
     List<TypeDeclaration<?>> declarations = new ArrayList<>();
-    
+
     for (TypeDeclaration<?> declaration : unit.findAll(TypeDeclaration.class))
       if (isSupportedMemberType(declaration)) declarations.add(declaration);
-    
+
     TypeDeclaration<?> primary =
         declarations.stream()
             .filter(type -> type.isTopLevelType() && type.getNameAsString().equals(fileTypeName))
@@ -94,8 +87,8 @@ public final class JavaSourceParser {
                         .filter(TypeDeclaration::isTopLevelType)
                         .findFirst()
                         .orElse(null));
-    
-    // Preserve the physical file identity and legacy single-container accessor for its 
+
+    // Preserve the physical file identity and legacy single-container accessor for its
     // primary type.
     declarations.sort(Comparator.comparingInt(type -> type == primary ? 0 : 1));
     for (TypeDeclaration<?> declaration : declarations) {
@@ -105,7 +98,7 @@ public final class JavaSourceParser {
               ? sourcePath
               : sourcePath.resolveSibling(
                   sourcePath.getFileName() + ".__java_type__." + declaredType + ".java");
-      
+
       AbstractClass type = createType(service, declaration, identity);
       if (type == null) continue;
 
@@ -148,7 +141,7 @@ public final class JavaSourceParser {
         || declaration instanceof EnumDeclaration
         || declaration instanceof RecordDeclaration)) return false;
     var parent = declaration.getParentNode().orElse(null);
-    
+
     return parent instanceof CompilationUnit
         || parent instanceof TypeDeclaration<?> outer && isSupportedMemberType(outer);
   }
@@ -160,7 +153,7 @@ public final class JavaSourceParser {
       names.addFirst(type.getNameAsString());
       current = current.getParentNode().orElse(null);
     }
-    
+
     return String.join(".", names);
   }
 
@@ -176,7 +169,7 @@ public final class JavaSourceParser {
           named.getImplementedTypes().stream()
               .map(type -> type.getNameAsString())
               .collect(Collectors.toCollection(LinkedHashSet::new));
-      
+
       return new JClass(
           service, identity, packageName, parents.stream().findFirst().orElse(""), interfaces);
     }
@@ -190,7 +183,7 @@ public final class JavaSourceParser {
           enumeration.getEntries().stream()
               .map(entry -> entry.getNameAsString())
               .collect(Collectors.toCollection(LinkedHashSet::new));
-      
+
       return new JEnum(service, identity, packageName, interfaces, entries);
     }
 
@@ -199,7 +192,7 @@ public final class JavaSourceParser {
           record.getImplementedTypes().stream()
               .map(type -> type.getNameAsString())
               .collect(Collectors.toCollection(LinkedHashSet::new));
-      
+
       return new JRecord(service, identity, packageName, interfaces);
     }
 

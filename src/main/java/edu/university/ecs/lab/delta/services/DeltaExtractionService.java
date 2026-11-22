@@ -5,20 +5,16 @@ import edu.university.ecs.lab.common.config.RepositoryBranchPair;
 import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.models.ir.MicroserviceSystem;
 import edu.university.ecs.lab.common.utils.JsonReadWriteUtils;
-
 import edu.university.ecs.lab.delta.models.SystemChange;
 import edu.university.ecs.lab.intermediate.create.services.IRExtractionService;
-
 import java.io.IOException;
 import java.nio.file.Path;
-
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-
 import org.eclipse.jgit.api.errors.GitAPIException;
 
 /** Parser-neutral revision comparison using the same extraction path as snapshots. */
@@ -53,8 +49,8 @@ public final class DeltaExtractionService {
         .anyMatch(repository -> !configured.contains(repository.repoBranchPair())))
       throw new IllegalArgumentException(
           "A comparison repository was not present in the base configuration");
-    
-          // Reconstruct the complete target configuration so unchanged repositories survive the delta.
+
+    // Reconstruct the complete target configuration so unchanged repositories survive the delta.
     List<RepositoryConfig> targets = new ArrayList<>();
     for (RepositoryConfig base : config.getSystemRepositories()) {
       List<String> revisions =
@@ -69,7 +65,7 @@ public final class DeltaExtractionService {
           new RepositoryConfig(
               base.repoBranchPair(), revisions.isEmpty() ? base.commitID() : revisions.getFirst()));
     }
-    
+
     try {
       // Both snapshot and delta parsing share the same registry, module context, source discovery,
       // and boundary detector. Full re-extraction favors correctness over an incomplete per-file

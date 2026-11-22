@@ -15,13 +15,13 @@ function buildEndpoints({
   function prefixes(routerId, seen = new Set()) {
     resource.step();
     if (seen.has(routerId)) return [null];
-    
+
     const router = routers.get(routerId);
     if (router?.root) return [''];
-    
+
     const edges = mounts.filter((edge) => edge.child === routerId);
     if (!edges.length) return [null];
-    
+
     const result = [];
     for (const edge of edges)
       for (const prefix of prefixes(edge.parent, new Set(seen).add(routerId))) {
@@ -47,7 +47,7 @@ function buildEndpoints({
     for (const prefix of prefixes(router.id)) {
       const complete =
         prefix !== null && own.path !== null ? prefix.replace(/\/$/, '') + own.path : null;
-      
+
       if (own.path === null)
         diag(
           file,

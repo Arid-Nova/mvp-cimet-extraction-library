@@ -26,7 +26,7 @@ function finalizeRecords(records, category, name, kind) {
     );
     record.fingerprint = hash(`${record.contractFingerprint}:${record.bodyFingerprint}`);
   }
-  
+
   return records.sort(
     (a, b) =>
       a.file.localeCompare(b.file, 'en') || a.line - b.line || a.id.localeCompare(b.id, 'en'),
@@ -49,7 +49,7 @@ function sourceCoverage(diagnostics) {
       sourceExclusions.filter((d) => d.code === 'SYMLINK_SKIPPED').map((d) => d.file),
     ).size,
   };
-  
+
   return {
     sourceExclusionCounts: counts,
     sourceInspectionComplete: counts.sourceExcludedPaths === 0,

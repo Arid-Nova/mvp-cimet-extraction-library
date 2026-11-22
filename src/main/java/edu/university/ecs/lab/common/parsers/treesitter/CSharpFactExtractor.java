@@ -8,9 +8,8 @@ import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.looks
 import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.urlOf;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
-
-import java.util.List;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -83,9 +82,9 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
     if (prefix != null)
       prefix = prefix.replace("[controller]", className.replaceAll("Controller$", ""));
     SNode body = cls.field("body");
-    
+
     if (body == null) return;
-    
+
     for (SNode m : body.namedChildren()) {
       if (!m.type.equals("method_declaration")) continue;
       for (SNode list : m.namedChildren()) {
@@ -271,7 +270,7 @@ final class CSharpFactExtractor implements LanguageFactExtractor {
       SNode name = p.field("name");
       parts.add((type == null ? "" : out.text(type)) + (name != null ? " " + out.text(name) : ""));
     }
-    
+
     return String.join(", ", parts);
   }
 }

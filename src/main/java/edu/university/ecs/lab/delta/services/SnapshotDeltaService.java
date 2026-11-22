@@ -3,7 +3,6 @@ package edu.university.ecs.lab.delta.services;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-
 import edu.university.ecs.lab.common.models.ir.AbstractClass;
 import edu.university.ecs.lab.common.models.ir.Component;
 import edu.university.ecs.lab.common.models.ir.Microservice;
@@ -16,12 +15,10 @@ import edu.university.ecs.lab.delta.models.ModifyDelta;
 import edu.university.ecs.lab.delta.models.SimpleDelta;
 import edu.university.ecs.lab.delta.models.SystemChange;
 import edu.university.ecs.lab.delta.models.enums.ChangeType;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;

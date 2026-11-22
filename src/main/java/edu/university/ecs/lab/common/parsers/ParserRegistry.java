@@ -2,10 +2,8 @@ package edu.university.ecs.lab.common.parsers;
 
 import edu.university.ecs.lab.common.config.RepositoryConfig;
 import edu.university.ecs.lab.common.parsers.treesitter.PolyglotExtractor;
-
 import java.io.File;
 import java.nio.file.Path;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;

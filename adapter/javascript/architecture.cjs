@@ -54,7 +54,7 @@ function buildArchitecture({
       functions,
       resource,
     });
-    
+
   const { requireIdentifier, resolveValue } = createValueResolver({
     ts,
     unwrap,

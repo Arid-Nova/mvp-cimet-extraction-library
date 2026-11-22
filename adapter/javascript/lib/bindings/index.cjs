@@ -41,7 +41,7 @@ function buildBindings({ root, files, resource }) {
     scopes.set(node, scope);
     if (ts.isFunctionDeclaration(node) && node.name)
       binding(scope, node.name.text, node, { init: node });
-    
+
     if (isFunction(node)) {
       scope = { parent: scope, values: new Map(), file, node };
       scopes.set(node, scope);
@@ -152,7 +152,7 @@ function buildBindings({ root, files, resource }) {
     if (file.exports.has(name)) return file.exports.get(name);
     const node = unwrap(file.exports.get('default'));
     if (node && ts.isObjectLiteralExpression(node)) return property(node, name);
-    
+
     return null;
   }
 
@@ -163,7 +163,7 @@ function buildBindings({ root, files, resource }) {
       const b = lookup(node);
       if (b && !b.assigned) return property(b.init, key, depth + 1);
     }
-    
+
     if (ts.isObjectLiteralExpression(node))
       for (const item of node.properties) {
         if (memberName(item.name) === key)

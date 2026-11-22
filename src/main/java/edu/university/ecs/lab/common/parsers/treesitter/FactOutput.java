@@ -1,7 +1,6 @@
 package edu.university.ecs.lab.common.parsers.treesitter;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;

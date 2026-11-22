@@ -8,7 +8,6 @@ import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.looks
 import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.urlOf;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
-
 import java.util.ArrayList;
 import java.util.List;
 
@@ -82,12 +81,12 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
       String httpMethod = CONFIG.httpMethodFor("javascript", name, name); // e.g. bare fetch(url)
       if (httpMethod != null && !args.isEmpty())
         out.add("httpCalls", caller + ": " + httpMethod + " " + urlOf(args.get(0), out));
-      
+
       return;
     }
 
     if (!fn.type.equals("member_expression")) return;
-    
+
     String method = out.text(fn.field("property"));
     SNode object = fn.field("object");
     String objectText = out.text(object);
@@ -96,7 +95,7 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
       // server.addService(proto.pkg.CartService.service, impl)
       String svc = out.text(args.get(0)).replaceAll("\\.service$", "");
       out.add("rpcServers", caller + ": " + lastSegment(svc));
-      
+
       return;
     }
 
@@ -124,7 +123,7 @@ final class JavaScriptFactExtractor implements LanguageFactExtractor {
   private static List<String> jsClassFields(SNode classNode, FactOutput out) {
     SNode body = classNode.field("body");
     if (body == null) return List.of();
-    
+
     List<String> fields = new ArrayList<>();
     for (SNode m : body.namedChildren()) {
       // The TSX grammar (used here) calls this "public_field_definition" with a "name" field;

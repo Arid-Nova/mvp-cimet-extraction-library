@@ -4,14 +4,11 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.*;
-
-import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.models.enums.ClassRole;
-import edu.university.ecs.lab.common.models.enums.HttpMethod;
 import edu.university.ecs.lab.common.models.enums.EndpointTemplate;
-
+import edu.university.ecs.lab.common.models.enums.HttpMethod;
+import edu.university.ecs.lab.common.models.ir.*;
 import edu.university.ecs.lab.common.utils.SourceToObjectUtils;
-
 import java.util.*;
 import org.json.JSONObject;
 
@@ -48,7 +45,7 @@ public final class SpringAnnotationSupport {
     for (var role : roles.entrySet())
       if (annotation(declaration.getAnnotations(), role.getKey()).isPresent())
         return role.getValue();
-    
+
     if (declaration instanceof ClassOrInterfaceDeclaration named
         && named.getExtendedTypes().stream()
             .anyMatch(
@@ -63,14 +60,14 @@ public final class SpringAnnotationSupport {
     AnnotationExpr classMapping =
         annotation(declaration.getAnnotations(), "RequestMapping").orElse(null);
     List<MethodDeclaration> methods = declaration.getMethods();
-    
+
     if (owner.getClassRole() == ClassRole.FEIGN_CLIENT)
       return feignMethods(owner, declaration, methods, classMapping);
-    
+
     if (owner.getClassRole() == ClassRole.REP_REST_RSC)
       return repositoryMethods(owner, declaration, methods);
     Set<Method> result = SourceToObjectUtils.parseMethods(owner, methods, classMapping);
-    
+
     for (MethodDeclaration method : methods) {
       boolean mapping =
           method.getAnnotations().stream()
@@ -93,10 +90,10 @@ public final class SpringAnnotationSupport {
       AnnotationExpr classMapping) {
     AnnotationExpr client = annotation(declaration.getAnnotations(), "FeignClient").orElseThrow();
     Optional<String> prefix = literalAttribute(client, "path");
-    
+
     if (prefix.isEmpty())
       partial(owner, "Dynamic Feign path is unresolved; no concrete remote route is invented.");
-    
+
     Set<Method> methods = new LinkedHashSet<>();
     for (MethodDeclaration declarationMethod : declarations) {
       Method method = new Method(owner, declarationMethod);
@@ -151,7 +148,7 @@ public final class SpringAnnotationSupport {
     Optional<String> configuredPath = literalAttribute(repository, "path");
     boolean convention = configuredPath.isPresent() && configuredPath.get().isEmpty();
     String path = configuredPath.orElse("");
-    
+
     if (convention) {
       path =
           declaration.getNameAsString().replaceFirst("Repository$", "").toLowerCase(Locale.ROOT)
@@ -161,7 +158,7 @@ public final class SpringAnnotationSupport {
 
     if (classExported.isEmpty() || configuredPath.isEmpty())
       partial(owner, "Dynamic repository export/path attributes are unresolved.");
-    
+
     Set<Method> methods = new LinkedHashSet<>();
     for (MethodDeclaration methodDeclaration : declarations) {
       Method method = new Method(owner, methodDeclaration);
@@ -227,7 +224,7 @@ public final class SpringAnnotationSupport {
     if (expression.isArrayInitializerExpr()
         && expression.asArrayInitializerExpr().getValues().size() == 1)
       return literal(expression.asArrayInitializerExpr().getValues().get(0));
-      
+
     return Optional.empty();
   }
 

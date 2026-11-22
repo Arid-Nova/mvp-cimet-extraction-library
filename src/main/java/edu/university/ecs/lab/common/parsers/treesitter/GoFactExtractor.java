@@ -6,10 +6,9 @@ import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.looks
 import static edu.university.ecs.lab.common.parsers.treesitter.FactSupport.urlOf;
 
 import edu.university.ecs.lab.common.parsers.treesitter.TsUtil.SNode;
-
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -130,7 +129,7 @@ final class GoFactExtractor implements LanguageFactExtractor {
         return;
       }
     }
-    
+
     if (!GO_ROUTE_FUNCS.contains(name) || args.isEmpty()) return;
     String url = urlOf(args.get(0), out);
     if (!looksLikePath(url)) return;

@@ -90,7 +90,7 @@ function buildSemanticEvidence({
     typeof value === 'string' && /^[A-Za-z_$][\w$]{0,79}$/.test(value) ? value : null;
   const member = (node) =>
     node && (ts.isIdentifier(node) ? safeName(node.text) : safeName(literal(node)));
-  
+
   // Local semantic bounds yield partial evidence; a repository resource bound aborts the snapshot.
   function budget() {
     resource.step();
@@ -217,7 +217,7 @@ function buildSemanticEvidence({
       return imported === '*' || imported === 'default'
         ? { type: 'package', library: source }
         : propertyRole({ type: 'package', library: source }, imported, seen);
-    
+
     const local = resolveModule(file, source);
     if (!local) return null;
 
@@ -652,7 +652,7 @@ function buildSemanticEvidence({
           add(columns, tokens[i]);
       }
     }
-    
+
     if (operation === 'insert') {
       const into = upper.indexOf('INTO');
       const start = tokens.indexOf('(', into + 2),
@@ -686,11 +686,11 @@ function buildSemanticEvidence({
       tokens.some((t, i) => t === ';' && i !== tokens.length - 1)
     )
       incomplete = true;
-    
+
     const tableList = [...tables].sort(),
       columnList = [...columns].sort();
     const structure = `${operation}|tables:${tableList.join(',')}|columns:${columnList.join(',')}|dynamic:${value.dynamic}|wildcard:${tokens.includes('*')}`;
-    
+
     if (structure.length > 2048) {
       boundsReached = true;
       incomplete = true;
@@ -848,10 +848,10 @@ function buildSemanticEvidence({
 
     if (!node || !ts.isObjectLiteralExpression(node)) return { fields: [], complete: false };
     let complete = node.properties.length <= MAX_FIELDS;
-    
+
     if (!complete) boundsReached = true;
     const fields = [];
-    
+
     for (const item of node.properties.slice(0, MAX_FIELDS)) {
       const field = member(item.name);
       if (!field || !ts.isPropertyAssignment(item)) {
@@ -994,7 +994,7 @@ function buildSemanticEvidence({
       !callee
     )
       unresolvedDataAccessCandidates++;
-    
+
     if (
       callee?.type === 'entity-factory' ||
       (callee?.type === 'package-member' &&
@@ -1166,10 +1166,10 @@ function buildSemanticEvidence({
 
   const order = (a, b) =>
     a.file.localeCompare(b.file, 'en') || a.line - b.line || a.id.localeCompare(b.id, 'en');
-  
+
   for (const array of [dataAccess, entities, proxies, resilience]) array.sort(order);
   healthEndpoints.sort((a, b) => a.endpointId.localeCompare(b.endpointId, 'en'));
-  
+
   return {
     schemaVersion: 1,
     dataAccess,

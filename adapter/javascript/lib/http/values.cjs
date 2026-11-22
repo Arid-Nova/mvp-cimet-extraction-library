@@ -29,7 +29,7 @@ function createHttpValues({
     if (!node || seen.has(node) || seen.size > 32) return dynamic();
     seen = new Set(seen).add(node);
     const env = dotted(node).match(/^(?:import\.meta\.env|process\.env)\.([A-Za-z0-9_]+)$/);
-    
+
     if (env)
       return {
         text: backendEnv.has(env[1]) ? '{backend}' : '{unknown}',
@@ -90,8 +90,8 @@ function createHttpValues({
       role(node.expression.expression)?.type === 'wrapper'
     )
       return { text: '{backend}', dynamic: true, base: 'backend' };
-    
-      if (ts.isConditionalExpression(node)) {
+
+    if (ts.isConditionalExpression(node)) {
       const a = value(node.whenTrue, seen),
         b = value(node.whenFalse, seen);
       if (a.text === b.text && a.base === b.base) return a;
@@ -112,7 +112,7 @@ function createHttpValues({
   function resolvedPath(node, assumedTarget = 'unknown', baseNode = null, express = false) {
     let parsed = value(node);
     let target = assumedTarget;
-    
+
     if (
       baseNode &&
       !/^(?:https?:)?\/\//.test(parsed.text) &&
@@ -145,7 +145,7 @@ function createHttpValues({
       }
     } else if (text.startsWith('//'))
       return { path: null, normalizedPath: null, target: 'external', resolution: 'unresolved' };
-    
+
     if (!text.startsWith('/') || text.startsWith('//'))
       return { path: null, normalizedPath: null, target, resolution: 'unresolved' };
 
@@ -164,7 +164,7 @@ function createHttpValues({
     }
 
     const unsupportedPattern = express && /[?+*()[\]{}]/.test(text);
-    
+
     return {
       path: text,
       normalizedPath: unsupportedPattern ? null : normalize(text),
@@ -192,7 +192,7 @@ function createHttpValues({
     if (!node) return fallback;
     if (seen.has(node) || seen.size > 16) return 'UNKNOWN';
     seen = new Set(seen).add(node);
-    
+
     if (ts.isIdentifier(node)) {
       const b = lookup(node);
       return b && !b.assigned && b.init !== node ? optionMethod(b.init, fallback, seen) : 'UNKNOWN';
@@ -205,7 +205,7 @@ function createHttpValues({
       )
     )
       return 'UNKNOWN';
-   
+
     return method(property(node, 'method'), fallback);
   }
 
@@ -224,7 +224,7 @@ function createHttpValues({
     node = unwrap(node);
     if (!node || seen.has(node)) return { label: '<unresolved>', fingerprint: hash('unresolved') };
     seen = new Set(seen).add(node);
-    
+
     if (isFunction(node))
       return {
         label: memberName(node.name) || '<inline>',
@@ -232,7 +232,7 @@ function createHttpValues({
         file: scopes.get(node).file.rel,
         line: scopes.get(node).file.sf.getLineAndCharacterOfPosition(node.getStart()).line + 1,
       };
-    
+
     if (ts.isCallExpression(node) && dotted(node.expression) === 'require') {
       const target = role(node);
       if (target?.type === 'function') return handler(target.node, file, seen);
@@ -253,7 +253,7 @@ function createHttpValues({
         ref?.type === 'module'
           ? exported(ref.local, node.name.text)
           : property(node.expression, node.name.text);
-      
+
       if (!definition && ts.isIdentifier(node.expression)) {
         const b = lookup(node.expression);
         if (b?.module) definition = exported(resolveModule(b.file, b.module), node.name.text);

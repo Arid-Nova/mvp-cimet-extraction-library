@@ -44,7 +44,7 @@ public final class JavaScriptIRConverter {
             .put("repositoryURL", service.getRepositoryURL())
             .put("commit", service.getCommitID())
             .put("boundaryInferred", false));
-    
+
     for (JsonNode endpoint : snapshot.endpoints(file)) {
       String url = nullableText(endpoint, "normalizedPath");
       Method base = new Method(module, endpoint.path("id").asText(), location(endpoint));
@@ -55,8 +55,7 @@ public final class JavaScriptIRConverter {
               .put("resolved", url != null)
               .put("componentKind", "backend"));
       module.getMethods().add(node);
-      if (url != null) 
-        module.setClassRole(ClassRole.CONTROLLER);
+      if (url != null) module.setClassRole(ClassRole.CONTROLLER);
     }
 
     for (JsonNode call : snapshot.calls(file)) {
@@ -157,7 +156,7 @@ public final class JavaScriptIRConverter {
                 s.path("component").path("kind").asText()
                     + ":"
                     + s.path("component").path("name").asText()));
-    
+
     for (JsonNode snapshot : ordered) {
       JavaScriptExtractionService.validateSnapshot(snapshot);
       JsonNode info = snapshot.path("component");
@@ -243,8 +242,7 @@ public final class JavaScriptIRConverter {
         else service.addAbstractClass(module);
       }
 
-      if (service != null) 
-        system.getMicroservices().add(service);
+      if (service != null) system.getMicroservices().add(service);
     }
 
     return system;
@@ -275,9 +273,8 @@ public final class JavaScriptIRConverter {
                   componentMetadata(info).put("language", language(file)).put("sourceFile", file));
               return created;
             });
-    if (role == ClassRole.CONTROLLER) 
-      module.setClassRole(role);
-    
+    if (role == ClassRole.CONTROLLER) module.setClassRole(role);
+
     return module;
   }
 

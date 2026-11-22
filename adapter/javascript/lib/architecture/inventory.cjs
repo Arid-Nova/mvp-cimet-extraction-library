@@ -45,7 +45,7 @@ function buildInventory({
   function scan(file, node, parentFunction = null) {
     resource.step();
     nodeFiles.set(node, file);
-    
+
     if (isFunction(node)) {
       const label = functionLabel(node);
       const record = {
@@ -104,7 +104,7 @@ function buildInventory({
       let left = ts.isBinaryExpression(node) ? node.left : node.operand;
       while (ts.isPropertyAccessExpression(left) || ts.isElementAccessExpression(left))
         left = left.expression;
-      
+
       if (ts.isIdentifier(left)) {
         const binding = lookup(left);
         if (binding) mutations.add(binding);

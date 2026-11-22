@@ -27,7 +27,9 @@ function collectHttpObservations({
   diag,
   semanticHash,
 }) {
-  const endpointCandidates = [], calls = [], mounts = [];
+  const endpointCandidates = [],
+    calls = [],
+    mounts = [];
   const wrapperFiles = new Set();
 
   for (const file of files.values())
@@ -55,8 +57,8 @@ function collectHttpObservations({
             const prefix = firstIsRouter
               ? { path: '/', resolution: 'literal' }
               : resolvedPath(call.arguments[0], 'unknown', null, true);
-            
-              if (prefix.unsupportedPattern)
+
+            if (prefix.unsupportedPattern)
               diag(
                 file,
                 call,
@@ -192,7 +194,7 @@ function collectHttpObservations({
               'UNRESOLVED_HTTP_METHOD',
               'The request HTTP method could not be resolved statically.',
             );
-          
+
           resource.record();
           calls.push({
             ...location(file, call),

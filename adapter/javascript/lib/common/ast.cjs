@@ -96,7 +96,7 @@ function createSemanticHasher(resource) {
   return (node) => {
     if (!node) return hash('unresolved');
     if (!cache.has(node)) cache.set(node, semanticHash(node, resource));
-    
+
     return cache.get(node);
   };
 }

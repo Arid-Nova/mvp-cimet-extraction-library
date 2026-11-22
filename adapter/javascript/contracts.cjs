@@ -29,7 +29,7 @@ function buildContracts({
     typeLimitHit = false;
   const declaredCache = new WeakMap();
   const mutatedValues = new Set(mutations);
-  
+
   for (const binding of mutations) {
     let current = binding;
     const seen = new Set();
@@ -63,14 +63,14 @@ function buildContracts({
       if (ts.isTypeAliasDeclaration(statement) || ts.isInterfaceDeclaration(statement))
         types.get(file).set(statement.name.text, statement);
     }
-  
+
   const safeName = (text) =>
     typeof text === 'string' && /^[A-Za-z_$][\w$-]{0,79}$/.test(text) ? text : null;
   const propertyName = (node) =>
     node && (ts.isIdentifier(node) ? safeName(node.text) : safeName(literal(node)));
   const unknown = () => ({ type: 'unknown', shape: 'unknown', complete: false });
   const primitive = (type) => ({ type, shape: type, complete: true });
-  
+
   // Declared type evidence is cached only while complete; bounded inference stays unknown.
   function declared(node, file, seen = new Set()) {
     resource.step();
@@ -84,7 +84,7 @@ function buildContracts({
     const beforeLimit = typeLimitHit,
       result = declaredValue(node, file, seen);
     if (!beforeLimit && !typeLimitHit && result.complete) declaredCache.set(node, result);
-    
+
     return result;
   }
 
@@ -142,7 +142,7 @@ function buildContracts({
         return { type: 'array', shape, complete: item.complete };
       }
       const definition = types.get(file)?.get(node.typeName.text);
-      
+
       if (definition && !definition.typeParameters?.length && !definition.heritageClauses?.length)
         return declared(
           ts.isTypeAliasDeclaration(definition) ? definition.type : definition,
@@ -160,9 +160,9 @@ function buildContracts({
         fields = [];
       let complete = members.length <= MAX_FIELDS,
         shapeLength = 8;
-      
+
       if (!complete) typeLimitHit = true;
-      
+
       for (const member of [...members].slice(0, MAX_FIELDS)) {
         const name = propertyName(member.name);
         if (
@@ -201,7 +201,7 @@ function buildContracts({
     if (parameter?.type) return parameter.type;
     const tag =
       parameter && ts.getJSDocParameterTags(parameter).find((item) => item.typeExpression?.type);
-    
+
     return tag?.typeExpression?.type;
   }
 
@@ -247,7 +247,7 @@ function buildContracts({
       return LOCATIONS.has(name) ? { role: 'input', location: name, path: [] } : null;
     if (base.role === 'input' && base.path.length < MAX_DEPTH)
       return { ...base, path: [...base.path, name] };
-    
+
     return null;
   }
 
@@ -255,7 +255,7 @@ function buildContracts({
   function reference(node, context, seen = new Set()) {
     resource.step();
     node = unwrap(node);
-    
+
     if (!node || seen.has(node) || seen.size > 32) return null;
     seen = new Set(seen).add(node);
 
@@ -309,7 +309,7 @@ function buildContracts({
 
     if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression) || lookup(node.expression))
       return null;
-    
+
     return (
       {
         Number: 'number',
@@ -828,7 +828,7 @@ function buildContracts({
   }
 
   operations.sort((a, b) => a.endpointId.localeCompare(b.endpointId, 'en'));
-  
+
   return {
     schemaVersion: 1,
     operations,
