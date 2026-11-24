@@ -1,0 +1,315 @@
+{
+  "a.js" : {
+    "type" : "JSModule",
+    "name" : "a.js",
+    "metadata" : {
+      "componentKind" : "backend",
+      "commit" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "extractor" : "cimet-javascript",
+      "language" : "JavaScript",
+      "componentName" : "api",
+      "architectureEvidence" : {
+        "schemaVersion" : 1,
+        "functions" : [ {
+          "file" : "a.js",
+          "id" : "function-a"
+        } ],
+        "calls" : [ {
+          "file" : "a.js",
+          "targetId" : "function-b",
+          "id" : "local-a",
+          "callerId" : "function-a"
+        } ],
+        "endpointHandlers" : [ {
+          "functionId" : "function-a",
+          "endpointId" : "endpoint-a2"
+        }, {
+          "functionId" : "function-a",
+          "endpointId" : "endpoint-a"
+        } ],
+        "semanticEvidence" : {
+          "dataAccess" : [ {
+            "file" : "a.js",
+            "endpointId" : "endpoint-a",
+            "id" : "data-a"
+          } ],
+          "healthEndpoints" : [ {
+            "endpointId" : "endpoint-a",
+            "id" : "health-a"
+          } ],
+          "schemaVersion" : 1,
+          "entities" : [ {
+            "file" : "a.js",
+            "id" : "entity-a"
+          } ],
+          "inspectionScope" : "repository",
+          "repositoryInspection" : {
+            "sourceInspectionComplete" : true
+          },
+          "proxies" : [ {
+            "file" : "b.js",
+            "endpointId" : "endpoint-a",
+            "id" : "proxy-shared"
+          } ],
+          "resilience" : [ ],
+          "limitations" : [ "Authored regression fixture" ]
+        },
+        "contracts" : {
+          "schemaVersion" : 1,
+          "operations" : [ {
+            "endpointId" : "endpoint-a"
+          } ]
+        },
+        "modules" : [ {
+          "file" : "a.js",
+          "id" : "module-a"
+        } ],
+        "dependencies" : [ ],
+        "limitations" : [ "Static source observations" ]
+      },
+      "sourceFile" : "a.js",
+      "sourcePath" : "/a.js",
+      "boundaryInferred" : false,
+      "repositoryURL" : "https://github.com/example/api.git"
+    },
+    "path" : "/a.js",
+    "classRole" : "CONTROLLER",
+    "classType" : "MODULE",
+    "packageName" : "api",
+    "protection" : "PUBLIC",
+    "isFinal" : false,
+    "isStatic" : false,
+    "isAbstract" : false,
+    "imports" : [ ],
+    "annotations" : [ ],
+    "fields" : [ ],
+    "methods" : [ {
+      "type" : "Endpoint",
+      "name" : "endpoint-a",
+      "metadata" : {
+        "file" : "a.js",
+        "normalizedPath" : "/a",
+        "componentKind" : "backend",
+        "method" : "GET",
+        "line" : 3,
+        "observation" : "endpoint",
+        "extractor" : "cimet-javascript",
+        "id" : "endpoint-a",
+        "resolved" : true
+      },
+      "protection" : "PUBLIC",
+      "parameters" : [ ],
+      "methodCalls" : [ ],
+      "returnType" : "",
+      "annotations" : [ ],
+      "isAbstract" : false,
+      "isStatic" : false,
+      "isFinal" : false,
+      "thrownExceptions" : [ ],
+      "url" : "/a",
+      "httpMethod" : "GET",
+      "id" : "api.a.js&endpoint-a"
+    }, {
+      "type" : "Method",
+      "name" : "endpoint-a2",
+      "metadata" : {
+        "file" : "a.js",
+        "normalizedPath" : null,
+        "componentKind" : "backend",
+        "method" : "POST",
+        "line" : 4,
+        "observation" : "endpoint",
+        "extractor" : "cimet-javascript",
+        "id" : "endpoint-a2",
+        "resolved" : false
+      },
+      "protection" : "PUBLIC",
+      "parameters" : [ ],
+      "methodCalls" : [ ],
+      "returnType" : "",
+      "annotations" : [ ],
+      "isAbstract" : false,
+      "isStatic" : false,
+      "isFinal" : false,
+      "thrownExceptions" : [ ],
+      "id" : "api.a.js&endpoint-a2"
+    }, {
+      "type" : "Method",
+      "name" : "client-call:call-a",
+      "metadata" : {
+        "caller" : "loadA",
+        "syntheticCallContainer" : true
+      },
+      "protection" : "PUBLIC",
+      "parameters" : [ ],
+      "methodCalls" : [ {
+        "type" : "RestCall",
+        "name" : "call-a",
+        "metadata" : {
+          "caller" : "loadA",
+          "file" : "a.js",
+          "normalizedPath" : "/b",
+          "componentKind" : "backend",
+          "method" : "POST",
+          "line" : 6,
+          "observation" : "http-call",
+          "extractor" : "cimet-javascript",
+          "id" : "call-a",
+          "resolved" : true
+        },
+        "objectName" : "",
+        "objectType" : "JavaScript HTTP client",
+        "calledFrom" : "loadA",
+        "parameterContents" : "",
+        "url" : "/b",
+        "httpMethod" : "POST",
+        "id" : "api.a.js&client-call:call-a&call-a"
+      } ],
+      "returnType" : "",
+      "annotations" : [ ],
+      "isAbstract" : false,
+      "isStatic" : false,
+      "isFinal" : false,
+      "thrownExceptions" : [ ],
+      "id" : "api.a.js&client-call:call-a"
+    } ],
+    "id" : "/a.js"
+  },
+  "b.js" : {
+    "type" : "JSModule",
+    "name" : "b.js",
+    "metadata" : {
+      "componentKind" : "backend",
+      "commit" : "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "extractor" : "cimet-javascript",
+      "language" : "JavaScript",
+      "componentName" : "api",
+      "architectureEvidence" : {
+        "schemaVersion" : 1,
+        "functions" : [ {
+          "file" : "b.js",
+          "id" : "function-b"
+        } ],
+        "calls" : [ ],
+        "endpointHandlers" : [ {
+          "functionId" : "function-b",
+          "endpointId" : "endpoint-b"
+        } ],
+        "semanticEvidence" : {
+          "dataAccess" : [ {
+            "endpointId" : "endpoint-b",
+            "id" : "data-b"
+          } ],
+          "healthEndpoints" : [ ],
+          "schemaVersion" : 1,
+          "entities" : [ ],
+          "inspectionScope" : "repository",
+          "repositoryInspection" : {
+            "sourceInspectionComplete" : true
+          },
+          "proxies" : [ {
+            "file" : "b.js",
+            "endpointId" : "endpoint-a",
+            "id" : "proxy-shared"
+          } ],
+          "resilience" : [ ],
+          "limitations" : [ "Authored regression fixture" ]
+        },
+        "contracts" : {
+          "schemaVersion" : 1,
+          "operations" : [ {
+            "endpointId" : "endpoint-b"
+          } ]
+        },
+        "modules" : [ {
+          "file" : "b.js",
+          "id" : "module-b"
+        } ],
+        "dependencies" : [ ],
+        "limitations" : [ "Static source observations" ]
+      },
+      "sourceFile" : "b.js",
+      "sourcePath" : "/b.js",
+      "boundaryInferred" : false,
+      "repositoryURL" : "https://github.com/example/api.git"
+    },
+    "path" : "/b.js",
+    "classRole" : "CONTROLLER",
+    "classType" : "MODULE",
+    "packageName" : "api",
+    "protection" : "PUBLIC",
+    "isFinal" : false,
+    "isStatic" : false,
+    "isAbstract" : false,
+    "imports" : [ ],
+    "annotations" : [ ],
+    "fields" : [ ],
+    "methods" : [ {
+      "type" : "Endpoint",
+      "name" : "endpoint-b",
+      "metadata" : {
+        "file" : "b.js",
+        "normalizedPath" : "/b",
+        "componentKind" : "backend",
+        "method" : "GET",
+        "line" : 2,
+        "observation" : "endpoint",
+        "extractor" : "cimet-javascript",
+        "id" : "endpoint-b",
+        "resolved" : true
+      },
+      "protection" : "PUBLIC",
+      "parameters" : [ ],
+      "methodCalls" : [ ],
+      "returnType" : "",
+      "annotations" : [ ],
+      "isAbstract" : false,
+      "isStatic" : false,
+      "isFinal" : false,
+      "thrownExceptions" : [ ],
+      "url" : "/b",
+      "httpMethod" : "GET",
+      "id" : "api.b.js&endpoint-b"
+    }, {
+      "type" : "Method",
+      "name" : "client-call:call-b",
+      "metadata" : {
+        "caller" : "loadB",
+        "syntheticCallContainer" : true
+      },
+      "protection" : "PUBLIC",
+      "parameters" : [ ],
+      "methodCalls" : [ {
+        "type" : "RestCall",
+        "name" : "call-b",
+        "metadata" : {
+          "caller" : "loadB",
+          "file" : "b.js",
+          "normalizedPath" : "/a",
+          "componentKind" : "backend",
+          "method" : "GET",
+          "line" : 5,
+          "observation" : "http-call",
+          "extractor" : "cimet-javascript",
+          "id" : "call-b",
+          "resolved" : true
+        },
+        "objectName" : "",
+        "objectType" : "JavaScript HTTP client",
+        "calledFrom" : "loadB",
+        "parameterContents" : "",
+        "url" : "/a",
+        "httpMethod" : "GET",
+        "id" : "api.b.js&client-call:call-b&call-b"
+      } ],
+      "returnType" : "",
+      "annotations" : [ ],
+      "isAbstract" : false,
+      "isStatic" : false,
+      "isFinal" : false,
+      "thrownExceptions" : [ ],
+      "id" : "api.b.js&client-call:call-b"
+    } ],
+    "id" : "/b.js"
+  }
+}

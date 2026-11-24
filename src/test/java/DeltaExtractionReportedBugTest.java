@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Tag("integration")
+@Tag("network")
 class DeltaExtractionReportedBugTest {
     private static final Path CONFIG_PATH =
             Path.of(TestUtilities.CONFIGS_PATH + File.separator + "test_config2.json");

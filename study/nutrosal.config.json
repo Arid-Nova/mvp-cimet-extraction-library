@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "name": "Nutrosal",
+  "association": "Candidate source cohorts; commit pairs are not verified deployment or release pairs.",
+  "components": [
+    {
+      "name": "nutrosal-backend",
+      "kind": "backend",
+      "repo": "../../nutrosal-backend",
+      "repositoryURL": "https://github.com/sali1982/nutrosal-backend",
+      "commit": "4273a7e40b77b3df6e9c36db54b23854c8460825"
+    },
+    {
+      "name": "nutrosal-frontend",
+      "kind": "frontend",
+      "repo": "../../nutrosal_v2",
+      "repositoryURL": "https://github.com/sali1982/nutrosal_v2",
+      "commit": "1a1db117564c7fe08c583ae84ad58e4f1f1d579d"
+    }
+  ],
+  "historicalCohorts": [
+    {
+      "name": "discount-code-registrations",
+      "association": "Candidate coordinated feature change; maintainer validation is pending.",
+      "components": [
+        {
+          "name": "nutrosal-backend",
+          "before": "f4cd26b7ed5ca62072e384d000d2fee721bdda73",
+          "after": "8e2976a02a74ed8319ba4511b8ed5f9ed888295a"
+        },
+        {
+          "name": "nutrosal-frontend",
+          "before": { "parentOf": "d39501130c10d8c3ffdc283894059c8563d6a08a", "parent": 1 },
+          "after": "d39501130c10d8c3ffdc283894059c8563d6a08a"
+        }
+      ]
+    }
+  ]
+}

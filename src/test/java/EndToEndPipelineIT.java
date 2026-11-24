@@ -38,6 +38,7 @@ import java.util.Objects;
  */
 @Tag("integration")
 @Tag("e2e")
+@Tag("network")
 class EndToEndPipelineIT {
 
     private static final Path CONFIG_PATH =

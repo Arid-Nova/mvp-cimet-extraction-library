@@ -9,5 +9,10 @@ output/
 clone/
 settings.xml
 
+# Local deliverables and generated dependencies
+*.xlsx
+~$*
+adapter/javascript/node_modules/
+study-output/
 # Ignore Gradle caches inside test fixtures (these are generated and should not be committed)
 src/test/resources/**/.gradle/

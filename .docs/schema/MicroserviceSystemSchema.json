@@ -5,7 +5,19 @@
     "name" : {
       "type" : "string"
     },
-    "commitID" : {
+    "metadata" : {
+      "type" : "object",
+      "id" : "urn:jsonschema:org:json:JSONObject",
+      "properties" : {
+        "empty" : {
+          "type" : "boolean"
+        },
+        "mapType" : {
+          "type" : "string"
+        }
+      }
+    },
+    "version" : {
       "type" : "string"
     },
     "microservices" : {
@@ -17,24 +29,42 @@
           "name" : {
             "type" : "string"
           },
-          "path" : {
+          "metadata" : {
+            "type" : "object",
+            "$ref" : "urn:jsonschema:org:json:JSONObject"
+          },
+          "repositoryURL" : {
             "type" : "string"
+          },
+          "commitID" : {
+            "type" : "string"
+          },
+          "path" : {
+            "type" : "any"
           },
           "controllers" : {
             "type" : "array",
             "items" : {
               "type" : "object",
-              "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:JClass",
+              "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:AbstractClass",
               "properties" : {
                 "name" : {
                   "type" : "string"
                 },
-                "path" : {
-                  "type" : "string"
+                "metadata" : {
+                  "type" : "object",
+                  "$ref" : "urn:jsonschema:org:json:JSONObject"
                 },
-                "fileType" : {
+                "path" : {
+                  "type" : "any"
+                },
+                "classRole" : {
                   "type" : "string",
-                  "enum" : [ "JCLASS", "JINTERFACE", "JENUM", "JRECORD", "CONFIG", "POM" ]
+                  "enum" : [ "CONTROLLER", "SERVICE", "REPOSITORY", "ENTITY", "REP_REST_RSC", "FEIGN_CLIENT", "UNKNOWN" ]
+                },
+                "classType" : {
+                  "type" : "string",
+                  "enum" : [ "CLASS", "INTERFACE", "ENUM", "RECORD", "MODULE" ]
                 },
                 "packageName" : {
                   "type" : "string"
@@ -42,6 +72,15 @@
                 "protection" : {
                   "type" : "string",
                   "enum" : [ "PUBLIC", "PROTECTED", "PRIVATE", "PACKAGE_PRIVATE" ]
+                },
+                "isFinal" : {
+                  "type" : "boolean"
+                },
+                "isStatic" : {
+                  "type" : "boolean"
+                },
+                "isAbstract" : {
+                  "type" : "boolean"
                 },
                 "imports" : {
                   "type" : "array",
@@ -52,20 +91,9 @@
                       "name" : {
                         "type" : "string"
                       },
-                      "packageAndClassName" : {
-                        "type" : "string"
-                      },
-                      "location" : {
+                      "metadata" : {
                         "type" : "object",
-                        "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Location",
-                        "properties" : {
-                          "startLine" : {
-                            "type" : "integer"
-                          },
-                          "endLine" : {
-                            "type" : "integer"
-                          }
-                        }
+                        "$ref" : "urn:jsonschema:org:json:JSONObject"
                       },
                       "importPackage" : {
                         "type" : "string"
@@ -75,28 +103,268 @@
                       },
                       "isStatic" : {
                         "type" : "boolean"
+                      },
+                      "id" : {
+                        "type" : "string"
                       }
                     }
                   }
                 },
-                "implementedTypes" : {
+                "annotations" : {
                   "type" : "array",
                   "items" : {
-                    "type" : "string"
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Annotation",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "metadata" : {
+                        "type" : "object",
+                        "$ref" : "urn:jsonschema:org:json:JSONObject"
+                      },
+                      "attributes" : {
+                        "type" : "object",
+                        "additionalProperties" : {
+                          "type" : "string"
+                        }
+                      },
+                      "id" : {
+                        "type" : "string"
+                      }
+                    }
                   }
                 },
-                "extendedTypes" : {
+                "fields" : {
                   "type" : "array",
                   "items" : {
-                    "type" : "string"
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Field",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "metadata" : {
+                        "type" : "object",
+                        "$ref" : "urn:jsonschema:org:json:JSONObject"
+                      },
+                      "fieldType" : {
+                        "type" : "string"
+                      },
+                      "protection" : {
+                        "type" : "string",
+                        "enum" : [ "PUBLIC", "PROTECTED", "PRIVATE", "PACKAGE_PRIVATE" ]
+                      },
+                      "isStatic" : {
+                        "type" : "boolean"
+                      },
+                      "isFinal" : {
+                        "type" : "boolean"
+                      },
+                      "initializer" : {
+                        "type" : "string"
+                      },
+                      "id" : {
+                        "type" : "string"
+                      }
+                    }
                   }
                 },
-                "classRole" : {
-                  "type" : "string",
-                  "enum" : [ "CONTROLLER", "SERVICE", "REPOSITORY", "ENTITY", "REP_REST_RSC", "FEIGN_CLIENT", "UNKNOWN" ]
+                "methods" : {
+                  "type" : "array",
+                  "items" : {
+                    "type" : "object",
+                    "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Method",
+                    "properties" : {
+                      "name" : {
+                        "type" : "string"
+                      },
+                      "metadata" : {
+                        "type" : "object",
+                        "$ref" : "urn:jsonschema:org:json:JSONObject"
+                      },
+                      "protection" : {
+                        "type" : "string",
+                        "enum" : [ "PUBLIC", "PROTECTED", "PRIVATE", "PACKAGE_PRIVATE" ]
+                      },
+                      "parameters" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "object",
+                          "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Parameter",
+                          "properties" : {
+                            "name" : {
+                              "type" : "string"
+                            },
+                            "metadata" : {
+                              "type" : "object",
+                              "$ref" : "urn:jsonschema:org:json:JSONObject"
+                            },
+                            "parameterType" : {
+                              "type" : "string"
+                            },
+                            "annotations" : {
+                              "type" : "array",
+                              "items" : {
+                                "type" : "object",
+                                "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Annotation"
+                              }
+                            },
+                            "isVariableParameter" : {
+                              "type" : "boolean"
+                            },
+                            "id" : {
+                              "type" : "string"
+                            }
+                          }
+                        }
+                      },
+                      "methodCalls" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "object",
+                          "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:MethodCall",
+                          "properties" : {
+                            "name" : {
+                              "type" : "string"
+                            },
+                            "metadata" : {
+                              "type" : "object",
+                              "$ref" : "urn:jsonschema:org:json:JSONObject"
+                            },
+                            "objectName" : {
+                              "type" : "string"
+                            },
+                            "objectType" : {
+                              "type" : "string"
+                            },
+                            "calledFrom" : {
+                              "type" : "string"
+                            },
+                            "parameterContents" : {
+                              "type" : "string"
+                            },
+                            "id" : {
+                              "type" : "string"
+                            }
+                          }
+                        }
+                      },
+                      "returnType" : {
+                        "type" : "string"
+                      },
+                      "annotations" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "object",
+                          "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:Annotation"
+                        }
+                      },
+                      "isAbstract" : {
+                        "type" : "boolean"
+                      },
+                      "isStatic" : {
+                        "type" : "boolean"
+                      },
+                      "isFinal" : {
+                        "type" : "boolean"
+                      },
+                      "thrownExceptions" : {
+                        "type" : "array",
+                        "items" : {
+                          "type" : "string"
+                        }
+                      },
+                      "id" : {
+                        "type" : "string"
+                      }
+                    }
+                  }
+                },
+                "id" : {
+                  "type" : "string"
                 }
               }
             }
+          },
+          "services" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:AbstractClass"
+            }
+          },
+          "repositories" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:AbstractClass"
+            }
+          },
+          "entities" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:AbstractClass"
+            }
+          },
+          "unknowns" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:AbstractClass"
+            }
+          },
+          "feignClients" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "$ref" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:AbstractClass"
+            }
+          },
+          "files" : {
+            "type" : "array",
+            "items" : {
+              "type" : "object",
+              "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:ConfigFile",
+              "properties" : {
+                "name" : {
+                  "type" : "string"
+                },
+                "metadata" : {
+                  "type" : "object",
+                  "$ref" : "urn:jsonschema:org:json:JSONObject"
+                },
+                "path" : {
+                  "type" : "any"
+                },
+                "data" : {
+                  "type" : "any"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "orphans" : {
+      "type" : "array",
+      "items" : {
+        "type" : "object",
+        "id" : "urn:jsonschema:edu:university:ecs:lab:common:models:ir:ProjectFile",
+        "properties" : {
+          "name" : {
+            "type" : "string"
+          },
+          "metadata" : {
+            "type" : "object",
+            "$ref" : "urn:jsonschema:org:json:JSONObject"
+          },
+          "path" : {
+            "type" : "any"
+          },
+          "id" : {
+            "type" : "string"
           }
         }
       }

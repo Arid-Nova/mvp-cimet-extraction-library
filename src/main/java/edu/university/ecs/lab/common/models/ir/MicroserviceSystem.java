@@ -233,5 +233,9 @@ public class MicroserviceSystem extends Node {
                 setParentReferencesRecursively(child, node);
             }
         }
+        // Frontend JS modules are intentionally orphans, but still need component parent links after JSON reads.
+        if (node instanceof MicroserviceSystem system && system.getOrphans() != null) {
+            for (ProjectFile orphan : system.getOrphans()) setParentReferencesRecursively(orphan, system);
+        }
     }
 }
